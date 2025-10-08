@@ -18,19 +18,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Beim Start User aus localStorage laden
-    const savedUser = authService.getCurrentUser();
-    if (savedUser) {
-      setUser(savedUser);
-    }
-    setLoading(false);
+    // User aus localStorage laden beim Start
+    const initAuth = async () => {
+      const savedUser = authService.getCurrentUser();
+      if (savedUser) {
+        setUser(savedUser);
+      }
+      setLoading(false);
+    };
+    
+    initAuth();
   }, []);
 
   const login = async (credentials: LoginRequest) => {
     try {
       const response = await authService.login(credentials);
-      setUser(response.user);
+      setUser(response.user); // ← WICHTIG: User State updaten!
+      console.log('AuthContext: User nach Login gesetzt', response.user);
     } catch (error) {
+      console.error('AuthContext: Login fehlgeschlagen', error);
       throw error;
     }
   };
@@ -39,7 +45,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const response = await authService.register(userData);
       setUser(response.user);
+      console.log('AuthContext: User nach Registrierung gesetzt', response.user);
     } catch (error) {
+      console.error('AuthContext: Registrierung fehlgeschlagen', error);
       throw error;
     }
   };
@@ -47,14 +55,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = () => {
     authService.logout();
     setUser(null);
+    console.log('AuthContext: User nach Logout entfernt');
   };
 
   const hasRole = (roles: string[]) => {
     return user ? roles.includes(user.role) : false;
   };
 
+  const value = {
+    user,
+    login,
+    register,
+    logout,
+    hasRole,
+    loading
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, hasRole, loading }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

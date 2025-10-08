@@ -1,5 +1,5 @@
 // frontend/src/services/authService.ts
-const API_BASE = 'http://localhost:3001/api';
+const API_BASE = 'http://localhost:3002/api';
 
 export interface LoginRequest {
   email: string;
