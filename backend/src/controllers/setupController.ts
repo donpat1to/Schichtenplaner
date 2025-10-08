@@ -6,17 +6,31 @@ import { db } from '../services/databaseService.js';
 
 export const checkSetupStatus = async (req: Request, res: Response): Promise<void> => {
   try {
-    const adminExists = await db.get<{ count: number }>(
-      'SELECT COUNT(*) as count FROM users WHERE role = ?',
-      ['admin']
-    );
+    // First, ensure database is properly initialized
+    try {
+      const adminExists = await db.get<{ count: number }>(
+        'SELECT COUNT(*) as count FROM users WHERE role = ?',
+        ['admin']
+      );
 
-    res.json({
-      needsSetup: !adminExists || adminExists.count === 0
-    });
+      res.json({
+        needsSetup: !adminExists || adminExists.count === 0,
+        message: adminExists && adminExists.count > 0 ? 'Admin user exists' : 'No admin user found'
+      });
+    } catch (dbError) {
+      console.error('Database error in checkSetupStatus:', dbError);
+      // If there's a database error, assume setup is needed
+      res.json({
+        needsSetup: true,
+        message: 'Database not ready, setup required'
+      });
+    }
   } catch (error) {
     console.error('Error checking setup status:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ 
+      error: 'Internal server error',
+      needsSetup: true 
+    });
   }
 };
 
@@ -78,7 +92,8 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
 
     res.status(201).json({
       message: 'Admin user created successfully',
-      userId: adminId
+      userId: adminId,
+      email: email
     });
   } catch (error) {
     console.error('Error in setup:', error);

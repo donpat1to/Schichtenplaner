@@ -1,7 +1,6 @@
-// backend/src/server.ts - Login für alle Benutzer
+// backend/src/server.ts
 import express from 'express';
 import cors from 'cors';
-import { v4 as uuidv4 } from 'uuid';
 import { setupDefaultTemplate } from './scripts/setupDefaultTemplate.js';
 import { initializeDatabase } from './scripts/initializeDatabase.js';
 
@@ -38,6 +37,29 @@ app.get('/api/health', (req: any, res: any) => {
   });
 });
 
+// Setup status route (additional endpoint for clarity)
+app.get('/api/initial-setup', async (req: any, res: any) => {
+  try {
+    const { db } = await import('./services/databaseService.js');
+    
+    // Define proper interface for the result
+    interface AdminCountResult {
+      count: number;
+    }
+    
+    const adminExists = await db.get<AdminCountResult>(
+      'SELECT COUNT(*) as count FROM users WHERE role = ?',
+      ['admin']
+    );
+
+    res.json({
+      needsInitialSetup: !adminExists || adminExists.count === 0
+    });
+  } catch (error) {
+    console.error('Error checking initial setup:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // Start server
 app.listen(PORT, async () => {
@@ -47,13 +69,15 @@ app.listen(PORT, async () => {
 
   try {
     await initializeDatabase();
+    console.log('✅ Database initialized successfully');
+    
     await setupDefaultTemplate();
-    console.log('✅ Standard-Vorlage überprüft/erstellt');
+    console.log('✅ Default template checked/created');
   } catch (error) {
-    console.error('❌ Fehler bei der Initialisierung:', error);
+    console.error('❌ Error during initialization:', error);
   }
 
   console.log('');
-  console.log('🔧 Setup ready at: http://localhost:${PORT}/api/setup/status');
+  console.log(`🔧 Setup ready at: http://localhost:${PORT}/api/setup/status`);
   console.log('📝 Create your admin account on first launch');
 });

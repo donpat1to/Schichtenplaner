@@ -1,4 +1,4 @@
-// frontend/src/contexts/AuthContext.tsx - KORRIGIERT
+// frontend/src/contexts/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { authService, User, LoginRequest } from '../services/authService';
 
@@ -8,7 +8,7 @@ interface AuthContextType {
   logout: () => void;
   hasRole: (roles: string[]) => boolean;
   loading: boolean;
-  refreshUser: () => void; // NEU: Force refresh
+  refreshUser: () => void;
   needsSetup: boolean;
   checkSetupStatus: () => Promise<void>;
 }
@@ -19,15 +19,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [needsSetup, setNeedsSetup] = useState(false);
-  const [refreshTrigger, setRefreshTrigger] = useState(0); // NEU: Refresh trigger
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const checkSetupStatus = async () => {
     try {
       const response = await fetch('/api/setup/status');
+      if (!response.ok) {
+        throw new Error('Failed to check setup status');
+      }
       const data = await response.json();
       setNeedsSetup(data.needsSetup);
     } catch (error) {
       console.error('Error checking setup status:', error);
+      // If we can't reach the server, assume setup is needed
+      setNeedsSetup(true);
     }
   };
 
@@ -35,19 +40,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const initializeApp = async () => {
       await checkSetupStatus();
-      const savedUser = authService.getCurrentUser();
-      if (savedUser) {
-        setUser(savedUser);
-        console.log('✅ User from localStorage:', savedUser.email);
+      
+      // Only try to load user if setup is not needed
+      if (!needsSetup) {
+        const savedUser = authService.getCurrentUser();
+        if (savedUser) {
+          setUser(savedUser);
+          console.log('✅ User from localStorage:', savedUser.email);
+        }
       }
+      
       setLoading(false);
     };
     initializeApp();
   }, []);
 
-  // NEU: User vom Server laden wenn nötig
+  // Update needsSetup when it changes
   useEffect(() => {
-    if (refreshTrigger > 0) {
+    if (!needsSetup && !user) {
+      // If setup is complete but no user is loaded, try to load from localStorage
+      const savedUser = authService.getCurrentUser();
+      if (savedUser) {
+        setUser(savedUser);
+      }
+    }
+  }, [needsSetup, user]);
+
+  // User vom Server laden wenn nötig
+  useEffect(() => {
+    if (refreshTrigger > 0 && !needsSetup) {
       const loadUserFromServer = async () => {
         const serverUser = await authService.fetchCurrentUser();
         if (serverUser) {
@@ -57,7 +78,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       loadUserFromServer();
     }
-  }, [refreshTrigger]);
+  }, [refreshTrigger, needsSetup]);
 
   const login = async (credentials: LoginRequest) => {
     try {

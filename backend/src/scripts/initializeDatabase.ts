@@ -1,3 +1,4 @@
+// backend/src/scripts/initializeDatabase.ts
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -14,6 +15,20 @@ export async function initializeDatabase(): Promise<void> {
   try {
     console.log('Starting database initialization...');
     
+    // Check if users table exists and has data
+    try {
+      const existingAdmin = await db.get<{ count: number }>(
+        "SELECT COUNT(*) as count FROM users WHERE role = 'admin'"
+      );
+      
+      if (existingAdmin && existingAdmin.count > 0) {
+        console.log('✅ Database already initialized with admin user');
+        return;
+      }
+    } catch (error) {
+      console.log('ℹ️ Database tables might not exist yet, creating schema...');
+    }
+    
     // Get list of existing tables
     interface TableInfo {
       name: string;
@@ -26,7 +41,7 @@ export async function initializeDatabase(): Promise<void> {
       
       console.log('Existing tables found:', existingTables.map(t => t.name).join(', ') || 'none');
       
-      // Drop existing tables in reverse order of dependencies
+      // Drop existing tables in reverse order of dependencies if they exist
       const tablesToDrop = [
         'employee_availabilities',
         'assigned_shifts',
@@ -77,54 +92,13 @@ export async function initializeDatabase(): Promise<void> {
     }
     
     await db.run('COMMIT');
-    console.log('✅ Datenbankschema erfolgreich initialisiert');
+    console.log('✅ Database schema successfully initialized');
     
     // Give a small delay to ensure all transactions are properly closed
     await new Promise(resolve => setTimeout(resolve, 100));
     
-    // Create default template
-    await setupDefaultTemplate();
   } catch (error) {
-    console.error('Fehler bei der Datenbankinitialisierung:', error);
-    throw error;
-  }
-}
-
-async function createAdminUser(): Promise<void> {
-  try {
-    await db.run('BEGIN TRANSACTION');
-    
-    try {
-      // Erstelle Admin-Benutzer, wenn noch keiner existiert
-      const admin = await db.get('SELECT id FROM users WHERE role = ?', ['admin']);
-      
-      if (!admin) {
-        await db.run(
-          `INSERT INTO users (id, email, password, name, role, phone, department, is_active) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            'admin-' + Math.random().toString(36).substring(2),
-            'admin@schichtplan.de',
-            'admin123',
-            'Administrator',
-            'admin',
-            '+49 123 456789',
-            'IT',
-            true
-          ]
-        );
-        console.log('✅ Admin-Benutzer erstellt');
-      } else {
-        console.log('ℹ️ Admin-Benutzer existiert bereits');
-      }
-      
-      await db.run('COMMIT');
-    } catch (error) {
-      await db.run('ROLLBACK');
-      throw error;
-    }
-  } catch (error) {
-    console.error('Fehler beim Erstellen des Admin-Benutzers:', error);
+    console.error('Error during database initialization:', error);
     throw error;
   }
 }

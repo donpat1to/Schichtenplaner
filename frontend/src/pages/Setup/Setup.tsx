@@ -1,3 +1,4 @@
+// frontend/src/pages/Setup/Setup.tsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -14,7 +15,7 @@ const Setup: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, checkSetupStatus } = useAuth();
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -81,6 +82,9 @@ const Setup: React.FC = () => {
         throw new Error(data.error || 'Setup fehlgeschlagen');
       }
 
+      // Re-check setup status after successful setup
+      await checkSetupStatus();
+      
       // Automatically log in after setup
       await login({ email: adminEmail, password: formData.password });
       navigate('/');
