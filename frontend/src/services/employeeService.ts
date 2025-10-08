@@ -7,9 +7,11 @@ const API_BASE = 'http://localhost:3002/api/employees';
 export const employeeService = {
   // Alle Mitarbeiter abrufen
   async getEmployees(): Promise<Employee[]> {
-    const response = await fetch(API_BASE, {
+    const response = await fetch(`${API_BASE}?_=${Date.now()}`, {
       headers: {
         'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
         ...authService.getAuthHeaders()
       }
     });
@@ -74,7 +76,7 @@ export const employeeService = {
     return response.json();
   },
 
-  // Mitarbeiter löschen (deaktivieren)
+  // Mitarbeiter permanent löschen
   async deleteEmployee(id: string): Promise<void> {
     const response = await fetch(`${API_BASE}/${id}`, {
       method: 'DELETE',
@@ -84,7 +86,8 @@ export const employeeService = {
     });
     
     if (!response.ok) {
-      throw new Error('Fehler beim Löschen des Mitarbeiters');
+      const error = await response.json().catch(() => ({ error: 'Fehler beim Löschen des Mitarbeiters' }));
+      throw new Error(error.error || 'Fehler beim Löschen des Mitarbeiters');
     }
   },
 

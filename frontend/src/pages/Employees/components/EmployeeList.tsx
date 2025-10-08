@@ -1,14 +1,16 @@
-// frontend/src/pages/Employees/components/EmployeeList.tsx
+// frontend/src/pages/Employees/components/EmployeeList.tsx - KORRIGIERT
 import React, { useState } from 'react';
 import { Employee } from '../../../types/employee';
+import { useAuth } from '../../../contexts/AuthContext';
 
 interface EmployeeListProps {
   employees: Employee[];
   onEdit: (employee: Employee) => void;
-  onDelete: (employeeId: string) => void;
+  onDelete: (employee: Employee) => void; // Jetzt mit Employee-Objekt
   onManageAvailability: (employee: Employee) => void;
   currentUserRole: 'admin' | 'instandhalter';
 }
+
 
 const EmployeeList: React.FC<EmployeeListProps> = ({
   employees,
@@ -17,8 +19,9 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
   onManageAvailability,
   currentUserRole
 }) => {
-  const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('active');
   const [searchTerm, setSearchTerm] = useState('');
+  const { user: currentUser } = useAuth();
 
   const filteredEmployees = employees.filter(employee => {
     // Status-Filter
@@ -52,6 +55,33 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
     return isActive 
       ? { text: 'Aktiv', color: '#27ae60', bgColor: '#d5f4e6' }
       : { text: 'Inaktiv', color: '#e74c3c', bgColor: '#fadbd8' };
+  };
+
+  // NEU: Kann Benutzer löschen?
+  const canDeleteEmployee = (employee: Employee): boolean => {
+    // Nur Admins können löschen
+    if (currentUserRole !== 'admin') return false;
+    
+    // Kann sich nicht selbst löschen
+    if (employee.id === currentUser?.id) return false;
+    
+    // Admins können nur von Admins gelöscht werden
+    if (employee.role === 'admin' && currentUserRole !== 'admin') return false;
+    
+    return true;
+  };
+
+  // NEU: Kann Benutzer bearbeiten?
+  const canEditEmployee = (employee: Employee): boolean => {
+    // Admins können alle bearbeiten
+    if (currentUserRole === 'admin') return true;
+    
+    // Instandhalter können nur User und sich selbst bearbeiten
+    if (currentUserRole === 'instandhalter') {
+      return employee.role === 'user' || employee.id === currentUser?.id;
+    }
+    
+    return false;
   };
 
   if (employees.length === 0) {
@@ -122,7 +152,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
         </div>
       </div>
 
-      {/* Mitarbeiter Tabelle */}
+      {/* Mitarbeiter Tabelle - SYMMETRISCH KORRIGIERT */}
       <div style={{
         backgroundColor: 'white',
         borderRadius: '8px',
@@ -130,33 +160,37 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
         overflow: 'hidden',
         boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
       }}>
+        {/* Tabellen-Header - SYMMETRISCH */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: '2fr 1.5fr 1fr 1fr 1fr auto',
+          gridTemplateColumns: '2fr 1.5fr 1fr 1fr 1fr 120px', // Feste Breite für Aktionen
           gap: '15px',
           padding: '15px 20px',
           backgroundColor: '#f8f9fa',
           borderBottom: '1px solid #dee2e6',
           fontWeight: 'bold',
-          color: '#2c3e50'
+          color: '#2c3e50',
+          alignItems: 'center'
         }}>
           <div>Name & E-Mail</div>
           <div>Abteilung</div>
-          <div>Rolle</div>
-          <div>Status</div>
-          <div>Letzter Login</div>
-          <div>Aktionen</div>
+          <div style={{ textAlign: 'center' }}>Rolle</div>
+          <div style={{ textAlign: 'center' }}>Status</div>
+          <div style={{ textAlign: 'center' }}>Letzter Login</div>
+          <div style={{ textAlign: 'center' }}>Aktionen</div>
         </div>
 
         {filteredEmployees.map(employee => {
-          const status = getStatusBadge(employee.isActive);
+          const status = getStatusBadge(employee.isActive ?? true);
+          const canEdit = canEditEmployee(employee);
+          const canDelete = canDeleteEmployee(employee);
           
           return (
             <div
               key={employee.id}
               style={{
                 display: 'grid',
-                gridTemplateColumns: '2fr 1.5fr 1fr 1fr 1fr auto',
+                gridTemplateColumns: '2fr 1.5fr 1fr 1fr 1fr 120px', // Gleiche Spalten wie Header
                 gap: '15px',
                 padding: '15px 20px',
                 borderBottom: '1px solid #f0f0f0',
@@ -167,6 +201,16 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
               <div>
                 <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
                   {employee.name}
+                  {employee.id === currentUser?.id && (
+                    <span style={{ 
+                      marginLeft: '8px',
+                      fontSize: '12px',
+                      color: '#3498db',
+                      fontWeight: 'normal'
+                    }}>
+                      (Sie)
+                    </span>
+                  )}
                 </div>
                 <div style={{ color: '#666', fontSize: '14px' }}>
                   {employee.email}
@@ -174,81 +218,99 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
               </div>
 
               {/* Abteilung */}
-              <div>
+              <div style={{ color: '#666' }}>
                 {employee.department || (
                   <span style={{ color: '#999', fontStyle: 'italic' }}>Nicht zugewiesen</span>
                 )}
               </div>
 
-              {/* Rolle */}
-              <div>
+              {/* Rolle - ZENTRIERT */}
+              <div style={{ textAlign: 'center' }}>
                 <span
                   style={{
                     backgroundColor: getRoleBadgeColor(employee.role),
                     color: 'white',
-                    padding: '4px 8px',
-                    borderRadius: '12px',
+                    padding: '6px 12px',
+                    borderRadius: '15px',
                     fontSize: '12px',
-                    fontWeight: 'bold'
+                    fontWeight: 'bold',
+                    display: 'inline-block',
+                    minWidth: '80px'
                   }}
                 >
-                  {employee.role}
+                  {employee.role === 'admin' ? 'ADMIN' : 
+                   employee.role === 'instandhalter' ? 'INSTANDHALTER' : 'MITARBEITER'}
                 </span>
               </div>
 
-              {/* Status */}
-              <div>
+              {/* Status - ZENTRIERT */}
+              <div style={{ textAlign: 'center' }}>
                 <span
                   style={{
                     backgroundColor: status.bgColor,
                     color: status.color,
-                    padding: '4px 8px',
-                    borderRadius: '12px',
+                    padding: '6px 12px',
+                    borderRadius: '15px',
                     fontSize: '12px',
-                    fontWeight: 'bold'
+                    fontWeight: 'bold',
+                    display: 'inline-block',
+                    minWidth: '70px'
                   }}
                 >
                   {status.text}
                 </span>
               </div>
 
-              {/* Letzter Login */}
-              <div style={{ fontSize: '14px', color: '#666' }}>
+              {/* Letzter Login - ZENTRIERT */}
+              <div style={{ textAlign: 'center', fontSize: '14px', color: '#666' }}>
                 {employee.lastLogin 
                   ? new Date(employee.lastLogin).toLocaleDateString('de-DE')
                   : 'Noch nie'
                 }
               </div>
 
-              {/* Aktionen */}
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <button
-                  onClick={() => onManageAvailability(employee)}
-                  style={{
-                    padding: '6px 12px',
-                    backgroundColor: '#3498db',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '12px'
-                  }}
-                  title="Verfügbarkeit verwalten"
-                >
-                  📅
-                </button>
+              {/* Aktionen - ZENTRIERT und SYMMETRISCH */}
+              <div style={{ 
+                display: 'flex', 
+                gap: '8px', 
+                justifyContent: 'center',
+                flexWrap: 'wrap'
+              }}>
+                {/* Verfügbarkeit Button - immer sichtbar für berechtigte */}
+                {(currentUserRole === 'admin' || currentUserRole === 'instandhalter') && (
+                  <button
+                    onClick={() => onManageAvailability(employee)}
+                    style={{
+                      padding: '6px 8px',
+                      backgroundColor: '#3498db',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      minWidth: '32px',
+                      height: '32px'
+                    }}
+                    title="Verfügbarkeit verwalten"
+                  >
+                    📅
+                  </button>
+                )}
 
-                {(currentUserRole === 'admin' || employee.role !== 'admin') && (
+                {/* Bearbeiten Button */}
+                {canEdit && (
                   <button
                     onClick={() => onEdit(employee)}
                     style={{
-                      padding: '6px 12px',
+                      padding: '6px 8px',
                       backgroundColor: '#f39c12',
                       color: 'white',
                       border: 'none',
                       borderRadius: '4px',
                       cursor: 'pointer',
-                      fontSize: '12px'
+                      fontSize: '12px',
+                      minWidth: '32px',
+                      height: '32px'
                     }}
                     title="Mitarbeiter bearbeiten"
                   >
@@ -256,27 +318,54 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
                   </button>
                 )}
 
-                {currentUserRole === 'admin' && employee.role !== 'admin' && (
+                {/* Löschen Button - NUR FÜR ADMINS */}
+                {canDelete && (
                   <button
-                    onClick={() => onDelete(employee.id)}
+                    onClick={() => onDelete(employee)}
                     style={{
-                      padding: '6px 12px',
+                      padding: '6px 8px',
                       backgroundColor: '#e74c3c',
                       color: 'white',
                       border: 'none',
                       borderRadius: '4px',
                       cursor: 'pointer',
-                      fontSize: '12px'
+                      fontSize: '12px',
+                      minWidth: '32px',
+                      height: '32px'
                     }}
-                    title="Mitarbeiter löschen"
+                    title="Mitarbeiter deaktivieren"
                   >
                     🗑️
                   </button>
+                )}
+
+                {/* Platzhalter für Symmetrie wenn keine Aktionen */}
+                {!canEdit && !canDelete && (currentUserRole !== 'admin' && currentUserRole !== 'instandhalter') && (
+                  <div style={{ width: '32px', height: '32px' }}></div>
                 )}
               </div>
             </div>
           );
         })}
+      </div>
+
+      {/* NEU: Info-Box über Berechtigungen */}
+      <div style={{
+        marginTop: '20px',
+        padding: '15px',
+        backgroundColor: '#e8f4fd',
+        border: '1px solid #b6d7e8',
+        borderRadius: '6px',
+        fontSize: '14px',
+        color: '#2c3e50'
+      }}>
+        <strong>💡 Informationen zu Berechtigungen:</strong>
+        <ul style={{ margin: '8px 0 0 20px', padding: 0 }}>
+          <li><strong>Admins</strong> können alle Benutzer bearbeiten und löschen</li>
+          <li><strong>Instandhalter</strong> können nur Mitarbeiter bearbeiten</li>
+          <li>Mindestens <strong>ein Admin</strong> muss immer im System vorhanden sein</li>
+          <li>Benutzer können sich <strong>nicht selbst löschen</strong></li>
+        </ul>
       </div>
     </div>
   );

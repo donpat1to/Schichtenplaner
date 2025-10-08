@@ -17,20 +17,59 @@ export class DatabaseService {
         console.error('Database connection error:', err);
       } else {
         console.log('Connected to SQLite database');
-        this.initializeDatabase();
+        this.enableForeignKeysAndInitialize();
       }
     });
   }
 
+  private async enableForeignKeysAndInitialize() {
+    try {
+      // First enable foreign keys
+      await this.run('PRAGMA foreign_keys = ON');
+      console.log('Foreign keys enabled');
+
+      // Then check if it's actually enabled
+      const pragma = await this.get('PRAGMA foreign_keys');
+      console.log('Foreign keys status:', pragma);
+
+      // Now initialize the database
+      await this.initializeDatabase();
+    } catch (error) {
+      console.error('Error in database initialization:', error);
+    }
+  }
+
   private initializeDatabase() {
+    const dropTables = `
+      DROP TABLE IF EXISTS employee_availabilities;
+      DROP TABLE IF EXISTS assigned_shifts;
+      DROP TABLE IF EXISTS shift_plans;
+      DROP TABLE IF EXISTS template_shifts;
+      DROP TABLE IF EXISTS shift_templates;
+      DROP TABLE IF EXISTS users;
+    `;
+
+    this.db.exec(dropTables, (err) => {
+      if (err) {
+        console.error('Error dropping tables:', err);
+        return;
+      }
+      console.log('Existing tables dropped');
+    });
+
     const schema = `
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
-        email TEXT UNIQUE NOT NULL,
+        email TEXT NOT NULL,
         password TEXT NOT NULL,
         name TEXT NOT NULL,
         role TEXT CHECK(role IN ('admin', 'instandhalter', 'user')) NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        is_active BOOLEAN DEFAULT TRUE,
+        phone TEXT,
+        department TEXT,
+        last_login DATETIME,
+        CONSTRAINT unique_active_email UNIQUE (email, is_active) WHERE is_active = 1
       );
 
       CREATE TABLE IF NOT EXISTS shift_templates (
@@ -64,8 +103,8 @@ export class DatabaseService {
         status TEXT CHECK(status IN ('draft', 'published')) DEFAULT 'draft',
         created_by TEXT NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (created_by) REFERENCES users(id),
-        FOREIGN KEY (template_id) REFERENCES shift_templates(id)
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+        FOREIGN KEY (template_id) REFERENCES shift_templates(id) ON DELETE SET NULL
       );
 
       CREATE TABLE IF NOT EXISTS assigned_shifts (
@@ -92,6 +131,15 @@ export class DatabaseService {
   run(sql: string, params: any[] = []): Promise<void> {
     return new Promise((resolve, reject) => {
       this.db.run(sql, params, function(err) {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+
+  exec(sql: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.db.exec(sql, (err) => {
         if (err) reject(err);
         else resolve();
       });

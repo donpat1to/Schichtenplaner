@@ -1,7 +1,9 @@
-// frontend/src/App.tsx - KORRIGIERT
+// frontend/src/App.tsx - KORRIGIERTE VERSION
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { NotificationProvider } from './contexts/NotificationContext';
+import NotificationContainer from './components/Notification/NotificationContainer';
 import Layout from './components/Layout/Layout';
 import Login from './pages/Auth/Login';
 import Dashboard from './pages/Dashboard/Dashboard';
@@ -11,14 +13,12 @@ import EmployeeManagement from './pages/Employees/EmployeeManagement';
 import Settings from './pages/Settings/Settings';
 import Help from './pages/Help/Help';
 
-// Protected Route Component
+// Protected Route Component direkt in App.tsx
 const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[] }> = ({ 
   children, 
   roles = ['admin', 'instandhalter', 'user'] 
 }) => {
   const { user, loading, hasRole } = useAuth();
-
-  console.log('🔒 ProtectedRoute - User:', user?.email, 'Loading:', loading);
 
   if (loading) {
     return (
@@ -29,12 +29,10 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[] }> 
   }
   
   if (!user) {
-    console.log('❌ No user, redirecting to login');
     return <Login />;
   }
 
   if (!hasRole(roles)) {
-    console.log('❌ Insufficient permissions for:', user.email);
     return (
       <Layout>
         <div style={{ textAlign: 'center', padding: '40px' }}>
@@ -45,82 +43,58 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[] }> 
     );
   }
   
-  console.log('✅ Access granted for:', user.email);
   return <Layout>{children}</Layout>;
 };
 
 function App() {
-  const { user, loading } = useAuth();
-
-  console.log('🏠 App Component - User:', user?.email, 'Loading:', loading);
-
-  // Während des Ladens zeigen wir einen Loading Screen
-  if (loading) {
-    return (
-      <div style={{ 
-        textAlign: 'center', 
-        padding: '100px 20px',
-        fontSize: '18px'
-      }}>
-        <div>⏳ SchichtPlaner wird geladen...</div>
-      </div>
-    );
-  }
-
   return (
-    <Router>
-      <Routes>
-        {/* Public Route */}
-        <Route path="/login" element={<Login />} />
-        
-        {/* Protected Routes with Layout */}
-        <Route path="/" element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/shift-plans" element={
-          <ProtectedRoute>
-            <ShiftPlanList />
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/shift-plans/new" element={
-          <ProtectedRoute roles={['admin', 'instandhalter']}>
-            <ShiftPlanCreate />
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/employees" element={
-          <ProtectedRoute roles={['admin', 'instandhalter']}>
-            <EmployeeManagement />
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/settings" element={
-          <ProtectedRoute roles={['admin']}>
-            <Settings />
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/help" element={
-          <ProtectedRoute>
-            <Help />
-          </ProtectedRoute>
-        } />
-      </Routes>
-    </Router>
+    <NotificationProvider>
+      <AuthProvider>
+        <Router>
+          <NotificationContainer />
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            
+            <Route path="/" element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/shift-plans" element={
+              <ProtectedRoute>
+                <ShiftPlanList />
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/shift-plans/new" element={
+              <ProtectedRoute roles={['admin', 'instandhalter']}>
+                <ShiftPlanCreate />
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/employees" element={
+              <ProtectedRoute roles={['admin', 'instandhalter']}>
+                <EmployeeManagement />
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/settings" element={
+              <ProtectedRoute roles={['admin']}>
+                <Settings />
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/help" element={
+              <ProtectedRoute>
+                <Help />
+              </ProtectedRoute>
+            } />
+          </Routes>
+        </Router>
+      </AuthProvider>
+    </NotificationProvider>
   );
 }
 
-// Hauptkomponente mit AuthProvider
-function AppWrapper() {
-  return (
-    <AuthProvider>
-      <App />
-    </AuthProvider>
-  );
-}
-
-export default AppWrapper;
+export default App;

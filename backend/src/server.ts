@@ -239,18 +239,32 @@ app.put('/api/employees/:id', async (req: any, res: any) => {
 app.delete('/api/employees/:id', async (req: any, res: any) => {
   try {
     const { id } = req.params;
-    console.log('🗑️ Deleting employee:', id);
+    console.log('🗑️  Deleting employee:', id);
     
-    // Mitarbeiter finden
     const employeeIndex = employees.findIndex(emp => emp.id === id);
     if (employeeIndex === -1) {
       return res.status(404).json({ error: 'Employee not found' });
     }
 
-    // Soft delete
-    employees[employeeIndex].isActive = false;
+    const employeeToDelete = employees[employeeIndex];
 
-    console.log('✅ Employee deactivated:', employees[employeeIndex].name);
+    // Admin-Check
+    if (employeeToDelete.role === 'admin') {
+      const adminCount = employees.filter(emp => 
+        emp.role === 'admin' && emp.isActive
+      ).length;
+      
+      if (adminCount <= 1) {
+        return res.status(400).json({ 
+          error: 'Mindestens ein Administrator muss im System verbleiben' 
+        });
+      }
+    }
+
+    // Perform hard delete
+    employees.splice(employeeIndex, 1);
+    console.log('✅ Employee permanently deleted:', employeeToDelete.name);
+
     res.status(204).send();
     
   } catch (error) {

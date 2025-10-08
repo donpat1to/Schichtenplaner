@@ -1,4 +1,4 @@
-// frontend/src/pages/Employees/EmployeeManagement.tsx
+// frontend/src/pages/Employees/EmployeeManagement.tsx - MIT NOTIFICATION SYSTEM
 import React, { useState, useEffect } from 'react';
 import { Employee } from '../../types/employee';
 import { employeeService } from '../../services/employeeService';
@@ -6,16 +6,17 @@ import EmployeeList from './components/EmployeeList';
 import EmployeeForm from './components/EmployeeForm';
 import AvailabilityManager from './components/AvailabilityManager';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotification } from '../../contexts/NotificationContext';
 
 type ViewMode = 'list' | 'create' | 'edit' | 'availability';
 
 const EmployeeManagement: React.FC = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const { hasRole } = useAuth();
+  const { showNotification, confirmDialog } = useNotification();
 
   useEffect(() => {
     loadEmployees();
@@ -24,14 +25,20 @@ const EmployeeManagement: React.FC = () => {
   const loadEmployees = async () => {
     try {
       setLoading(true);
-      setError('');
-      console.log('🔄 Loading employees...');
+      console.log('Fetching fresh employee list');
+      
+      // Add cache-busting parameter to prevent browser caching
       const data = await employeeService.getEmployees();
-      console.log('✅ Employees loaded:', data);
+      console.log('Received employees:', data.length);
+      
       setEmployees(data);
     } catch (err: any) {
-      console.error('❌ Error loading employees:', err);
-      setError(err.message || 'Fehler beim Laden der Mitarbeiter');
+      console.error('Error loading employees:', err);
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: 'Mitarbeiter konnten nicht geladen werden'
+      });
     } finally {
       setLoading(false);
     }
@@ -57,38 +64,91 @@ const EmployeeManagement: React.FC = () => {
     setSelectedEmployee(null);
   };
 
-  // KORRIGIERT: Explizit Daten neu laden nach Create/Update
   const handleEmployeeCreated = () => {
-    console.log('🔄 Reloading employees after creation...');
-    loadEmployees(); // Daten neu laden
-    setViewMode('list'); // Zurück zur Liste
+    loadEmployees();
+    setViewMode('list');
+    showNotification({
+      type: 'success',
+      title: 'Erfolg',
+      message: 'Mitarbeiter wurde erfolgreich erstellt'
+    });
   };
 
   const handleEmployeeUpdated = () => {
-    console.log('🔄 Reloading employees after update...');
-    loadEmployees(); // Daten neu laden
-    setViewMode('list'); // Zurück zur Liste
+    loadEmployees();
+    setViewMode('list');
+    showNotification({
+      type: 'success',
+      title: 'Erfolg',
+      message: 'Mitarbeiter wurde erfolgreich aktualisiert'
+    });
   };
 
-  const handleDeleteEmployee = async (employeeId: string) => {
-    if (!window.confirm('Mitarbeiter wirklich löschen?\nDer Mitarbeiter wird deaktiviert und kann keine Schichten mehr zugewiesen bekommen.')) {
-      return;
-    }
-
+  // Verbesserte Lösch-Funktion mit Bestätigungs-Dialog
+  const handleDeleteEmployee = async (employee: Employee) => {
     try {
-      await employeeService.deleteEmployee(employeeId);
-      await loadEmployees(); // Liste aktualisieren
+      // Bestätigungs-Dialog basierend auf Rolle
+      let confirmMessage = `Möchten Sie den Mitarbeiter "${employee.name}" wirklich PERMANENT LÖSCHEN?\n\nDie Daten des Mitarbeiters werden unwiderruflich gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.`;
+      let confirmTitle = 'Mitarbeiter löschen';
+      
+      if (employee.role === 'admin') {
+        const adminCount = employees.filter(emp => 
+          emp.role === 'admin' && emp.isActive
+        ).length;
+        
+        if (adminCount <= 1) {
+          showNotification({
+            type: 'error',
+            title: 'Aktion nicht möglich',
+            message: 'Mindestens ein Administrator muss im System verbleiben'
+          });
+          return;
+        }
+        
+        confirmTitle = 'Administrator löschen';
+        confirmMessage = `Möchten Sie den Administrator "${employee.name}" wirklich PERMANENT LÖSCHEN?\n\nAchtung: Diese Aktion ist permanent und kann nicht rückgängig gemacht werden.`;
+      }
+
+      const confirmed = await confirmDialog({
+        title: confirmTitle,
+        message: confirmMessage,
+        confirmText: 'Permanent löschen',
+        cancelText: 'Abbrechen',
+        type: 'warning'
+      });
+
+      if (!confirmed) return;
+
+      console.log('Starting deletion process for employee:', employee.name);
+      await employeeService.deleteEmployee(employee.id);
+      console.log('Employee deleted, reloading list');
+      
+      // Force a fresh reload of employees
+      const updatedEmployees = await employeeService.getEmployees();
+      setEmployees(updatedEmployees);
+      
+      showNotification({
+        type: 'success',
+        title: 'Erfolg',
+        message: `Mitarbeiter "${employee.name}" wurde erfolgreich gelöscht`
+      });
+
     } catch (err: any) {
-      setError(err.message || 'Fehler beim Löschen des Mitarbeiters');
+      if (err.message.includes('Mindestens ein Administrator')) {
+        showNotification({
+          type: 'error',
+          title: 'Aktion nicht möglich',
+          message: err.message
+        });
+      } else {
+        showNotification({
+          type: 'error',
+          title: 'Fehler',
+          message: 'Mitarbeiter konnte nicht gelöscht werden'
+        });
+      }
     }
   };
-
-  // Debug: Zeige aktuellen State
-  console.log('📊 Current state:', { 
-    viewMode, 
-    employeesCount: employees.length,
-    selectedEmployee: selectedEmployee?.name 
-  });
 
   if (loading && viewMode === 'list') {
     return (
@@ -100,7 +160,6 @@ const EmployeeManagement: React.FC = () => {
 
   return (
     <div>
-      {/* Header mit Titel und Aktionen */}
       <div style={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
@@ -154,39 +213,12 @@ const EmployeeManagement: React.FC = () => {
         )}
       </div>
 
-      {/* Fehleranzeige */}
-      {error && (
-        <div style={{
-          backgroundColor: '#fee',
-          border: '1px solid #f5c6cb',
-          color: '#721c24',
-          padding: '15px',
-          borderRadius: '6px',
-          marginBottom: '20px'
-        }}>
-          <strong>Fehler:</strong> {error}
-          <button
-            onClick={() => setError('')}
-            style={{
-              float: 'right',
-              background: 'none',
-              border: 'none',
-              color: '#721c24',
-              cursor: 'pointer',
-              fontWeight: 'bold'
-            }}
-          >
-            ×
-          </button>
-        </div>
-      )}
-
       {/* Inhalt basierend auf View Mode */}
       {viewMode === 'list' && (
         <EmployeeList
           employees={employees}
           onEdit={handleEditEmployee}
-          onDelete={handleDeleteEmployee}
+          onDelete={handleDeleteEmployee} // Jetzt mit Employee-Objekt
           onManageAvailability={handleManageAvailability}
           currentUserRole={hasRole(['admin']) ? 'admin' : 'instandhalter'}
         />
