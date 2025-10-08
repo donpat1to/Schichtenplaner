@@ -6,7 +6,7 @@ export interface Employee {
   role: 'admin' | 'instandhalter' | 'user';
   isActive: boolean;
   createdAt: string;
-  lastLogin?: string;
+  lastLogin?: string | null;
   phone?: string;
   department?: string;
 }

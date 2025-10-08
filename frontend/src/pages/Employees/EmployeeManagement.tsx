@@ -24,9 +24,13 @@ const EmployeeManagement: React.FC = () => {
   const loadEmployees = async () => {
     try {
       setLoading(true);
+      setError('');
+      console.log('🔄 Loading employees...');
       const data = await employeeService.getEmployees();
+      console.log('✅ Employees loaded:', data);
       setEmployees(data);
     } catch (err: any) {
+      console.error('❌ Error loading employees:', err);
       setError(err.message || 'Fehler beim Laden der Mitarbeiter');
     } finally {
       setLoading(false);
@@ -51,15 +55,19 @@ const EmployeeManagement: React.FC = () => {
   const handleBackToList = () => {
     setViewMode('list');
     setSelectedEmployee(null);
-    loadEmployees(); // Daten aktualisieren
   };
 
+  // KORRIGIERT: Explizit Daten neu laden nach Create/Update
   const handleEmployeeCreated = () => {
-    handleBackToList();
+    console.log('🔄 Reloading employees after creation...');
+    loadEmployees(); // Daten neu laden
+    setViewMode('list'); // Zurück zur Liste
   };
 
   const handleEmployeeUpdated = () => {
-    handleBackToList();
+    console.log('🔄 Reloading employees after update...');
+    loadEmployees(); // Daten neu laden
+    setViewMode('list'); // Zurück zur Liste
   };
 
   const handleDeleteEmployee = async (employeeId: string) => {
@@ -74,6 +82,13 @@ const EmployeeManagement: React.FC = () => {
       setError(err.message || 'Fehler beim Löschen des Mitarbeiters');
     }
   };
+
+  // Debug: Zeige aktuellen State
+  console.log('📊 Current state:', { 
+    viewMode, 
+    employeesCount: employees.length,
+    selectedEmployee: selectedEmployee?.name 
+  });
 
   if (loading && viewMode === 'list') {
     return (
@@ -97,7 +112,7 @@ const EmployeeManagement: React.FC = () => {
         <div>
           <h1 style={{ margin: 0, color: '#2c3e50' }}>👥 Mitarbeiter Verwaltung</h1>
           <p style={{ margin: '5px 0 0 0', color: '#7f8c8d' }}>
-            Verwalten Sie Mitarbeiterkonten und Verfügbarkeiten
+            {employees.length} Mitarbeiter gefunden
           </p>
         </div>
 
@@ -197,7 +212,7 @@ const EmployeeManagement: React.FC = () => {
       {viewMode === 'availability' && selectedEmployee && (
         <AvailabilityManager
           employee={selectedEmployee}
-          onSave={handleBackToList}
+          onSave={handleEmployeeUpdated}
           onCancel={handleBackToList}
         />
       )}

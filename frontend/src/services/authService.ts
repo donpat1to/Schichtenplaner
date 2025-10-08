@@ -11,6 +11,8 @@ export interface RegisterRequest {
   password: string;
   name: string;
   role?: string;
+  phone?: string;
+  department?: string;
 }
 
 export interface AuthResponse {
@@ -25,6 +27,10 @@ export interface User {
   name: string;
   role: 'admin' | 'instandhalter' | 'user';
   createdAt: string;
+  lastLogin?: string;
+  phone?: string;
+  department?: string;
+  isActive?: boolean;
 }
 
 class AuthService {
@@ -38,7 +44,8 @@ class AuthService {
     });
 
     if (!response.ok) {
-      throw new Error('Login fehlgeschlagen');
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Login fehlgeschlagen');
     }
 
     const data: AuthResponse = await response.json();
@@ -49,23 +56,56 @@ class AuthService {
     return data;
   }
 
+  // Register Methode hinzufügen
   async register(userData: RegisterRequest): Promise<AuthResponse> {
-    const response = await fetch(`${API_BASE}/auth/register`, {
+    const response = await fetch(`${API_BASE}/employees`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(userData)
     });
 
     if (!response.ok) {
-      throw new Error('Registrierung fehlgeschlagen');
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Registrierung fehlgeschlagen');
     }
 
-    const data: AuthResponse = await response.json();
-    this.token = data.token;
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('user', JSON.stringify(data.user));
-    
-    return data;
+    // Nach der Erstellung automatisch einloggen
+    return this.login({
+      email: userData.email,
+      password: userData.password
+    });
+  }
+
+  // getCurrentUser als SYNCHRON machen
+  getCurrentUser(): User | null {
+    const userStr = localStorage.getItem('user');
+    return userStr ? JSON.parse(userStr) : null;
+  }
+
+  // Asynchrone Methode für Server-Abfrage
+  async fetchCurrentUser(): Promise<User | null> {
+    const token = this.getToken();
+    if (!token) {
+      return null;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/auth/me`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const user = await response.json();
+        localStorage.setItem('user', JSON.stringify(user));
+        return user;
+      }
+    } catch (error) {
+      console.error('Error fetching current user:', error);
+    }
+
+    return null;
   }
 
   logout(): void {
@@ -79,11 +119,6 @@ class AuthService {
       this.token = localStorage.getItem('token');
     }
     return this.token;
-  }
-
-  getCurrentUser(): User | null {
-    const userStr = localStorage.getItem('user');
-    return userStr ? JSON.parse(userStr) : null;
   }
 
   isAuthenticated(): boolean {

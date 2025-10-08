@@ -9,7 +9,7 @@ export interface Employee {
   phone?: string;
   department?: string;
   createdAt: string;
-  lastLogin?: string;
+  lastLogin?: string | null;
 }
 
 export interface Availability {

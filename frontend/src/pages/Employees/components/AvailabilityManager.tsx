@@ -152,13 +152,13 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         overflow: 'hidden',
         marginBottom: '30px'
       }}>
-        {daysOfWeek.map(day => {
+        {daysOfWeek.map((day, dayIndex) => {
           const dayAvailabilities = getAvailabilitiesForDay(day.id);
+          const isLastDay = dayIndex === daysOfWeek.length - 1;
           
           return (
             <div key={day.id} style={{
-              borderBottom: '1px solid #f0f0f0',
-              ':last-child': { borderBottom: 'none' }
+              borderBottom: isLastDay ? 'none' : '1px solid #f0f0f0'
             }}>
               {/* Tag Header */}
               <div style={{
@@ -173,96 +173,99 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
 
               {/* Zeit-Slots */}
               <div style={{ padding: '15px 20px' }}>
-                {dayAvailabilities.map(availability => (
-                  <div
-                    key={availability.id}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr auto auto auto',
-                      gap: '15px',
-                      alignItems: 'center',
-                      padding: '10px 0',
-                      borderBottom: '1px solid #f8f9fa',
-                      ':last-child': { borderBottom: 'none' }
-                    }}
-                  >
-                    {/* Verfügbarkeit Toggle */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <input
-                        type="checkbox"
-                        id={`avail-${availability.id}`}
-                        checked={availability.isAvailable}
-                        onChange={(e) => handleAvailabilityChange(availability.id, e.target.checked)}
-                        style={{ width: '18px', height: '18px' }}
-                      />
-                      <label 
-                        htmlFor={`avail-${availability.id}`}
-                        style={{ 
-                          fontWeight: 'bold',
-                          color: availability.isAvailable ? '#27ae60' : '#95a5a6'
-                        }}
-                      >
-                        {availability.isAvailable ? 'Verfügbar' : 'Nicht verfügbar'}
-                      </label>
-                    </div>
+                {dayAvailabilities.map((availability, availabilityIndex) => {
+                  const isLastAvailability = availabilityIndex === dayAvailabilities.length - 1;
+                  
+                  return (
+                    <div
+                      key={availability.id}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr auto auto auto',
+                        gap: '15px',
+                        alignItems: 'center',
+                        padding: '10px 0',
+                        borderBottom: isLastAvailability ? 'none' : '1px solid #f8f9fa'
+                      }}
+                    >
+                      {/* Verfügbarkeit Toggle */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <input
+                          type="checkbox"
+                          id={`avail-${availability.id}`}
+                          checked={availability.isAvailable}
+                          onChange={(e) => handleAvailabilityChange(availability.id, e.target.checked)}
+                          style={{ width: '18px', height: '18px' }}
+                        />
+                        <label 
+                          htmlFor={`avail-${availability.id}`}
+                          style={{ 
+                            fontWeight: 'bold',
+                            color: availability.isAvailable ? '#27ae60' : '#95a5a6'
+                          }}
+                        >
+                          {availability.isAvailable ? 'Verfügbar' : 'Nicht verfügbar'}
+                        </label>
+                      </div>
 
-                    {/* Startzeit */}
-                    <div>
-                      <label style={{ fontSize: '12px', color: '#7f8c8d', display: 'block', marginBottom: '4px' }}>
-                        Von
-                      </label>
-                      <input
-                        type="time"
-                        value={availability.startTime}
-                        onChange={(e) => handleTimeChange(availability.id, 'startTime', e.target.value)}
-                        disabled={!availability.isAvailable}
-                        style={{
-                          padding: '6px 8px',
-                          border: `1px solid ${availability.isAvailable ? '#ddd' : '#f0f0f0'}`,
-                          borderRadius: '4px',
-                          backgroundColor: availability.isAvailable ? 'white' : '#f8f9fa',
-                          color: availability.isAvailable ? '#333' : '#999'
-                        }}
-                      />
-                    </div>
+                      {/* Startzeit */}
+                      <div>
+                        <label style={{ fontSize: '12px', color: '#7f8c8d', display: 'block', marginBottom: '4px' }}>
+                          Von
+                        </label>
+                        <input
+                          type="time"
+                          value={availability.startTime}
+                          onChange={(e) => handleTimeChange(availability.id, 'startTime', e.target.value)}
+                          disabled={!availability.isAvailable}
+                          style={{
+                            padding: '6px 8px',
+                            border: `1px solid ${availability.isAvailable ? '#ddd' : '#f0f0f0'}`,
+                            borderRadius: '4px',
+                            backgroundColor: availability.isAvailable ? 'white' : '#f8f9fa',
+                            color: availability.isAvailable ? '#333' : '#999'
+                          }}
+                        />
+                      </div>
 
-                    {/* Endzeit */}
-                    <div>
-                      <label style={{ fontSize: '12px', color: '#7f8c8d', display: 'block', marginBottom: '4px' }}>
-                        Bis
-                      </label>
-                      <input
-                        type="time"
-                        value={availability.endTime}
-                        onChange={(e) => handleTimeChange(availability.id, 'endTime', e.target.value)}
-                        disabled={!availability.isAvailable}
-                        style={{
-                          padding: '6px 8px',
-                          border: `1px solid ${availability.isAvailable ? '#ddd' : '#f0f0f0'}`,
-                          borderRadius: '4px',
-                          backgroundColor: availability.isAvailable ? 'white' : '#f8f9fa',
-                          color: availability.isavailable ? '#333' : '#999'
-                        }}
-                      />
-                    </div>
+                      {/* Endzeit */}
+                      <div>
+                        <label style={{ fontSize: '12px', color: '#7f8c8d', display: 'block', marginBottom: '4px' }}>
+                          Bis
+                        </label>
+                        <input
+                          type="time"
+                          value={availability.endTime}
+                          onChange={(e) => handleTimeChange(availability.id, 'endTime', e.target.value)}
+                          disabled={!availability.isAvailable}
+                          style={{
+                            padding: '6px 8px',
+                            border: `1px solid ${availability.isAvailable ? '#ddd' : '#f0f0f0'}`,
+                            borderRadius: '4px',
+                            backgroundColor: availability.isAvailable ? 'white' : '#f8f9fa',
+                            color: availability.isAvailable ? '#333' : '#999'
+                          }}
+                        />
+                      </div>
 
-                    {/* Status Badge */}
-                    <div>
-                      <span
-                        style={{
-                          backgroundColor: availability.isAvailable ? '#d5f4e6' : '#fadbd8',
-                          color: availability.isAvailable ? '#27ae60' : '#e74c3c',
-                          padding: '4px 8px',
-                          borderRadius: '12px',
-                          fontSize: '12px',
-                          fontWeight: 'bold'
-                        }}
-                      >
-                        {availability.isAvailable ? 'Aktiv' : 'Inaktiv'}
-                      </span>
+                      {/* Status Badge */}
+                      <div>
+                        <span
+                          style={{
+                            backgroundColor: availability.isAvailable ? '#d5f4e6' : '#fadbd8',
+                            color: availability.isAvailable ? '#27ae60' : '#e74c3c',
+                            padding: '4px 8px',
+                            borderRadius: '12px',
+                            fontSize: '12px',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          {availability.isAvailable ? 'Aktiv' : 'Inaktiv'}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           );
