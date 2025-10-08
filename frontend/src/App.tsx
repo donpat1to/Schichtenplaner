@@ -1,4 +1,4 @@
-// frontend/src/App.tsx
+// frontend/src/App.tsx - KORRIGIERT
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -17,77 +17,110 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[] }> 
   roles = ['admin', 'instandhalter', 'user'] 
 }) => {
   const { user, loading, hasRole } = useAuth();
-  
+
+  console.log('🔒 ProtectedRoute - User:', user?.email, 'Loading:', loading);
+
   if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: '40px' }}>
+        <div>⏳ Lade Anwendung...</div>
+      </div>
+    );
+  }
+  
+  if (!user) {
+    console.log('❌ No user, redirecting to login');
+    return <Login />;
+  }
+
+  if (!hasRole(roles)) {
+    console.log('❌ Insufficient permissions for:', user.email);
     return (
       <Layout>
         <div style={{ textAlign: 'center', padding: '40px' }}>
-          <div>⏳ Lade Anwendung...</div>
+          <h2>Zugriff verweigert</h2>
+          <p>Sie haben keine Berechtigung für diese Seite.</p>
         </div>
       </Layout>
     );
   }
   
-  if (!user || !hasRole(roles)) {
-    return <Login />;
-  }
-  
+  console.log('✅ Access granted for:', user.email);
   return <Layout>{children}</Layout>;
 };
 
 function App() {
+  const { user, loading } = useAuth();
+
+  console.log('🏠 App Component - User:', user?.email, 'Loading:', loading);
+
+  // Während des Ladens zeigen wir einen Loading Screen
+  if (loading) {
+    return (
+      <div style={{ 
+        textAlign: 'center', 
+        padding: '100px 20px',
+        fontSize: '18px'
+      }}>
+        <div>⏳ SchichtPlaner wird geladen...</div>
+      </div>
+    );
+  }
+
+  return (
+    <Router>
+      <Routes>
+        {/* Public Route */}
+        <Route path="/login" element={<Login />} />
+        
+        {/* Protected Routes with Layout */}
+        <Route path="/" element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/shift-plans" element={
+          <ProtectedRoute>
+            <ShiftPlanList />
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/shift-plans/new" element={
+          <ProtectedRoute roles={['admin', 'instandhalter']}>
+            <ShiftPlanCreate />
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/employees" element={
+          <ProtectedRoute roles={['admin', 'instandhalter']}>
+            <EmployeeManagement />
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/settings" element={
+          <ProtectedRoute roles={['admin']}>
+            <Settings />
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/help" element={
+          <ProtectedRoute>
+            <Help />
+          </ProtectedRoute>
+        } />
+      </Routes>
+    </Router>
+  );
+}
+
+// Hauptkomponente mit AuthProvider
+function AppWrapper() {
   return (
     <AuthProvider>
-      <Router>
-        <Routes>
-          {/* Public Route */}
-          <Route path="/login" element={<Login />} />
-          
-          {/* Protected Routes with Layout */}
-          <Route path="/" element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/shift-plans" element={
-            <ProtectedRoute>
-              <ShiftPlanList />
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/shift-plans/new" element={
-            <ProtectedRoute roles={['admin', 'instandhalter']}>
-              <ShiftPlanCreate />
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/employees" element={
-            <ProtectedRoute roles={['admin', 'instandhalter']}>
-              <EmployeeManagement />
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/settings" element={
-            <ProtectedRoute roles={['admin']}>
-              <Settings />
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/help" element={
-            <ProtectedRoute>
-              <Help />
-            </ProtectedRoute>
-          } />
-          
-          {/* Legal Pages (ohne Layout für einfacheren Zugang) */}
-          <Route path="/impressum" element={<div>Impressum Seite</div>} />
-          <Route path="/datenschutz" element={<div>Datenschutz Seite</div>} />
-          <Route path="/agb" element={<div>AGB Seite</div>} />
-        </Routes>
-      </Router>
+      <App />
     </AuthProvider>
   );
 }
 
-export default App;
+export default AppWrapper;

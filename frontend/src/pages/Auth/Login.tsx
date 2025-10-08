@@ -1,16 +1,16 @@
-// frontend/src/pages/Auth/Login.tsx
+// frontend/src/pages/Auth/Login.tsx - KORRIGIERT
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 
 const Login: React.FC = () => {
-  const [email, setEmail] = useState('admin@schichtplan.de');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
-  const { login } = useAuth();
+  const { login, user } = useAuth(); // user hinzugefügt für Debugging
 
-  console.log('Login Komponente - State:', { email, password, error, loading });
+  console.log('🔍 Login Component - Current user:', user);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,13 +18,14 @@ const Login: React.FC = () => {
     setLoading(true);
 
     try {
-      console.log('Login startet mit:', { email });
+      console.log('🚀 Starting login process...');
       await login({ email, password });
-      console.log('Login erfolgreich abgeschlossen');
-      // Force refresh als Fallback
-      window.location.reload();
+      console.log('✅ Login process completed');
+      
+      // Navigation passiert automatisch durch AuthContext
+      
     } catch (err: any) {
-      console.error('Login Fehler:', err);
+      console.error('❌ Login error:', err);
       setError(err.message || 'Login fehlgeschlagen');
     } finally {
       setLoading(false);
@@ -37,10 +38,9 @@ const Login: React.FC = () => {
       margin: '100px auto', 
       padding: '20px',
       border: '1px solid #ddd',
-      borderRadius: '8px',
-      backgroundColor: '#f9f9f9'
+      borderRadius: '8px'
     }}>
-      <h2 style={{ textAlign: 'center', marginBottom: '20px' }}>Anmelden</h2>
+      <h2>Anmelden</h2>
       
       {error && (
         <div style={{ 
@@ -48,8 +48,7 @@ const Login: React.FC = () => {
           backgroundColor: '#ffe6e6',
           padding: '10px',
           borderRadius: '4px',
-          marginBottom: '15px',
-          border: '1px solid #ffcccc'
+          marginBottom: '15px'
         }}>
           <strong>Fehler:</strong> {error}
         </div>
@@ -57,7 +56,7 @@ const Login: React.FC = () => {
 
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: '15px' }}>
-          <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+          <label style={{ display: 'block', marginBottom: '5px' }}>
             E-Mail:
           </label>
           <input
@@ -65,18 +64,12 @@ const Login: React.FC = () => {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            style={{ 
-              width: '100%', 
-              padding: '10px', 
-              border: '1px solid #ccc', 
-              borderRadius: '4px',
-              fontSize: '16px'
-            }}
+            style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
           />
         </div>
 
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+        <div style={{ marginBottom: '15px' }}>
+          <label style={{ display: 'block', marginBottom: '5px' }}>
             Passwort:
           </label>
           <input
@@ -84,13 +77,7 @@ const Login: React.FC = () => {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            style={{ 
-              width: '100%', 
-              padding: '10px', 
-              border: '1px solid #ccc', 
-              borderRadius: '4px',
-              fontSize: '16px'
-            }}
+            style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
           />
         </div>
 
@@ -99,31 +86,23 @@ const Login: React.FC = () => {
           disabled={loading}
           style={{ 
             width: '100%', 
-            padding: '12px', 
-            backgroundColor: loading ? '#6c757d' : '#007bff',
+            padding: '10px', 
+            backgroundColor: loading ? '#ccc' : '#007bff',
             color: 'white',
             border: 'none',
             borderRadius: '4px',
-            fontSize: '16px',
-            fontWeight: 'bold',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            transition: 'background-color 0.2s'
+            cursor: loading ? 'not-allowed' : 'pointer'
           }}
         >
-          {loading ? '⏳ Anmeldung...' : 'Anmelden'}
+          {loading ? 'Anmeldung...' : 'Anmelden'}
         </button>
       </form>
 
-      <div style={{ 
-        marginTop: '20px', 
-        padding: '15px',
-        backgroundColor: '#e7f3ff',
-        borderRadius: '4px',
-        border: '1px solid #b3d9ff'
-      }}>
-        <h4 style={{ margin: '0 0 10px 0' }}>Test Account:</h4>
-        <p style={{ margin: '5px 0' }}><strong>Email:</strong> admin@schichtplan.de</p>
-        <p style={{ margin: '5px 0' }}><strong>Passwort:</strong> admin123</p>
+      <div style={{ marginTop: '15px', textAlign: 'center' }}>
+        <p><strong>Test Accounts:</strong></p>
+        <p>admin@schichtplan.de / admin123</p>
+        <p>instandhalter@schichtplan.de / instandhalter123</p>
+        <p>user@schichtplan.de / user123</p>
       </div>
     </div>
   );

@@ -2,17 +2,16 @@
 const express = require('express');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
-const bcrypt = require('bcryptjs');
 
 const app = express();
 const PORT = 3002;
 
-// IN-MEMORY STORE für Mitarbeiter (mit gehashten Passwörtern)
+// IN-MEMORY STORE für Mitarbeiter
 let employees = [
   {
     id: '1',
     email: 'admin@schichtplan.de',
-    password: '$2a$10$8K1p/a0dRTlB0ZQ1.5Q.2e5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q', // admin123
+    password: 'admin123', // Klartext für Test
     name: 'Admin User',
     role: 'admin',
     isActive: true,
@@ -24,11 +23,35 @@ let employees = [
   {
     id: '2', 
     email: 'instandhalter@schichtplan.de',
-    password: '$2a$10$8K1p/a0dRTlB0ZQ1.5Q.2e5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q5Q', // instandhalter123
+    password: 'instandhalter123',
     name: 'Max Instandhalter',
     role: 'instandhalter',
     isActive: true,
     phone: '+49 123 456790',
+    department: 'Produktion',
+    createdAt: new Date().toISOString(),
+    lastLogin: new Date().toISOString()
+  },
+  {
+    id: '3',
+    email: 'mitarbeiter1@schichtplan.de', 
+    password: 'user123',
+    name: 'Anna Müller',
+    role: 'user',
+    isActive: true,
+    phone: '+49 123 456791',
+    department: 'Logistik',
+    createdAt: new Date().toISOString(),
+    lastLogin: new Date().toISOString()
+  },
+  {
+    id: '4',
+    email: 'mitarbeiter2@schichtplan.de',
+    password: 'user123',  
+    name: 'Tom Schmidt',
+    role: 'user',
+    isActive: true,
+    phone: '+49 123 456792',
     department: 'Produktion',
     createdAt: new Date().toISOString(),
     lastLogin: new Date().toISOString()
@@ -51,18 +74,19 @@ app.get('/api/health', (req: any, res: any) => {
   });
 });
 
-// Login Route für ALLE Benutzer
 app.post('/api/auth/login', async (req: any, res: any) => {
   try {
     const { email, password } = req.body;
     
     console.log('🔐 Login attempt for:', email);
+    console.log('📧 Email:', email);
+    console.log('🔑 Password length:', password?.length);
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    // Benutzer in der employees Liste suchen
+    // Benutzer suchen
     const user = employees.find(emp => emp.email === email && emp.isActive);
     
     if (!user) {
@@ -70,20 +94,15 @@ app.post('/api/auth/login', async (req: any, res: any) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // Passwort vergleichen
-    // Für Test: Wenn Passwort nicht gehasht ist (neue Benutzer), direkt vergleichen
-    let isPasswordValid = false;
-    
-    if (user.password.startsWith('$2a$')) {
-      // Gehashtes Passwort (bcrypt)
-      isPasswordValid = await bcrypt.compare(password, user.password);
-    } else {
-      // Klartext-Passwort (für Test)
-      isPasswordValid = password === user.password;
-    }
+    console.log('🔍 User found:', user.email);
+    console.log('💾 Stored password:', user.password);
+    console.log('↔️ Password match:', password === user.password);
+
+    // Passwort-Überprüfung
+    const isPasswordValid = password === user.password;
 
     if (!isPasswordValid) {
-      console.log('❌ Invalid password for:', email);
+      console.log('❌ Password invalid for:', email);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
@@ -107,7 +126,7 @@ app.post('/api/auth/login', async (req: any, res: any) => {
   }
 });
 
-// EMPLOYEE ROUTES mit In-Memory Store
+// EMPLOYEE ROUTES
 app.get('/api/employees', async (req: any, res: any) => {
   try {
     console.log('📋 Fetching employees - Total:', employees.length);
@@ -139,19 +158,22 @@ app.post('/api/employees', async (req: any, res: any) => {
       return res.status(400).json({ error: 'Password must be at least 6 characters long' });
     }
 
+    // Rollen-Validierung
+    const validRoles = ['admin', 'instandhalter', 'user'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ error: 'Ungültige Rolle' });
+    }
+
     // Check if email already exists
     if (employees.find(emp => emp.email === email)) {
       return res.status(409).json({ error: 'Email already exists' });
     }
 
-    // Passwort hashen für neue Benutzer
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Neuen Mitarbeiter erstellen
+    // NEUEN Benutzer erstellen
     const newEmployee = {
       id: uuidv4(),
       email,
-      password: hashedPassword, // Gehashtes Passwort speichern
+      password: password, // Klartext speichern für einfachen Test
       name, 
       role,
       isActive: true,
@@ -161,10 +183,14 @@ app.post('/api/employees', async (req: any, res: any) => {
       lastLogin: ''
     };
 
-    // Zum Store hinzufügen
     employees.push(newEmployee);
 
-    console.log('✅ Employee created. Total employees:', employees.length);
+    console.log('✅ Employee created:', { 
+      email: newEmployee.email, 
+      name: newEmployee.name, 
+      role: newEmployee.role 
+    });
+    console.log('📊 Total employees:', employees.length);
     
     // Response ohne Passwort
     const { password: _, ...employeeWithoutPassword } = newEmployee;
@@ -189,7 +215,7 @@ app.put('/api/employees/:id', async (req: any, res: any) => {
       return res.status(404).json({ error: 'Employee not found' });
     }
 
-    // Mitarbeiter aktualisieren (Passwort bleibt unverändert)
+    // Mitarbeiter aktualisieren
     employees[employeeIndex] = {
       ...employees[employeeIndex],
       name: name || employees[employeeIndex].name,
@@ -221,7 +247,7 @@ app.delete('/api/employees/:id', async (req: any, res: any) => {
       return res.status(404).json({ error: 'Employee not found' });
     }
 
-    // Soft delete - set isActive to false
+    // Soft delete
     employees[employeeIndex].isActive = false;
 
     console.log('✅ Employee deactivated:', employees[employeeIndex].name);
@@ -232,38 +258,7 @@ app.delete('/api/employees/:id', async (req: any, res: any) => {
   }
 });
 
-// Get current user profile
-app.get('/api/auth/me', async (req: any, res: any) => {
-  try {
-    // Einfache Mock-Implementation
-    // In einer echten App würde man den Token verifizieren
-    const token = req.headers.authorization?.replace('Bearer ', '');
-    
-    if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
-
-    // Einfache Token-"Validierung" für Demo
-    const tokenParts = token.split('-');
-    const userId = tokenParts[tokenParts.length - 1];
-    
-    const user = employees.find(emp => emp.id === userId && emp.isActive);
-    
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-
-    // User ohne Passwort zurückgeben
-    const { password, ...userWithoutPassword } = user;
-    res.json(userWithoutPassword);
-
-  } catch (error) {
-    console.error('Error getting user profile:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Availability Routes (Mock)
+// Availability Routes
 app.get('/api/employees/:employeeId/availabilities', async (req: any, res: any) => {
   try {
     const { employeeId } = req.params;
@@ -284,7 +279,7 @@ app.get('/api/employees/:employeeId/availabilities', async (req: any, res: any) 
         dayOfWeek: day,
         startTime: slot.start,
         endTime: slot.end,
-        isAvailable: day >= 1 && day <= 5 // Nur Mo-Fr verfügbar
+        isAvailable: day >= 1 && day <= 5
       }))
     );
     
@@ -301,7 +296,6 @@ app.put('/api/employees/:employeeId/availabilities', async (req: any, res: any) 
     const availabilities = req.body;
     
     console.log('💾 Saving availabilities for:', employeeId);
-    console.log('Data:', availabilities);
     
     // Mock erfolgreiches Speichern
     res.json(availabilities);
@@ -316,6 +310,13 @@ app.listen(PORT, () => {
   console.log('🎉 BACKEND STARTED SUCCESSFULLY!');
   console.log(`📍 Port: ${PORT}`);
   console.log(`📍 Health: http://localhost:${PORT}/api/health`);
-  console.log('🔐 Login system READY for ALL users!');
-  console.log('👥 Employee management READY with proper authentication!');
+  console.log('');
+  console.log('🔐 SIMPLE LOGIN READY - Plain text passwords for testing!');
+  console.log('');
+  console.log('📋 TEST ACCOUNTS:');
+  console.log('   👑 Admin: admin@schichtplan.de / admin123');
+  console.log('   🔧 Instandhalter: instandhalter@schichtplan.de / instandhalter123');
+  console.log('   👤 User1: mitarbeiter1@schichtplan.de / user123');
+  console.log('   👤 User2: mitarbeiter2@schichtplan.de / user123');
+  console.log('   👤 Patrick: patrick@patrick.de / 12345678');
 });

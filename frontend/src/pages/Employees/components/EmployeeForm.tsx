@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Employee, CreateEmployeeRequest, UpdateEmployeeRequest } from '../../../types/employee';
 import { employeeService } from '../../../services/employeeService';
+import { useAuth } from '../../../contexts/AuthContext';
 
 interface EmployeeFormProps {
   mode: 'create' | 'edit';
@@ -9,6 +10,13 @@ interface EmployeeFormProps {
   onSuccess: () => void;
   onCancel: () => void;
 }
+
+// Rollen Definition
+const ROLE_OPTIONS = [
+  { value: 'user', label: 'Mitarbeiter', description: 'Kann eigene Schichten einsehen' },
+  { value: 'instandhalter', label: 'Instandhalter', description: 'Kann Schichtpläne erstellen und Mitarbeiter verwalten' },
+  { value: 'admin', label: 'Administrator', description: 'Voller Zugriff auf alle Funktionen' }
+] as const;
 
 const EmployeeForm: React.FC<EmployeeFormProps> = ({
   mode,
@@ -27,6 +35,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const { hasRole } = useAuth();
 
   useEffect(() => {
     if (mode === 'edit' && employee) {
@@ -47,6 +56,14 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
     setFormData(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
+    }));
+  };
+
+  // NEU: Checkbox für Rollen
+  const handleRoleChange = (roleValue: 'admin' | 'instandhalter' | 'user') => {
+    setFormData(prev => ({
+      ...prev,
+      role: roleValue
     }));
   };
 
@@ -93,6 +110,19 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
     }
     return formData.name.trim() && formData.email.trim();
   };
+
+  // Bestimme welche Rollen der aktuelle Benutzer vergeben darf
+  const getAvailableRoles = () => {
+    if (hasRole(['admin'])) {
+      return ROLE_OPTIONS; // Admins können alle Rollen vergeben
+    }
+    if (hasRole(['instandhalter'])) {
+      return ROLE_OPTIONS.filter(role => role.value !== 'admin'); // Instandhalter können keine Admins erstellen
+    }
+    return ROLE_OPTIONS.filter(role => role.value === 'user'); // Normale User können gar nichts (sollte nicht vorkommen)
+  };
+
+  const availableRoles = getAvailableRoles();
 
   return (
     <div style={{
@@ -146,7 +176,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
               required
               style={{
                 width: '100%',
-                padding: '10px 12px',
+                padding: '10px',
                 border: '1px solid #ddd',
                 borderRadius: '4px',
                 fontSize: '16px'
@@ -173,7 +203,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
               required
               style={{
                 width: '100%',
-                padding: '10px 12px',
+                padding: '10px',
                 border: '1px solid #ddd',
                 borderRadius: '4px',
                 fontSize: '16px'
@@ -202,7 +232,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                 minLength={6}
                 style={{
                   width: '100%',
-                  padding: '10px 12px',
+                  padding: '10px',
                   border: '1px solid #ddd',
                   borderRadius: '4px',
                   fontSize: '16px'
@@ -215,40 +245,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
             </div>
           )}
 
-          {/* Rolle */}
-          <div>
-            <label style={{ 
-              display: 'block', 
-              marginBottom: '8px', 
-              fontWeight: 'bold',
-              color: '#2c3e50'
-            }}>
-              Rolle *
-            </label>
-            <select
-              name="role"
-              value={formData.role}
-              onChange={handleChange}
-              required
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                fontSize: '16px',
-                backgroundColor: 'white'
-              }}
-            >
-              <option value="user">Mitarbeiter (User)</option>
-              <option value="instandhalter">Instandhalter</option>
-              <option value="admin">Administrator</option>
-            </select>
-            <div style={{ fontSize: '12px', color: '#7f8c8d', marginTop: '5px' }}>
-              {formData.role === 'admin' && 'Administratoren haben vollen Zugriff auf alle Funktionen.'}
-              {formData.role === 'instandhalter' && 'Instandhalter können Schichtpläne erstellen und Mitarbeiter verwalten.'}
-              {formData.role === 'user' && 'Mitarbeiter können ihre eigenen Schichten und Verfügbarkeiten einsehen.'}
-            </div>
-          </div>
+          
 
           {/* Telefon */}
           <div>
@@ -267,7 +264,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
               onChange={handleChange}
               style={{
                 width: '100%',
-                padding: '10px 12px',
+                padding: '10px',
                 border: '1px solid #ddd',
                 borderRadius: '4px',
                 fontSize: '16px'
@@ -293,7 +290,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
               onChange={handleChange}
               style={{
                 width: '100%',
-                padding: '10px 12px',
+                padding: '10px',
                 border: '1px solid #ddd',
                 borderRadius: '4px',
                 fontSize: '16px'
@@ -302,9 +299,107 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
             />
           </div>
 
+          {/* NEU: Rollen als Checkboxes */}
+          <div>
+            <label style={{ 
+              display: 'block', 
+              marginBottom: '12px', 
+              fontWeight: 'bold',
+              color: '#2c3e50'
+            }}>
+              Rolle *
+            </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {availableRoles.map(role => (
+                <div 
+                  key={role.value}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    padding: '5px',
+                    border: `2px solid ${formData.role === role.value ? '#3498db' : '#e0e0e0'}`,
+                    borderRadius: '8px',
+                    backgroundColor: formData.role === role.value ? '#f8fafc' : 'white',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                  onClick={() => handleRoleChange(role.value)}
+                >
+                  <input
+                    type="radio"
+                    name="role"
+                    value={role.value}
+                    checked={formData.role === role.value}
+                    onChange={() => handleRoleChange(role.value)}
+                    style={{
+                      marginRight: '12px',
+                      marginTop: '2px',
+                      width: '18px',
+                      height: '18px'
+                    }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ 
+                      fontWeight: 'bold', 
+                      color: '#2c3e50',
+                      marginBottom: '4px'
+                    }}>
+                      {role.label}
+                    </div>
+                    <div style={{ 
+                      fontSize: '14px', 
+                      color: '#7f8c8d',
+                      lineHeight: '1.4'
+                    }}>
+                      {role.description}
+                    </div>
+                  </div>
+                  {/* Role Badge */}
+                  <div style={{
+                    padding: '4px 8px',
+                    backgroundColor: 
+                      role.value === 'admin' ? '#e74c3c' :
+                      role.value === 'instandhalter' ? '#3498db' : '#27ae60',
+                    color: 'white',
+                    borderRadius: '12px',
+                    fontSize: '12px',
+                    fontWeight: 'bold'
+                  }}>
+                    {role.value.toUpperCase()}
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            {/* Info über Berechtigungen */}
+            <div style={{ 
+              marginTop: '10px', 
+              padding: '10px',
+              backgroundColor: '#e8f4fd',
+              border: '1px solid #b6d7e8',
+              borderRadius: '4px',
+              fontSize: '12px',
+              color: '#2c3e50'
+            }}>
+              <strong>Info:</strong> { 
+                formData.role === 'admin' ? 'Administratoren haben vollen Zugriff auf alle Funktionen.' :
+                formData.role === 'instandhalter' ? 'Instandhalter können Schichtpläne erstellen und Mitarbeiter verwalten.' :
+                'Mitarbeiter können ihre eigenen Schichten und Verfügbarkeiten einsehen.'
+              }
+            </div>
+          </div>
+
           {/* Aktiv Status (nur beim Bearbeiten) */}
           {mode === 'edit' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '10px',
+              padding: '15px',
+              border: '1px solid #e0e0e0',
+              borderRadius: '6px',
+              backgroundColor: '#f8f9fa'
+            }}>
               <input
                 type="checkbox"
                 name="isActive"
@@ -313,9 +408,14 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                 onChange={handleChange}
                 style={{ width: '18px', height: '18px' }}
               />
-              <label htmlFor="isActive" style={{ fontWeight: 'bold', color: '#2c3e50' }}>
-                Mitarbeiter ist aktiv
-              </label>
+              <div>
+                <label htmlFor="isActive" style={{ fontWeight: 'bold', color: '#2c3e50', display: 'block' }}>
+                  Mitarbeiter ist aktiv
+                </label>
+                <div style={{ fontSize: '12px', color: '#7f8c8d' }}>
+                  Inaktive Mitarbeiter können sich nicht anmelden und werden nicht für Schichten eingeplant.
+                </div>
+              </div>
             </div>
           )}
         </div>
