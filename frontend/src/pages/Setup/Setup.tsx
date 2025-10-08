@@ -62,19 +62,24 @@ const Setup: React.FC = () => {
   const handleSubmit = async () => {
     try {
       setLoading(true);
-      const adminEmail = 'admin@instandhaltung.de';
-      const response = await fetch('/api/setup/admin', {
+      setError('');
+
+      // Create the request payload
+      const payload = {
+        password: formData.password,
+        name: formData.name,
+        ...(formData.phone ? { phone: formData.phone } : {}),
+        ...(formData.department ? { department: formData.department } : {})
+      };
+
+      console.log('Sending setup request with payload:', payload);
+
+      const response = await fetch('http://localhost:3002/api/setup/admin', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          email: adminEmail,
-          password: formData.password,
-          name: formData.name,
-          phone: formData.phone || undefined,
-          department: formData.department || undefined
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -82,15 +87,31 @@ const Setup: React.FC = () => {
         throw new Error(data.error || 'Setup fehlgeschlagen');
       }
 
+      // Check response format
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Non-JSON response:', text);
+        throw new Error('Server returned non-JSON response');
+      }
+
+      const result = await response.json();
+      console.log('Setup response:', result);
+
       // Re-check setup status after successful setup
       await checkSetupStatus();
       
       // Automatically log in after setup
-      await login({ email: adminEmail, password: formData.password });
+      await login({ 
+        email: 'admin@instandhaltung.de', 
+        password: formData.password 
+      });
+
       navigate('/');
       
     } catch (err: any) {
-      setError(err.message);
+      console.error('Setup error:', err);
+      setError(typeof err === 'string' ? err : err.message || 'Ein unerwarteter Fehler ist aufgetreten');
     } finally {
       setLoading(false);
     }
