@@ -110,7 +110,7 @@ const Login: React.FC = () => {
             transition: 'background-color 0.2s'
           }}
         >
-          {loading ? '⏳ Anmeldung...' : '🔐 Anmelden'}
+          {loading ? '⏳ Anmeldung...' : 'Anmelden'}
         </button>
       </form>
 

@@ -1,79 +1,90 @@
 // frontend/src/App.tsx
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import Layout from './components/Layout/Layout';
 import Login from './pages/Auth/Login';
 import Dashboard from './pages/Dashboard/Dashboard';
-import ShiftTemplateList from './pages/ShiftTemplates/ShiftTemplateList';
-import ShiftTemplateEditor from './pages/ShiftTemplates/ShiftTemplateEditor';
+import ShiftPlanList from './pages/ShiftPlans/ShiftPlanList';
+import ShiftPlanCreate from './pages/ShiftPlans/ShiftPlanCreate';
+import EmployeeManagement from './pages/Employees/EmployeeManagement';
+import Settings from './pages/Settings/Settings';
+import Help from './pages/Help/Help';
 
 // Protected Route Component
-const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, loading } = useAuth();
+const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[] }> = ({ 
+  children, 
+  roles = ['admin', 'instandhalter', 'user'] 
+}) => {
+  const { user, loading, hasRole } = useAuth();
   
   if (loading) {
-    return <div style={{ padding: '20px' }}>Lade...</div>;
+    return (
+      <Layout>
+        <div style={{ textAlign: 'center', padding: '40px' }}>
+          <div>⏳ Lade Anwendung...</div>
+        </div>
+      </Layout>
+    );
   }
   
-  return user ? <>{children}</> : <Navigate to="/login" replace />;
-};
-
-const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, loading } = useAuth();
-  
-  if (loading) {
-    return <div style={{ padding: '20px' }}>Lade...</div>;
+  if (!user || !hasRole(roles)) {
+    return <Login />;
   }
   
-  return !user ? <>{children}</> : <Navigate to="/" replace />;
+  return <Layout>{children}</Layout>;
 };
-
-function AppRoutes() {
-  return (
-    <Routes>
-      {/* Public Route - nur für nicht eingeloggte User */}
-      <Route path="/login" element={
-        <PublicRoute>
-          <Login />
-        </PublicRoute>
-      } />
-      
-      {/* Protected Routes - nur für eingeloggte User */}
-      <Route path="/" element={
-        <ProtectedRoute>
-          <Dashboard />
-        </ProtectedRoute>
-      } />
-      
-      <Route path="/shift-templates" element={
-        <ProtectedRoute>
-          <ShiftTemplateList />
-        </ProtectedRoute>
-      } />
-      
-      <Route path="/shift-templates/new" element={
-        <ProtectedRoute>
-          <ShiftTemplateEditor />
-        </ProtectedRoute>
-      } />
-      
-      <Route path="/shift-templates/:id" element={
-        <ProtectedRoute>
-          <ShiftTemplateEditor />
-        </ProtectedRoute>
-      } />
-      
-      {/* Fallback Route */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
-  );
-}
 
 function App() {
   return (
     <AuthProvider>
       <Router>
-        <AppRoutes />
+        <Routes>
+          {/* Public Route */}
+          <Route path="/login" element={<Login />} />
+          
+          {/* Protected Routes with Layout */}
+          <Route path="/" element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/shift-plans" element={
+            <ProtectedRoute>
+              <ShiftPlanList />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/shift-plans/new" element={
+            <ProtectedRoute roles={['admin', 'instandhalter']}>
+              <ShiftPlanCreate />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/employees" element={
+            <ProtectedRoute roles={['admin', 'instandhalter']}>
+              <EmployeeManagement />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/settings" element={
+            <ProtectedRoute roles={['admin']}>
+              <Settings />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/help" element={
+            <ProtectedRoute>
+              <Help />
+            </ProtectedRoute>
+          } />
+          
+          {/* Legal Pages (ohne Layout für einfacheren Zugang) */}
+          <Route path="/impressum" element={<div>Impressum Seite</div>} />
+          <Route path="/datenschutz" element={<div>Datenschutz Seite</div>} />
+          <Route path="/agb" element={<div>AGB Seite</div>} />
+        </Routes>
       </Router>
     </AuthProvider>
   );
