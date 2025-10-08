@@ -1,18 +1,31 @@
-const express = require('express');
-const cors = require('cors');
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+// backend/src/server.ts - Erweitert
+import express from 'express';
+import cors from 'cors';
+import { db } from './services/databaseService.js';
+import { seedData } from './scripts/seedData.js';
+import authRoutes from './routes/auth.js';
+import shiftTemplateRoutes from './routes/shiftTemplates.js';
+import shiftPlanRoutes from './routes/shiftPlans.js';
+import employeeRoutes from './routes/employees.js'; // NEU HINZUGEFÜGT
 
 const app = express();
-const PORT = process.env.PORT || 3002;
+const PORT = 3002;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:3000',
+  credentials: true
+}));
 app.use(express.json());
 
-// Health route
-app.get('/api/health', (req: any, res: any) => {
-  console.log('✅ Health check called');
+// Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/shift-templates', shiftTemplateRoutes);
+app.use('/api/shift-plans', shiftPlanRoutes);
+app.use('/api/employees', employeeRoutes); // NEU HINZUGEFÜGT
+
+// Health check
+app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'OK', 
     message: 'Backend läuft!',
@@ -20,55 +33,12 @@ app.get('/api/health', (req: any, res: any) => {
   });
 });
 
-// Simple login without bcrypt
-app.post('/api/auth/login', (req: any, res: any) => {
-  console.log('🔐 Login attempt:', req.body.email);
-  
-  // Einfache Hardcoded Auth (OHNE Passwort-Hashing für Test)
-  if (req.body.email === 'admin@schichtplan.de' && req.body.password === 'admin123') {
-    console.log('✅ Login successful');
-    res.json({
-      user: {
-        id: '1',
-        email: 'admin@schichtplan.de', 
-        name: 'Admin User',
-        role: 'admin',
-        createdAt: new Date().toISOString()
-      },
-      token: 'simple-jwt-token-' + Date.now(),
-      expiresIn: '7d'
-    });
-  } else {
-    console.log('❌ Login failed');
-    res.status(401).json({ error: 'Invalid credentials' });
-  }
-});
-
-// Get shift templates
-app.get('/api/shift-templates', (req: any, res: any) => {
-  console.log('📋 Fetching shift templates');
-  res.json([
-    {
-      id: '1',
-      name: 'Standard Woche',
-      description: 'Standard Schichtplan',
-      isDefault: true,
-      createdBy: '1',
-      createdAt: new Date().toISOString(),
-      shifts: [
-        { id: '1', dayOfWeek: 1, name: 'Vormittag', startTime: '08:00', endTime: '12:00', requiredEmployees: 2 },
-        { id: '2', dayOfWeek: 1, name: 'Nachmittag', startTime: '11:30', endTime: '15:30', requiredEmployees: 2 }
-      ]
-    }
-  ]);
-});
-
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log('🎉 BACKEND STARTED SUCCESSFULLY!');
   console.log(`📍 Port: ${PORT}`);
   console.log(`📍 Health: http://localhost:${PORT}/api/health`);
-  console.log(`📍 Ready for login!`);
+  console.log('📊 Employee management ready!');
+  
+  await seedData();
 });
-
-console.log('🚀 Server starting...');

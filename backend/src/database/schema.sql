@@ -22,3 +22,19 @@ CREATE TABLE IF NOT EXISTS assigned_shifts (
   assigned_employees TEXT DEFAULT '[]', -- JSON array of user IDs
   FOREIGN KEY (shift_plan_id) REFERENCES shift_plans(id) ON DELETE CASCADE
 );
+
+-- Zusätzliche Tabelle für Mitarbeiter-Verfügbarkeiten
+CREATE TABLE IF NOT EXISTS employee_availabilities (
+  id TEXT PRIMARY KEY,
+  employee_id TEXT NOT NULL,
+  day_of_week INTEGER NOT NULL CHECK (day_of_week >= 0 AND day_of_week <= 6),
+  start_time TEXT NOT NULL,
+  end_time TEXT NOT NULL,
+  is_available BOOLEAN DEFAULT FALSE,
+  FOREIGN KEY (employee_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Users Tabelle erweitern um zusätzliche Felder
+ALTER TABLE users ADD COLUMN phone TEXT;
+ALTER TABLE users ADD COLUMN department TEXT;
+ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT TRUE;
