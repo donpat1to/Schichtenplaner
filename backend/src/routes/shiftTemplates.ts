@@ -1,13 +1,13 @@
 // backend/src/routes/shiftTemplates.ts
 import express from 'express';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware } from '../middleware/auth.js';
 import { 
   getTemplates, 
   getTemplate, 
   createTemplate, 
   updateTemplate, 
   deleteTemplate 
-} from '../controllers/shiftTemplateController';
+} from '../controllers/shiftTemplateController.js';
 
 const router = express.Router();
 

@@ -1,8 +1,8 @@
 // backend/src/controllers/shiftPlanController.ts
 import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { db } from '../services/databaseService';
-import { AuthRequest } from '../middleware/auth';
+import { db } from '../services/databaseService.js';
+import { AuthRequest } from '../middleware/auth.js';
 
 export interface ShiftPlan {
   id: string;

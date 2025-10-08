@@ -1,13 +1,13 @@
 // backend/src/routes/shiftPlans.ts
 import express from 'express';
-import { authMiddleware, requireRole } from '../middleware/auth';
+import { authMiddleware, requireRole } from '../middleware/auth.js';
 import { 
   getShiftPlans, 
   getShiftPlan, 
   createShiftPlan, 
   updateShiftPlan, 
   deleteShiftPlan 
-} from '../controllers/shiftPlanController';
+} from '../controllers/shiftPlanController.js';
 
 const router = express.Router();
 

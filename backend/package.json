@@ -1,9 +1,9 @@
 {
   "name": "schichtplan-backend",
   "version": "1.0.0",
-  "type": "commonjs",
+  "type": "module",
   "scripts": {
-    "dev": "node -r ts-node/register src/server.ts",
+    "dev": "node --loader ts-node/esm src/server.ts",
     "simple": "node src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js"

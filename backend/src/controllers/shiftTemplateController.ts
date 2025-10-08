@@ -1,8 +1,8 @@
 // backend/src/controllers/shiftTemplateController.ts
 import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { db } from '../services/databaseService';
-import { ShiftTemplate, CreateShiftTemplateRequest, UpdateShiftTemplateRequest } from '../models/ShiftTemplate';
+import { db } from '../services/databaseService.js';
+import { ShiftTemplate, CreateShiftTemplateRequest, UpdateShiftTemplateRequest } from '../models/ShiftTemplate.js';
 
 export const getTemplates = async (req: Request, res: Response): Promise<void> => {
   try {

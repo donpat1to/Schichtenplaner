@@ -9,6 +9,8 @@ interface AuthContextType {
   hasRole: (roles: string[]) => boolean;
   loading: boolean;
   refreshUser: () => void; // NEU: Force refresh
+  needsSetup: boolean;
+  checkSetupStatus: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -16,16 +18,31 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [needsSetup, setNeedsSetup] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0); // NEU: Refresh trigger
 
-  // User beim Start laden
-  useEffect(() => {
-    const savedUser = authService.getCurrentUser();
-    if (savedUser) {
-      setUser(savedUser);
-      console.log('✅ User from localStorage:', savedUser.email);
+  const checkSetupStatus = async () => {
+    try {
+      const response = await fetch('/api/setup/status');
+      const data = await response.json();
+      setNeedsSetup(data.needsSetup);
+    } catch (error) {
+      console.error('Error checking setup status:', error);
     }
-    setLoading(false);
+  };
+
+  // Check setup status and load user on mount
+  useEffect(() => {
+    const initializeApp = async () => {
+      await checkSetupStatus();
+      const savedUser = authService.getCurrentUser();
+      if (savedUser) {
+        setUser(savedUser);
+        console.log('✅ User from localStorage:', savedUser.email);
+      }
+      setLoading(false);
+    };
+    initializeApp();
   }, []);
 
   // NEU: User vom Server laden wenn nötig
@@ -78,7 +95,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     logout,
     hasRole,
     loading,
-    refreshUser // NEU
+    refreshUser,
+    needsSetup,
+    checkSetupStatus
   };
 
   return (

@@ -12,6 +12,7 @@ import ShiftPlanCreate from './pages/ShiftPlans/ShiftPlanCreate';
 import EmployeeManagement from './pages/Employees/EmployeeManagement';
 import Settings from './pages/Settings/Settings';
 import Help from './pages/Help/Help';
+import Setup from './pages/Setup/Setup';
 
 // Protected Route Component direkt in App.tsx
 const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[] }> = ({ 
@@ -50,50 +51,66 @@ function App() {
   return (
     <NotificationProvider>
       <AuthProvider>
-        <Router>
-          <NotificationContainer />
-          <Routes>
+        <AppContent />
+      </AuthProvider>
+    </NotificationProvider>
+  );
+}
+
+function AppContent() {
+  const { loading, needsSetup } = useAuth();
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: '40px' }}>
+        <div>⏳ Lade Anwendung...</div>
+      </div>
+    );
+  }
+
+  return (
+    <Router>
+      <NotificationContainer />
+      <Routes>
+        {needsSetup ? (
+          <Route path="*" element={<Setup />} />
+        ) : (
+          <>
             <Route path="/login" element={<Login />} />
-            
             <Route path="/" element={
               <ProtectedRoute>
                 <Dashboard />
               </ProtectedRoute>
             } />
-            
             <Route path="/shift-plans" element={
               <ProtectedRoute>
                 <ShiftPlanList />
               </ProtectedRoute>
             } />
-            
             <Route path="/shift-plans/new" element={
               <ProtectedRoute roles={['admin', 'instandhalter']}>
                 <ShiftPlanCreate />
               </ProtectedRoute>
             } />
-            
             <Route path="/employees" element={
               <ProtectedRoute roles={['admin', 'instandhalter']}>
                 <EmployeeManagement />
               </ProtectedRoute>
             } />
-            
             <Route path="/settings" element={
               <ProtectedRoute roles={['admin']}>
                 <Settings />
               </ProtectedRoute>
             } />
-            
             <Route path="/help" element={
               <ProtectedRoute>
                 <Help />
               </ProtectedRoute>
             } />
-          </Routes>
-        </Router>
-      </AuthProvider>
-    </NotificationProvider>
+          </>
+        )}
+      </Routes>
+    </Router>
   );
 }
 

@@ -1,3 +1,39 @@
+-- Tabelle für Benutzer
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  password TEXT NOT NULL,
+  name TEXT NOT NULL,
+  role TEXT CHECK(role IN ('admin', 'user', 'instandhalter')) NOT NULL,
+  phone TEXT,
+  department TEXT,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabelle für Schichtvorlagen
+CREATE TABLE IF NOT EXISTS shift_templates (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  is_default BOOLEAN DEFAULT FALSE,
+  created_by TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+-- Tabelle für die Schichten in den Vorlagen
+CREATE TABLE IF NOT EXISTS template_shifts (
+  id TEXT PRIMARY KEY,
+  template_id TEXT NOT NULL,
+  day_of_week INTEGER NOT NULL CHECK (day_of_week >= 1 AND day_of_week <= 7),
+  name TEXT NOT NULL,
+  start_time TEXT NOT NULL,
+  end_time TEXT NOT NULL,
+  required_employees INTEGER DEFAULT 1,
+  FOREIGN KEY (template_id) REFERENCES shift_templates(id) ON DELETE CASCADE
+);
+
 -- Zusätzliche Tabellen für shift_plans
 CREATE TABLE IF NOT EXISTS shift_plans (
   id TEXT PRIMARY KEY,
@@ -33,8 +69,3 @@ CREATE TABLE IF NOT EXISTS employee_availabilities (
   is_available BOOLEAN DEFAULT FALSE,
   FOREIGN KEY (employee_id) REFERENCES users(id) ON DELETE CASCADE
 );
-
--- Users Tabelle erweitern um zusätzliche Felder
-ALTER TABLE users ADD COLUMN phone TEXT;
-ALTER TABLE users ADD COLUMN department TEXT;
-ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT TRUE;
