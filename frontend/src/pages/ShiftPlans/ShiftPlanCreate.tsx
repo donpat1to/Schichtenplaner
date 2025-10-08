@@ -54,3 +54,5 @@ const ShiftPlanCreate: React.FC = () => {
     </div>
   );
 };
+
+export default ShiftPlanCreate;

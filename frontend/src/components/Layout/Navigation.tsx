@@ -10,13 +10,13 @@ const Navigation: React.FC = () => {
 
   const isActive = (path: string) => location.pathname === path;
 
-  const navigationItems = [
-    { path: '/', label: '🏠 Dashboard', icon: '🏠', roles: ['admin', 'instandhalter', 'user'] },
-    { path: '/shift-plans', label: '📅 Schichtpläne', icon: '📅', roles: ['admin', 'instandhalter', 'user'] },
-    { path: '/employees', label: '👥 Mitarbeiter', icon: '👥', roles: ['admin', 'instandhalter'] },
-    { path: '/settings', label: '⚙️ Einstellungen', icon: '⚙️', roles: ['admin'] },
-    { path: '/help', label: '❓ Hilfe', icon: '❓', roles: ['admin', 'instandhalter', 'user'] },
-  ];
+const navigationItems = [
+    { path: '/', label: 'Dashboard', icon: '🏠', roles: ['admin', 'instandhalter', 'user'] },
+    { path: '/shift-plans', label: 'Schichtpläne', icon: '📅', roles: ['admin', 'instandhalter', 'user'] },
+    { path: '/employees', label: 'Mitarbeiter', icon: '👥', roles: ['admin', 'instandhalter'] },
+    { path: '/settings', label: 'Einstellungen', icon: '⚙️', roles: ['admin'] },
+    { path: '/help', label: 'Hilfe', icon: '❓', roles: ['admin', 'instandhalter', 'user'] },
+];
 
   const filteredNavigation = navigationItems.filter(item => 
     hasRole(item.roles)
