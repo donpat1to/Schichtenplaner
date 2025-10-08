@@ -4,8 +4,15 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ShiftTemplate, TemplateShift, DEFAULT_DAYS } from '../../types/shiftTemplate';
 import { shiftTemplateService } from '../../services/shiftTemplateService';
 import ShiftDayEditor from './components/ShiftDayEditor';
+import DefaultTemplateView from './components/DefaultTemplateView';
+import styles from './ShiftTemplateEditor.module.css';
 
-const defaultShift: Omit<TemplateShift, 'id'> = {
+interface ExtendedTemplateShift extends Omit<TemplateShift, 'id'> {
+  id?: string;
+  isPreview?: boolean;
+}
+
+const defaultShift: ExtendedTemplateShift = {
   dayOfWeek: 1, // Montag
   name: '',
   startTime: '08:00',
@@ -27,6 +34,7 @@ const ShiftTemplateEditor: React.FC = () => {
   });
   const [loading, setLoading] = useState(isEditing);
   const [saving, setSaving] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
     if (isEditing) {
@@ -104,84 +112,93 @@ const ShiftTemplateEditor: React.FC = () => {
     }));
   };
 
+  // Preview-Daten für die DefaultTemplateView vorbereiten
+  const previewTemplate: ShiftTemplate = {
+    id: 'preview',
+    name: template.name || 'Vorschau',
+    description: template.description,
+    shifts: template.shifts.map(shift => ({
+      ...shift,
+      id: shift.id || 'preview-' + Date.now()
+    })),
+    createdBy: 'preview',
+    createdAt: new Date().toISOString(),
+    isDefault: template.isDefault
+  };
+
   if (loading) return <div>Lade Vorlage...</div>;
 
   return (
-    <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-        <h1>{isEditing ? 'Vorlage bearbeiten' : 'Neue Vorlage erstellen'}</h1>
-        <div style={{ display: 'flex', gap: '10px' }}>
+    <div className={styles.editorContainer}>
+      <div className={styles.header}>
+        <h1 className={styles.title}>{isEditing ? 'Vorlage bearbeiten' : 'Neue Vorlage erstellen'}</h1>
+        <div className={styles.buttons}>
           <button 
-            onClick={() => navigate('/shift-templates')}
-            style={{ padding: '10px 20px', border: '1px solid #6c757d', background: 'white', color: '#6c757d' }}
+            className={styles.previewButton}
+            onClick={() => setShowPreview(!showPreview)}
           >
-            Abbrechen
+            {showPreview ? 'Editor anzeigen' : 'Vorschau'}
           </button>
           <button 
+            className={styles.saveButton}
             onClick={handleSave}
             disabled={saving}
-            style={{ padding: '10px 20px', backgroundColor: saving ? '#6c757d' : '#007bff', color: 'white', border: 'none' }}
           >
             {saving ? 'Speichern...' : 'Speichern'}
           </button>
         </div>
       </div>
 
-      {/* Template Meta Information */}
-      <div style={{ marginBottom: '30px', padding: '20px', border: '1px solid #ddd', borderRadius: '8px' }}>
-        <div style={{ marginBottom: '15px' }}>
-          <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-            Vorlagenname *
-          </label>
-          <input
-            type="text"
-            value={template.name}
-            onChange={(e) => setTemplate(prev => ({ ...prev, name: e.target.value }))}
-            style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
-            placeholder="z.B. Standard Woche, Teilzeit Modell, etc."
-          />
-        </div>
+      {showPreview ? (
+        <DefaultTemplateView template={previewTemplate} />
+      ) : (
+        <>
+          <div className={styles.formGroup}>
+            <label>Vorlagenname *</label>
+            <input
+              type="text"
+              value={template.name}
+              onChange={(e) => setTemplate(prev => ({ ...prev, name: e.target.value }))}
+              placeholder="z.B. Standard Woche, Teilzeit Modell, etc."
+            />
+          </div>
 
-        <div style={{ marginBottom: '15px' }}>
-          <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-            Beschreibung
-          </label>
-          <textarea
-            value={template.description || ''}
-            onChange={(e) => setTemplate(prev => ({ ...prev, description: e.target.value }))}
-            style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px', minHeight: '60px' }}
-            placeholder="Beschreibung der Vorlage (optional)"
-          />
-        </div>
+          <div className={styles.formGroup}>
+            <label>Beschreibung</label>
+            <textarea
+              value={template.description || ''}
+              onChange={(e) => setTemplate(prev => ({ ...prev, description: e.target.value }))}
+              placeholder="Beschreibung der Vorlage (optional)"
+            />
+          </div>
 
-        <div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div className={styles.defaultCheckbox}>
             <input
               type="checkbox"
+              id="isDefault"
               checked={template.isDefault}
               onChange={(e) => setTemplate(prev => ({ ...prev, isDefault: e.target.checked }))}
             />
-            Als Standardvorlage festlegen
-          </label>
-        </div>
-      </div>
+            <label htmlFor="isDefault">Als Standardvorlage festlegen</label>
+          </div>
 
-      {/* Schichten pro Tag */}
-      <div>
-        <h2 style={{ marginBottom: '20px' }}>Schichten pro Wochentag</h2>
-        <div style={{ display: 'grid', gap: '20px' }}>
-          {DEFAULT_DAYS.map(day => (
-            <ShiftDayEditor
-              key={day.id}
-              day={day}
-              shifts={template.shifts.filter(s => s.dayOfWeek === day.id)}
-              onAddShift={() => addShift(day.id)}
-              onUpdateShift={updateShift}
-              onRemoveShift={removeShift}
-            />
-          ))}
-        </div>
-      </div>
+          <div style={{ marginTop: '30px' }}>
+            <h2>Schichten pro Wochentag</h2>
+            <div style={{ display: 'grid', gap: '20px', marginTop: '20px' }}>
+              {DEFAULT_DAYS.map(day => (
+                <ShiftDayEditor
+                  key={day.id}
+                  day={day}
+                  shifts={template.shifts.filter(s => s.dayOfWeek === day.id)}
+                  onAddShift={() => addShift(day.id)}
+                  onUpdateShift={updateShift}
+                  onRemoveShift={removeShift}
+                />
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };

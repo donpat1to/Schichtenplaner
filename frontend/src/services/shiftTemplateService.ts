@@ -21,7 +21,13 @@ export const shiftTemplateService = {
       throw new Error('Fehler beim Laden der Vorlagen');
     }
     
-    return response.json();
+    const templates = await response.json();
+    // Sortiere die Vorlagen so, dass die Standard-Vorlage immer zuerst kommt
+    return templates.sort((a: ShiftTemplate, b: ShiftTemplate) => {
+      if (a.isDefault && !b.isDefault) return -1;
+      if (!a.isDefault && b.isDefault) return 1;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
   },
 
   async getTemplate(id: string): Promise<ShiftTemplate> {
@@ -44,6 +50,17 @@ export const shiftTemplateService = {
   },
 
   async createTemplate(template: Omit<ShiftTemplate, 'id' | 'createdAt' | 'createdBy'>): Promise<ShiftTemplate> {
+    // Wenn diese Vorlage als Standard markiert ist,
+    // fragen wir den Benutzer, ob er wirklich die Standard-Vorlage ändern möchte
+    if (template.isDefault) {
+      const confirm = window.confirm(
+        'Diese Vorlage wird als neue Standard-Vorlage festgelegt. Die bisherige Standard-Vorlage wird dadurch zu einer normalen Vorlage. Möchten Sie fortfahren?'
+      );
+      if (!confirm) {
+        throw new Error('Operation abgebrochen');
+      }
+    }
+
     const response = await fetch(API_BASE, {
       method: 'POST',
       headers: {

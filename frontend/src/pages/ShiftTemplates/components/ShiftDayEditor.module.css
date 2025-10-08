@@ -1,0 +1,137 @@
+.dayEditor {
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.dayHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.dayName {
+  font-size: 18px;
+  color: #2c3e50;
+  margin: 0;
+}
+
+.addButton {
+  padding: 6px 12px;
+  background-color: #3498db;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.addButton:hover {
+  background-color: #2980b9;
+}
+
+.addButton svg {
+  width: 16px;
+  height: 16px;
+}
+
+.shiftsGrid {
+  display: grid;
+  gap: 15px;
+}
+
+.shiftCard {
+  background: white;
+  padding: 15px;
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.shiftHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.shiftTitle {
+  color: #2c3e50;
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.deleteButton {
+  padding: 4px 8px;
+  background-color: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.deleteButton:hover {
+  background-color: #c0392b;
+}
+
+.formGroup {
+  margin-bottom: 12px;
+}
+
+.formGroup label {
+  display: block;
+  margin-bottom: 4px;
+  color: #34495e;
+  font-size: 14px;
+}
+
+.formGroup input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.formGroup input[type="time"] {
+  width: auto;
+}
+
+.timeInputs {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+}
+
+.colorPicker {
+  width: 100px;
+}
+
+.requiredEmployees {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.requiredEmployees input {
+  width: 60px;
+  text-align: center;
+}
+
+.requiredEmployees button {
+  padding: 4px 8px;
+  border: 1px solid #ddd;
+  background: white;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.requiredEmployees button:hover {
+  background: #f5f6fa;
+}

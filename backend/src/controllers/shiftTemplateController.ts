@@ -86,6 +86,57 @@ export const getTemplate = async (req: Request, res: Response): Promise<void> =>
   }
 };
 
+export const createDefaultTemplate = async (userId: string): Promise<string> => {
+  try {
+    const templateId = uuidv4();
+    
+    await db.run('BEGIN TRANSACTION');
+
+    try {
+      // Erstelle die Standard-Vorlage
+      await db.run(
+        `INSERT INTO shift_templates (id, name, description, is_default, created_by) 
+         VALUES (?, ?, ?, ?, ?)`,
+        [templateId, 'Standardwoche', 'Mo-Do: 2 Schichten, Fr: 1 Schicht', true, userId]
+      );
+
+      // Vormittagsschicht Mo-Do
+      for (let day = 1; day <= 4; day++) {
+        await db.run(
+          `INSERT INTO template_shifts (id, template_id, day_of_week, name, start_time, end_time, required_employees) 
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [uuidv4(), templateId, day, 'Vormittagsschicht', '08:00', '12:00', 1]
+        );
+      }
+
+      // Nachmittagsschicht Mo-Do
+      for (let day = 1; day <= 4; day++) {
+        await db.run(
+          `INSERT INTO template_shifts (id, template_id, day_of_week, name, start_time, end_time, required_employees) 
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [uuidv4(), templateId, day, 'Nachmittagsschicht', '11:30', '15:30', 1]
+        );
+      }
+
+      // Freitag nur Vormittagsschicht
+      await db.run(
+        `INSERT INTO template_shifts (id, template_id, day_of_week, name, start_time, end_time, required_employees) 
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [uuidv4(), templateId, 5, 'Vormittagsschicht', '08:00', '12:00', 1]
+      );
+
+      await db.run('COMMIT');
+      return templateId;
+    } catch (error) {
+      await db.run('ROLLBACK');
+      throw error;
+    }
+  } catch (error) {
+    console.error('Error creating default template:', error);
+    throw error;
+  }
+};
+
 export const createTemplate = async (req: Request, res: Response): Promise<void> => {
   try {
     const { name, description, isDefault, shifts }: CreateShiftTemplateRequest = req.body;
@@ -94,6 +145,12 @@ export const createTemplate = async (req: Request, res: Response): Promise<void>
     if (!userId) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
+    }
+
+    // Wenn diese Vorlage als Standard markiert werden soll,
+    // zuerst alle anderen Vorlagen auf nicht-Standard setzen
+    if (isDefault) {
+      await db.run('UPDATE shift_templates SET is_default = 0');
     }
 
     const templateId = uuidv4();
@@ -182,6 +239,12 @@ export const updateTemplate = async (req: Request, res: Response): Promise<void>
     await db.run('BEGIN TRANSACTION');
 
     try {
+      // Wenn diese Vorlage als Standard markiert werden soll,
+      // zuerst alle anderen Vorlagen auf nicht-Standard setzen
+      if (isDefault) {
+        await db.run('UPDATE shift_templates SET is_default = 0');
+      }
+
       // Update template
       if (name !== undefined || description !== undefined || isDefault !== undefined) {
         await db.run(

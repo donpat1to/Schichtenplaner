@@ -1,6 +1,7 @@
 // frontend/src/pages/ShiftTemplates/components/ShiftDayEditor.tsx
 import React from 'react';
 import { TemplateShift } from '../../../types/shiftTemplate';
+import styles from './ShiftDayEditor.module.css';
 
 interface ShiftDayEditorProps {
   day: { id: number; name: string };
@@ -18,13 +19,13 @@ const ShiftDayEditor: React.FC<ShiftDayEditorProps> = ({
   onRemoveShift
 }) => {
   return (
-    <div style={{ border: '1px solid #e0e0e0', borderRadius: '8px', padding: '20px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-        <h3 style={{ margin: 0 }}>{day.name}</h3>
-        <button
-          onClick={onAddShift}
-          style={{ padding: '8px 16px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px' }}
-        >
+    <div className={styles.dayEditor}>
+      <div className={styles.dayHeader}>
+        <h3 className={styles.dayName}>{day.name}</h3>
+        <button className={styles.addButton} onClick={onAddShift}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
+            <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+          </svg>
           Schicht hinzufügen
         </button>
       </div>
@@ -34,73 +35,85 @@ const ShiftDayEditor: React.FC<ShiftDayEditorProps> = ({
           Keine Schichten für {day.name}
         </div>
       ) : (
-        <div style={{ display: 'grid', gap: '15px' }}>
-          {shifts.map((shift, index) => (
-            <div key={shift.id} style={{ 
-              display: 'grid', 
-              gridTemplateColumns: '2fr 1fr 1fr 1fr auto',
-              gap: '10px',
-              alignItems: 'center',
-              padding: '15px',
-              border: '1px solid #f0f0f0',
-              borderRadius: '4px',
-              backgroundColor: '#fafafa'
-            }}>
-              {/* Schicht Name */}
-              <div>
+        <div className={styles.shiftsGrid}>
+          {shifts.map(shift => (
+            <div key={shift.id} className={styles.shiftCard}>
+              <div className={styles.shiftHeader}>
+                <h4 className={styles.shiftTitle}>Schicht bearbeiten</h4>
+                <button
+                  className={styles.deleteButton}
+                  onClick={() => onRemoveShift(shift.id)}
+                  title="Schicht löschen"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
+                    <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  Löschen
+                </button>
+              </div>
+
+              <div className={styles.formGroup}>
                 <input
                   type="text"
                   value={shift.name}
                   onChange={(e) => onUpdateShift(shift.id, { name: e.target.value })}
                   placeholder="Schichtname"
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
                 />
               </div>
 
-              {/* Startzeit */}
-              <div>
-                <label style={{ fontSize: '12px', display: 'block', marginBottom: '2px' }}>Start</label>
-                <input
-                  type="time"
-                  value={shift.startTime}
-                  onChange={(e) => onUpdateShift(shift.id, { startTime: e.target.value })}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
-                />
+              <div className={styles.timeInputs}>
+                <div className={styles.formGroup}>
+                  <label>Start</label>
+                  <input
+                    type="time"
+                    value={shift.startTime}
+                    onChange={(e) => onUpdateShift(shift.id, { startTime: e.target.value })}
+                  />
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label>Ende</label>
+                  <input
+                    type="time"
+                    value={shift.endTime}
+                    onChange={(e) => onUpdateShift(shift.id, { endTime: e.target.value })}
+                  />
+                </div>
               </div>
 
-              {/* Endzeit */}
-              <div>
-                <label style={{ fontSize: '12px', display: 'block', marginBottom: '2px' }}>Ende</label>
-                <input
-                  type="time"
-                  value={shift.endTime}
-                  onChange={(e) => onUpdateShift(shift.id, { endTime: e.target.value })}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
-                />
+              <div className={styles.formGroup}>
+                <label>Benötigte Mitarbeiter</label>
+                <div className={styles.requiredEmployees}>
+                  <button
+                    onClick={() => onUpdateShift(shift.id, { requiredEmployees: Math.max(1, shift.requiredEmployees - 1) })}
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    min="1"
+                    value={shift.requiredEmployees}
+                    onChange={(e) => onUpdateShift(shift.id, { requiredEmployees: parseInt(e.target.value) || 1 })}
+                  />
+                  <button
+                    onClick={() => onUpdateShift(shift.id, { requiredEmployees: shift.requiredEmployees + 1 })}
+                  >
+                    +
+                  </button>
+                </div>
               </div>
 
-              {/* Benötigte Mitarbeiter */}
-              <div>
-                <label style={{ fontSize: '12px', display: 'block', marginBottom: '2px' }}>Mitarbeiter</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={shift.requiredEmployees}
-                  onChange={(e) => onUpdateShift(shift.id, { requiredEmployees: parseInt(e.target.value) || 1 })}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
-                />
-              </div>
-
-              {/* Löschen Button */}
-              <div>
-                <button
-                  onClick={() => onRemoveShift(shift.id)}
-                  style={{ padding: '8px 12px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '4px' }}
-                  title="Schicht löschen"
-                >
-                  ×
-                </button>
-              </div>
+              {shift.color && (
+                <div className={styles.formGroup}>
+                  <label>Farbe</label>
+                  <input
+                    type="color"
+                    value={shift.color}
+                    onChange={(e) => onUpdateShift(shift.id, { color: e.target.value })}
+                    className={styles.colorPicker}
+                  />
+                </div>
+              )}
             </div>
           ))}
         </div>
