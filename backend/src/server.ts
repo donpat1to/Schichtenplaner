@@ -42,18 +42,13 @@ app.get('/api/initial-setup', async (req: any, res: any) => {
   try {
     const { db } = await import('./services/databaseService.js');
     
-    // Define proper interface for the result
-    interface AdminCountResult {
-      count: number;
-    }
-    
-    const adminExists = await db.get<AdminCountResult>(
-      'SELECT COUNT(*) as count FROM users WHERE role = ?',
+    const adminExists = await db.get<{ 'COUNT(*)': number }>(
+      'SELECT COUNT(*) FROM users WHERE role = ?',
       ['admin']
     );
 
     res.json({
-      needsInitialSetup: !adminExists || adminExists.count === 0
+      needsInitialSetup: !adminExists || adminExists['COUNT(*)'] === 0
     });
   } catch (error) {
     console.error('Error checking initial setup:', error);
@@ -61,23 +56,29 @@ app.get('/api/initial-setup', async (req: any, res: any) => {
   }
 });
 
-// Start server
-app.listen(PORT, async () => {
-  console.log('🎉 BACKEND STARTED SUCCESSFULLY!');
-  console.log(`📍 Port: ${PORT}`);
-  console.log(`📍 Health: http://localhost:${PORT}/api/health`);
-
+// Initialize the application
+const initializeApp = async () => {
   try {
     await initializeDatabase();
     console.log('✅ Database initialized successfully');
     
     await setupDefaultTemplate();
     console.log('✅ Default template checked/created');
+    
+    // Start server only after successful initialization
+    app.listen(PORT, () => {
+      console.log('🎉 BACKEND STARTED SUCCESSFULLY!');
+      console.log(`📍 Port: ${PORT}`);
+      console.log(`📍 Health: http://localhost:${PORT}/api/health`);
+      console.log('');
+      console.log(`🔧 Setup ready at: http://localhost:${PORT}/api/setup/status`);
+      console.log('📝 Create your admin account on first launch');
+    });
   } catch (error) {
     console.error('❌ Error during initialization:', error);
+    process.exit(1); // Exit if initialization fails
   }
+};
 
-  console.log('');
-  console.log(`🔧 Setup ready at: http://localhost:${PORT}/api/setup/status`);
-  console.log('📝 Create your admin account on first launch');
-});
+// Start the application
+initializeApp();

@@ -1,168 +1,203 @@
-// backend/src/controllers/authController.ts
 import { Request, Response } from 'express';
-import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { v4 as uuidv4 } from 'uuid';
+import bcrypt from 'bcrypt';
 import { db } from '../services/databaseService.js';
-import { AuthRequest } from '../middleware/auth.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+export interface User {
+  id: number;
+  email: string;
+  name: string;
+  role: string;
+  phone?: string;
+  department?: string;
+}
 
-export const login = async (req: Request, res: Response): Promise<void> => {
+export interface UserWithPassword extends User {
+  password: string;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface JWTPayload {
+  id: number;
+  email: string;
+  role: string;
+  iat?: number;
+  exp?: number;
+}
+
+export interface RegisterRequest {
+  email: string;
+  password: string;
+  name: string;
+  phone?: string;
+  department?: string;
+  role?: string;
+}
+
+export const login = async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body as LoginRequest;
 
     if (!email || !password) {
-      res.status(400).json({ error: 'Email and password are required' });
-      return;
+      return res.status(400).json({ error: 'E-Mail und Passwort sind erforderlich' });
     }
 
-    // User aus Datenbank holen
-    const user = await db.get<any>(
-      'SELECT * FROM users WHERE email = ?',
+    // Get user from database
+    const user = await db.get<UserWithPassword>(
+      'SELECT id, email, password, name, role, phone, department FROM users WHERE email = ?',
       [email]
     );
 
     if (!user) {
-      res.status(401).json({ error: 'Invalid credentials' });
-      return;
+      return res.status(401).json({ error: 'Ungültige Anmeldedaten' });
     }
 
-    // Passwort vergleichen
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      res.status(401).json({ error: 'Invalid credentials' });
-      return;
+    // Verify password
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) {
+      return res.status(401).json({ error: 'Ungültige Anmeldedaten' });
     }
 
-    // JWT Token generieren
+    // Create token payload
+    const tokenPayload: JWTPayload = {
+      id: user.id,
+      email: user.email,
+      role: user.role
+    };
+
+    // Create token
     const token = jwt.sign(
-      { 
-        userId: user.id, 
-        email: user.email, 
-        role: user.role 
-      },
-      JWT_SECRET as jwt.Secret,
-      { expiresIn: JWT_EXPIRES_IN as jwt.SignOptions['expiresIn'] }
+      tokenPayload,
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: '24h' }
     );
 
-    // User ohne Passwort zurückgeben
+    // Remove password from user object
     const { password: _, ...userWithoutPassword } = user;
 
     res.json({
       user: userWithoutPassword,
-      token,
-      expiresIn: JWT_EXPIRES_IN
+      token
     });
-
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Ein Fehler ist beim Login aufgetreten' });
   }
 };
 
-export const register = async (req: Request, res: Response): Promise<void> => {
+export const getCurrentUser = async (req: Request, res: Response) => {
   try {
-    const { email, password, name, role = 'user' } = req.body;
-
-    if (!email || !password || !name) {
-      res.status(400).json({ error: 'Email, password and name are required' });
-      return;
+    const jwtUser = (req as any).user as JWTPayload;
+    if (!jwtUser?.id) {
+      return res.status(401).json({ error: 'Nicht authentifiziert' });
     }
 
-    // Check if user already exists
-    const existingUser = await db.get<any>(
+    const user = await db.get<User>(
+      'SELECT id, email, name, role, phone, department FROM users WHERE id = ?',
+      [jwtUser.id]
+    );
+
+    if (!user) {
+      return res.status(404).json({ error: 'Benutzer nicht gefunden' });
+    }
+
+    res.json({ user });
+  } catch (error) {
+    console.error('Get current user error:', error);
+    res.status(500).json({ error: 'Ein Fehler ist beim Abrufen des Benutzers aufgetreten' });
+  }
+};
+
+export const validateToken = async (req: Request, res: Response) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'Kein Token vorhanden' });
+    }
+
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as JWTPayload;
+      
+      // Verify that the decoded token has the required fields
+      if (!decoded.id || !decoded.email || !decoded.role) {
+        throw new Error('Invalid token structure');
+      }
+      
+      res.json({ valid: true, user: decoded });
+    } catch (jwtError) {
+      return res.status(401).json({ valid: false, error: 'Ungültiger Token' });
+    }
+  } catch (error) {
+    console.error('Token validation error:', error);
+    res.status(500).json({ valid: false, error: 'Fehler bei der Token-Validierung' });
+  }
+};
+
+export const register = async (req: Request, res: Response) => {
+  try {
+    const { email, password, name, phone, department, role = 'user' } = req.body as RegisterRequest;
+
+    // Validate required fields
+    if (!email || !password || !name) {
+      return res.status(400).json({ 
+        error: 'E-Mail, Passwort und Name sind erforderlich' 
+      });
+    }
+
+    // Check if email already exists
+    const existingUser = await db.get<User>(
       'SELECT id FROM users WHERE email = ?',
       [email]
     );
 
     if (existingUser) {
-      res.status(409).json({ error: 'User already exists' });
-      return;
-    }
-
-    // Validate role
-    const validRoles = ['admin', 'instandhalter', 'user'];
-    if (!validRoles.includes(role)) {
-      res.status(400).json({ error: 'Invalid role' });
-      return;
+      return res.status(400).json({ 
+        error: 'Ein Benutzer mit dieser E-Mail existiert bereits' 
+      });
     }
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
-    const userId = uuidv4();
 
-    // Create user
-    await db.run(
-      'INSERT INTO users (id, email, password, name, role) VALUES (?, ?, ?, ?, ?)',
-      [userId, email, hashedPassword, name, role]
+    // Insert user
+    const result = await db.run(
+      `INSERT INTO users (email, password, name, role, phone, department) 
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [email, hashedPassword, name, role, phone, department]
     );
 
-    // Generate token
-    const token = jwt.sign(
-      { 
-        userId, 
-        email, 
-        role 
-      },
-      JWT_SECRET as jwt.Secret,
-      { expiresIn: JWT_EXPIRES_IN as jwt.SignOptions['expiresIn'] }
+    if (!result.lastID) {
+      throw new Error('Benutzer konnte nicht erstellt werden');
+    }
+
+    // Get created user
+    const newUser = await db.get<User>(
+      'SELECT id, email, name, role, phone, department FROM users WHERE id = ?',
+      [result.lastID]
     );
 
-    // Return user without password
-    const user = {
-      id: userId,
-      email,
-      name,
-      role,
-      createdAt: new Date().toISOString()
-    };
-
-    res.status(201).json({
-      user,
-      token,
-      expiresIn: JWT_EXPIRES_IN
-    });
-
+    res.status(201).json({ user: newUser });
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ 
+      error: 'Fehler bei der Registrierung'
+    });
   }
 };
 
-export const logout = async (req: AuthRequest, res: Response): Promise<void> => {
+export const logout = async (req: Request, res: Response) => {
   try {
-    // Bei JWT gibt es keinen Server-side logout, aber wir können den Token client-seitig entfernen
-    res.json({ message: 'Logged out successfully' });
+    // Note: Since we're using JWTs, we don't need to do anything server-side
+    // The client should remove the token from storage
+    res.json({ message: 'Erfolgreich abgemeldet' });
   } catch (error) {
     console.error('Logout error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-};
-
-export const getCurrentUser = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const userId = req.user?.userId;
-
-    if (!userId) {
-      res.status(401).json({ error: 'Not authenticated' });
-      return;
-    }
-
-    const user = await db.get<any>(
-      'SELECT id, email, name, role, created_at FROM users WHERE id = ?',
-      [userId]
-    );
-
-    if (!user) {
-      res.status(404).json({ error: 'User not found' });
-      return;
-    }
-
-    res.json(user);
-  } catch (error) {
-    console.error('Get current user error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ 
+      error: 'Fehler beim Abmelden' 
+    });
   }
 };
