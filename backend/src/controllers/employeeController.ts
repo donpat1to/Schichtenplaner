@@ -5,25 +5,6 @@ import bcrypt from 'bcryptjs';
 import { db } from '../services/databaseService.js';
 import { AuthRequest } from '../middleware/auth.js';
 
-export const getEmployees = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const employees = await db.all<any>(`
-      SELECT 
-        id, email, name, role, is_active as isActive, 
-        phone, department, created_at as createdAt, 
-        last_login as lastLogin
-      FROM users 
-      WHERE is_active = 1
-      ORDER BY name
-    `);
-
-    res.json(employees);
-  } catch (error) {
-    console.error('Error fetching employees:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-};
-
 export const getEmployee = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
@@ -56,7 +37,14 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
       password: '***hidden***'
     });
 
-    const { email, password, name, role, phone, department } = req.body;
+    const { email, password, name, role, phone, department } = req.body as {
+      email: string;
+      password: string;
+      name: string;
+      role: string;
+      phone?: string;
+      department?: string;
+    };
 
     // Validierung
     if (!email || !password || !name || !role) {
@@ -158,7 +146,7 @@ export const deleteEmployee = async (req: AuthRequest, res: Response): Promise<v
     const { id } = req.params;
     console.log('🗑️ Starting deletion process for employee ID:', id);
 
-    // Get full employee details first
+    // Check if employee exists
     const existingEmployee = await db.get<any>(`
       SELECT id, email, name, is_active, role 
       FROM users 
@@ -173,137 +161,60 @@ export const deleteEmployee = async (req: AuthRequest, res: Response): Promise<v
 
     console.log('📝 Found employee to delete:', existingEmployee);
 
+    // Start transaction
+    await db.run('BEGIN TRANSACTION');
+
     try {
-      // Start transaction
-      await db.run('BEGIN TRANSACTION');
-
-      // Remove all references first
-      const queries = [
-        // 1. Remove availabilities
-        'DELETE FROM employee_availabilities WHERE employee_id = ?',
-        
-        // 2. Remove from assigned shifts
-        `UPDATE assigned_shifts 
-         SET assigned_employees = json_remove(
-           assigned_employees, 
-           '$[' || (
-             SELECT key 
-             FROM json_each(assigned_employees) 
-             WHERE value = ? 
-             LIMIT 1
-           ) || ']'
-         )
-         WHERE json_extract(assigned_employees, '$') LIKE ?`,
-
-        // 3. Nullify references
-        'UPDATE shift_plans SET created_by = NULL WHERE created_by = ?',
-        'UPDATE shift_templates SET created_by = NULL WHERE created_by = ?',
-
-        // 4. Delete the user
-        'DELETE FROM users WHERE id = ?'
-      ];
-
-      // Execute all cleanup queries
-      for (const query of queries) {
-        if (query.includes('json_extract')) {
-          await db.run(query, [id, `%${id}%`]);
-        } else {
-          await db.run(query, [id]);
+      // 1. Remove availabilities
+      await db.run('DELETE FROM employee_availabilities WHERE employee_id = ?', [id]);
+      
+      // 2. Remove from assigned_shifts (JSON field cleanup)
+      interface AssignedShift {
+        id: string;
+        assigned_employees: string;
+      }
+      
+      const assignedShifts = await db.all<AssignedShift>(
+        'SELECT id, assigned_employees FROM assigned_shifts WHERE json_extract(assigned_employees, "$") LIKE ?', 
+        [`%${id}%`]
+      );
+      
+      for (const shift of assignedShifts) {
+        try {
+          const employeesArray: string[] = JSON.parse(shift.assigned_employees || '[]');
+          const filteredEmployees = employeesArray.filter((empId: string) => empId !== id);
+          await db.run(
+            'UPDATE assigned_shifts SET assigned_employees = ? WHERE id = ?',
+            [JSON.stringify(filteredEmployees), shift.id]
+          );
+        } catch (parseError) {
+          console.warn(`Could not parse assigned_employees for shift ${shift.id}:`, shift.assigned_employees);
+          // Falls JSON parsing fehlschlägt, setze leeres Array
+          await db.run(
+            'UPDATE assigned_shifts SET assigned_employees = ? WHERE id = ?',
+            [JSON.stringify([]), shift.id]
+          );
         }
       }
 
-      // Verify the deletion
-      const verifyDeletion = await db.get<{count: number}>(`
-        SELECT 
-          (SELECT COUNT(*) FROM users WHERE id = ?) + 
-          (SELECT COUNT(*) FROM employee_availabilities WHERE employee_id = ?) + 
-          (SELECT COUNT(*) FROM assigned_shifts WHERE json_extract(assigned_employees, '$') LIKE ?) as count
-      `, [id, id, `%${id}%`]);
+      // 3. Nullify created_by references
+      await db.run('UPDATE shift_plans SET created_by = NULL WHERE created_by = ?', [id]);
+      await db.run('UPDATE shift_templates SET created_by = NULL WHERE created_by = ?', [id]);
 
-      if ((verifyDeletion?.count ?? 0) > 0) {
-        throw new Error('Failed to remove all references to the employee');
-      }
+      // 4. Finally delete the user
+      await db.run('DELETE FROM users WHERE id = ?', [id]);
 
-      // If we got here, everything worked
       await db.run('COMMIT');
       console.log('✅ Successfully deleted employee:', existingEmployee.email);
       
       res.status(204).send();
+
     } catch (error) {
-      console.error('Error during deletion, rolling back:', error);
       await db.run('ROLLBACK');
+      console.error('Error during deletion transaction:', error);
       throw error;
     }
 
-    console.log('Attempting to delete employee:', { id, email: existingEmployee.email });
-
-    try {
-      // Start a transaction to ensure all deletes succeed or none do
-      await db.run('BEGIN TRANSACTION');
-
-      console.log('Starting transaction for deletion of employee:', id);
-
-      // First verify the current state
-      const beforeState = await db.all(`
-        SELECT 
-          (SELECT COUNT(*) FROM employee_availabilities WHERE employee_id = ?) as avail_count,
-          (SELECT COUNT(*) FROM shift_templates WHERE created_by = ?) as template_count,
-          (SELECT COUNT(*) FROM shift_plans WHERE created_by = ?) as plan_count,
-          (SELECT COUNT(*) FROM users WHERE id = ?) as user_count
-      `, [id, id, id, id]);
-      console.log('Before deletion state:', beforeState[0]);
-
-      // Clear all references first
-      await db.run(`DELETE FROM employee_availabilities WHERE employee_id = ?`, [id]);
-      await db.run(`UPDATE shift_plans SET created_by = NULL WHERE created_by = ?`, [id]);
-      await db.run(`UPDATE shift_templates SET created_by = NULL WHERE created_by = ?`, [id]);
-      await db.run(`UPDATE assigned_shifts 
-        SET assigned_employees = json_remove(assigned_employees, '$[' || json_each.key || ']')
-        FROM json_each(assigned_shifts.assigned_employees)
-        WHERE json_each.value = ?`, [id]);
-
-      // Now delete the user
-      await db.run('DELETE FROM users WHERE id = ?', [id]);
-      
-      // Verify the deletion
-      const verifyAfterDelete = await db.all(`
-        SELECT 
-          (SELECT COUNT(*) FROM users WHERE id = ?) as user_exists,
-          (SELECT COUNT(*) FROM users WHERE email = ?) as email_exists,
-          (SELECT COUNT(*) FROM users WHERE email = ? AND is_active = 1) as active_email_exists
-      `, [id, existingEmployee.email, existingEmployee.email]);
-      
-      console.log('🔍 Verification after delete:', verifyAfterDelete[0]);
-
-      // Verify the deletion worked
-      const verifyDeletion = await db.all<{user_count: number, avail_count: number, shift_refs: number}>(`
-        SELECT 
-          (SELECT COUNT(*) FROM users WHERE id = ?) as user_count,
-          (SELECT COUNT(*) FROM employee_availabilities WHERE employee_id = ?) as avail_count,
-          (SELECT COUNT(*) FROM assigned_shifts WHERE json_extract(assigned_employees, '$') LIKE ?) as shift_refs
-      `, [id, id, `%${id}%`]);
-
-      const counts = verifyDeletion[0];
-      if (!counts || counts.user_count > 0 || counts.avail_count > 0 || counts.shift_refs > 0) {
-        console.error('Deletion verification failed:', counts);
-        await db.run('ROLLBACK');
-        throw new Error('Failed to delete all user data');
-      }
-
-      // If we got here, the deletion was successful
-      await db.run('COMMIT');
-      console.log('✅ Deletion committed successfully');
-
-      // Final verification after commit
-      const finalCheck = await db.get('SELECT * FROM users WHERE email = ?', [existingEmployee.email]);
-      console.log('🔍 Final verification - any user with this email:', finalCheck);
-    } catch (err) {
-      console.error('Error during deletion transaction:', err);
-      await db.run('ROLLBACK');
-      throw err;
-    }
-
-    res.status(204).send();
   } catch (error) {
     console.error('Error deleting employee:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -344,7 +255,14 @@ export const getAvailabilities = async (req: AuthRequest, res: Response): Promis
 export const updateAvailabilities = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { employeeId } = req.params;
-    const availabilities = req.body;
+    const availabilities = req.body as Array<{
+      id?: string;
+      employeeId: string;
+      dayOfWeek: number;
+      startTime: string;
+      endTime: string;
+      isAvailable: boolean;
+    }>;
 
     // Check if employee exists
     const existingEmployee = await db.get('SELECT id FROM users WHERE id = ?', [employeeId]);

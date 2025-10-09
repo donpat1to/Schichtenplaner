@@ -1,6 +1,7 @@
 // backend/src/middleware/auth.ts
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { JWTPayload } from '../controllers/authController.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
@@ -21,8 +22,12 @@ export const authMiddleware = (req: AuthRequest, res: Response, next: NextFuncti
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
-    req.user = decoded;
+    const decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
+    req.user = {
+      userId: decoded.id,
+      email: decoded.email,
+      role: decoded.role
+    };
     next();
   } catch (error) {
     res.status(400).json({ error: 'Invalid token.' });

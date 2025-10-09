@@ -4,7 +4,7 @@ import { authService } from './authService';
 
 const API_BASE = 'http://localhost:3002/api/employees';
 
-export const employeeService = {
+export class EmployeeService {
   // Alle Mitarbeiter abrufen
   async getEmployees(): Promise<Employee[]> {
     const response = await fetch(`${API_BASE}?_=${Date.now()}`, {
@@ -21,7 +21,7 @@ export const employeeService = {
     }
     
     return response.json();
-  },
+  }
 
   // Einzelnen Mitarbeiter abrufen
   async getEmployee(id: string): Promise<Employee> {
@@ -37,7 +37,7 @@ export const employeeService = {
     }
     
     return response.json();
-  },
+  }
 
   // Neuen Mitarbeiter erstellen
   async createEmployee(employeeData: CreateEmployeeRequest): Promise<Employee> {
@@ -56,7 +56,7 @@ export const employeeService = {
     }
     
     return response.json();
-  },
+  }
 
   // Mitarbeiter aktualisieren
   async updateEmployee(id: string, updates: UpdateEmployeeRequest): Promise<Employee> {
@@ -74,7 +74,7 @@ export const employeeService = {
     }
     
     return response.json();
-  },
+  }
 
   // Mitarbeiter permanent löschen
   async deleteEmployee(id: string): Promise<void> {
@@ -89,7 +89,7 @@ export const employeeService = {
       const error = await response.json().catch(() => ({ error: 'Fehler beim Löschen des Mitarbeiters' }));
       throw new Error(error.error || 'Fehler beim Löschen des Mitarbeiters');
     }
-  },
+  }
 
   // Verfügbarkeiten abrufen
   async getAvailabilities(employeeId: string): Promise<Availability[]> {
@@ -105,7 +105,7 @@ export const employeeService = {
     }
     
     return response.json();
-  },
+  }
 
   // Verfügbarkeiten aktualisieren
   async updateAvailabilities(employeeId: string, availabilities: Availability[]): Promise<Availability[]> {

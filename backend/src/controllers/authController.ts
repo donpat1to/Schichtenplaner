@@ -22,7 +22,7 @@ export interface LoginRequest {
 }
 
 export interface JWTPayload {
-  id: number;
+  id: string; // ← VON number ZU string ÄNDERN
   email: string;
   role: string;
   iat?: number;
@@ -64,7 +64,7 @@ export const login = async (req: Request, res: Response) => {
 
     // Create token payload
     const tokenPayload: JWTPayload = {
-      id: user.id,
+      id: user.id.toString(), // ← Sicherstellen dass es string ist
       email: user.email,
       role: user.role
     };

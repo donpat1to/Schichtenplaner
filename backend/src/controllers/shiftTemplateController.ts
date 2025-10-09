@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../services/databaseService.js';
 import { ShiftTemplate, CreateShiftTemplateRequest, UpdateShiftTemplateRequest } from '../models/ShiftTemplate.js';
+import { AuthRequest } from '../middleware/auth.js';
 
 export const getTemplates = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -140,7 +141,7 @@ export const createDefaultTemplate = async (userId: string): Promise<string> => 
 export const createTemplate = async (req: Request, res: Response): Promise<void> => {
   try {
     const { name, description, isDefault, shifts }: CreateShiftTemplateRequest = req.body;
-    const userId = (req as any).user?.userId; // From auth middleware
+    const userId = (req as AuthRequest).user?.userId;
 
     if (!userId) {
       res.status(401).json({ error: 'Unauthorized' });
