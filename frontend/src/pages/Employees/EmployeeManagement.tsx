@@ -25,19 +25,19 @@ const EmployeeManagement: React.FC = () => {
   const loadEmployees = async () => {
     try {
       setLoading(true);
-      console.log('Fetching fresh employee list');
+      console.log('🔄 Loading employees...');
       
       // Add cache-busting parameter to prevent browser caching
       const data = await employeeService.getEmployees();
-      console.log('Received employees:', data.length);
+      console.log('✅ Employees loaded:', data);
       
       setEmployees(data);
     } catch (err: any) {
-      console.error('Error loading employees:', err);
+      console.error('❌ Error loading employees:', err);
       showNotification({
         type: 'error',
         title: 'Fehler',
-        message: 'Mitarbeiter konnten nicht geladen werden'
+        message: 'Mitarbeiter konnten nicht geladen werden: ' + err.message
       });
     } finally {
       setLoading(false);

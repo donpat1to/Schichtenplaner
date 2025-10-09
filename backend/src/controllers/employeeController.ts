@@ -7,6 +7,8 @@ import { AuthRequest } from '../middleware/auth.js';
 
 export const getEmployees = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    console.log('🔍 Fetching employees - User:', req.user);
+    
     const employees = await db.all<any>(`
       SELECT 
         id, email, name, role, is_active as isActive, 
@@ -17,9 +19,12 @@ export const getEmployees = async (req: AuthRequest, res: Response): Promise<voi
       ORDER BY name
     `);
 
+    console.log('✅ Employees found:', employees.length);
+    console.log('📋 Employees data:', employees);
+
     res.json(employees);
   } catch (error) {
-    console.error('Error fetching employees:', error);
+    console.error('❌ Error fetching employees:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

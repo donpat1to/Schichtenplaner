@@ -13,15 +13,27 @@ const getAuthHeaders = () => {
 
 export class EmployeeService {
   async getEmployees(): Promise<Employee[]> {
+    console.log('🔄 Fetching employees from API...');
+    
+    const token = localStorage.getItem('token');
+    console.log('🔑 Token exists:', !!token);
+    
     const response = await fetch(`${API_BASE_URL}/employees`, {
       headers: getAuthHeaders(),
     });
     
+    console.log('📡 Response status:', response.status);
+    
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ API Error:', errorText);
       throw new Error('Failed to fetch employees');
     }
     
-    return response.json();
+    const employees = await response.json();
+    console.log('✅ Employees received:', employees.length);
+    
+    return employees;
   }
 
   async getEmployee(id: string): Promise<Employee> {

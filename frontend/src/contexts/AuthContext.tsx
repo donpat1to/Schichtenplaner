@@ -129,8 +129,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const hasRole = (roles: string[]): boolean => {
-    if (!user) return false;
-    return roles.includes(user.role);
+    console.log('🔐 Checking roles - User:', user, 'Required roles:', roles);
+    
+    if (!user) {
+      console.log('❌ No user found');
+      return false;
+    }
+    
+    const hasRequiredRole = roles.includes(user.role);
+    console.log('✅ User role:', user.role, 'Has required role:', hasRequiredRole);
+    
+    return hasRequiredRole;
   };
 
   useEffect(() => {
