@@ -26,8 +26,9 @@ export const authMiddleware = (req: AuthRequest, res: Response, next: NextFuncti
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
-    console.log('✅ Token valid for user:', decoded.email);
+    console.log('✅ Token valid for user:', decoded.email, 'ID:', decoded.id);
     
+    // KORREKTUR: Verwende 'id' aus dem JWT Payload
     req.user = {
       userId: decoded.id,
       email: decoded.email,
