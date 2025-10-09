@@ -5,6 +5,25 @@ import bcrypt from 'bcryptjs';
 import { db } from '../services/databaseService.js';
 import { AuthRequest } from '../middleware/auth.js';
 
+export const getEmployees = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const employees = await db.all<any>(`
+      SELECT 
+        id, email, name, role, is_active as isActive, 
+        phone, department, created_at as createdAt, 
+        last_login as lastLogin
+      FROM users 
+      WHERE is_active = 1
+      ORDER BY name
+    `);
+
+    res.json(employees);
+  } catch (error) {
+    console.error('Error fetching employees:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const getEmployee = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;

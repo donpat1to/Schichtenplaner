@@ -1,9 +1,14 @@
 // frontend/src/contexts/AuthContext.tsx
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { authService, User, LoginRequest } from '../services/authService';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { Employee } from '../types/employee';
+
+interface LoginRequest {
+  email: string;
+  password: string;
+}
 
 interface AuthContextType {
-  user: User | null;
+  user: Employee | null;
   login: (credentials: LoginRequest) => Promise<void>;
   logout: () => void;
   hasRole: (roles: string[]) => boolean;
@@ -15,102 +20,130 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+interface AuthProviderProps {
+  children: ReactNode;
+}
+
+export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+  const [user, setUser] = useState<Employee | null>(null);
   const [loading, setLoading] = useState(true);
   const [needsSetup, setNeedsSetup] = useState(false);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  const checkSetupStatus = async () => {
+  // Token aus localStorage laden
+  const getStoredToken = (): string | null => {
+    return localStorage.getItem('token');
+  };
+
+  // Token in localStorage speichern
+  const setStoredToken = (token: string) => {
+    localStorage.setItem('token', token);
+  };
+
+  // Token aus localStorage entfernen
+  const removeStoredToken = () => {
+    localStorage.removeItem('token');
+  };
+
+  const checkSetupStatus = async (): Promise<void> => {
     try {
-      const response = await fetch('/api/setup/status');
+      const response = await fetch('http://localhost:3002/api/setup/status');
       if (!response.ok) {
-        throw new Error('Failed to check setup status');
+        throw new Error('Setup status check failed');
       }
       const data = await response.json();
-      setNeedsSetup(data.needsSetup);
+      console.log('Setup status response:', data);
+      setNeedsSetup(data.needsSetup === true);
     } catch (error) {
       console.error('Error checking setup status:', error);
-      // If we can't reach the server, assume setup is needed
-      setNeedsSetup(true);
+      setNeedsSetup(false);
     }
   };
 
-  // Check setup status and load user on mount
-  useEffect(() => {
-    const initializeApp = async () => {
-      await checkSetupStatus();
-      
-      // Only try to load user if setup is not needed
-      if (!needsSetup) {
-        const savedUser = authService.getCurrentUser();
-        if (savedUser) {
-          setUser(savedUser);
-          console.log('✅ User from localStorage:', savedUser.email);
-        }
-      }
-      
-      setLoading(false);
-    };
-    initializeApp();
-  }, []);
-
-  // Update needsSetup when it changes
-  useEffect(() => {
-    if (!needsSetup && !user) {
-      // If setup is complete but no user is loaded, try to load from localStorage
-      const savedUser = authService.getCurrentUser();
-      if (savedUser) {
-        setUser(savedUser);
-      }
-    }
-  }, [needsSetup, user]);
-
-  // User vom Server laden wenn nötig
-  useEffect(() => {
-    if (refreshTrigger > 0 && !needsSetup) {
-      const loadUserFromServer = async () => {
-        const serverUser = await authService.fetchCurrentUser();
-        if (serverUser) {
-          setUser(serverUser);
-          console.log('✅ User from server:', serverUser.email);
-        }
-      };
-      loadUserFromServer();
-    }
-  }, [refreshTrigger, needsSetup]);
-
-  const login = async (credentials: LoginRequest) => {
+  const refreshUser = async () => {
     try {
-      console.log('🔄 Attempting login...');
-      const response = await authService.login(credentials);
-      setUser(response.user);
-      console.log('✅ Login successful, user set:', response.user.email);
+      const token = getStoredToken();
+      console.log('🔄 Refreshing user, token exists:', !!token);
       
-      // Force refresh der App
-      setRefreshTrigger(prev => prev + 1);
-      
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+
+      const response = await fetch('http://localhost:3002/api/auth/me', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ User refreshed:', data.user);
+        setUser(data.user);
+      } else {
+        console.log('❌ Token invalid, removing from storage');
+        removeStoredToken();
+        setUser(null);
+      }
     } catch (error) {
-      console.error('❌ Login failed:', error);
+      console.error('Error refreshing user:', error);
+      removeStoredToken();
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const login = async (credentials: LoginRequest): Promise<void> => {
+    try {
+      console.log('🔐 Attempting login for:', credentials.email);
+      
+      const response = await fetch('http://localhost:3002/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(credentials),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Login failed');
+      }
+
+      const data = await response.json();
+      console.log('✅ Login successful, storing token');
+      
+      // Token persistent speichern
+      setStoredToken(data.token);
+      setUser(data.user);
+    } catch (error) {
+      console.error('Login error:', error);
       throw error;
     }
   };
 
   const logout = () => {
-    authService.logout();
+    console.log('🚪 Logging out user');
+    removeStoredToken();
     setUser(null);
-    console.log('✅ Logout completed');
   };
 
-  const refreshUser = () => {
-    setRefreshTrigger(prev => prev + 1);
+  const hasRole = (roles: string[]): boolean => {
+    if (!user) return false;
+    return roles.includes(user.role);
   };
 
-  const hasRole = (roles: string[]) => {
-    return user ? roles.includes(user.role) : false;
-  };
+  useEffect(() => {
+    const initializeAuth = async () => {
+      console.log('🚀 Initializing authentication...');
+      await checkSetupStatus();
+      await refreshUser();
+    };
 
-  const value = {
+    initializeAuth();
+  }, []);
+
+  const value: AuthContextType = {
     user,
     login,
     logout,
@@ -118,8 +151,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loading,
     refreshUser,
     needsSetup,
-    checkSetupStatus
+    checkSetupStatus,
   };
+
+  useEffect(() => {
+    console.log('🔄 Auth state changed - user:', user, 'loading:', loading);
+  }, [user, loading]);
+
+  useEffect(() => {
+    const token = getStoredToken();
+    console.log('💾 Stored token on mount:', token ? 'Exists' : 'None');
+  }, []);
 
   return (
     <AuthContext.Provider value={value}>
@@ -128,7 +170,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 };
 
-export const useAuth = () => {
+export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');

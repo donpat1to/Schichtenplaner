@@ -14,7 +14,7 @@ import Settings from './pages/Settings/Settings';
 import Help from './pages/Help/Help';
 import Setup from './pages/Setup/Setup';
 
-// Protected Route Component direkt in App.tsx
+// Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[] }> = ({ 
   children, 
   roles = ['admin', 'instandhalter', 'user'] 
@@ -47,18 +47,27 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[] }> 
   return <Layout>{children}</Layout>;
 };
 
-function App() {
+// SetupWrapper Component
+const SetupWrapper: React.FC = () => {
   return (
-    <NotificationProvider>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </NotificationProvider>
+    <Router>
+      <Setup />
+    </Router>
   );
-}
+};
 
-function AppContent() {
-  const { loading, needsSetup } = useAuth();
+// LoginWrapper Component  
+const LoginWrapper: React.FC = () => {
+  return (
+    <Router>
+      <Login />
+    </Router>
+  );
+};
+
+// Main App Content
+const AppContent: React.FC = () => {
+  const { loading, needsSetup, user } = useAuth();
 
   if (loading) {
     return (
@@ -68,49 +77,66 @@ function AppContent() {
     );
   }
 
+  console.log('AppContent - needsSetup:', needsSetup, 'user:', user);
+
+  // Wenn Setup benötigt wird → Setup zeigen (mit Router)
+  if (needsSetup) {
+    return <SetupWrapper />;
+  }
+
+  // Wenn kein User eingeloggt ist → Login zeigen (mit Router)
+  if (!user) {
+    return <LoginWrapper />;
+  }
+
+  // Wenn User eingeloggt ist → Geschützte Routen zeigen
   return (
     <Router>
       <NotificationContainer />
       <Routes>
-        {needsSetup ? (
-          <Route path="*" element={<Setup />} />
-        ) : (
-          <>
-            <Route path="/login" element={<Login />} />
-            <Route path="/" element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            } />
-            <Route path="/shift-plans" element={
-              <ProtectedRoute>
-                <ShiftPlanList />
-              </ProtectedRoute>
-            } />
-            <Route path="/shift-plans/new" element={
-              <ProtectedRoute roles={['admin', 'instandhalter']}>
-                <ShiftPlanCreate />
-              </ProtectedRoute>
-            } />
-            <Route path="/employees" element={
-              <ProtectedRoute roles={['admin', 'instandhalter']}>
-                <EmployeeManagement />
-              </ProtectedRoute>
-            } />
-            <Route path="/settings" element={
-              <ProtectedRoute roles={['admin']}>
-                <Settings />
-              </ProtectedRoute>
-            } />
-            <Route path="/help" element={
-              <ProtectedRoute>
-                <Help />
-              </ProtectedRoute>
-            } />
-          </>
-        )}
+        <Route path="/" element={
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        } />
+        <Route path="/shift-plans" element={
+          <ProtectedRoute>
+            <ShiftPlanList />
+          </ProtectedRoute>
+        } />
+        <Route path="/shift-plans/new" element={
+          <ProtectedRoute roles={['admin', 'instandhalter']}>
+            <ShiftPlanCreate />
+          </ProtectedRoute>
+        } />
+        <Route path="/employees" element={
+          <ProtectedRoute roles={['admin', 'instandhalter']}>
+            <EmployeeManagement />
+          </ProtectedRoute>
+        } />
+        <Route path="/settings" element={
+          <ProtectedRoute roles={['admin']}>
+            <Settings />
+          </ProtectedRoute>
+        } />
+        <Route path="/help" element={
+          <ProtectedRoute>
+            <Help />
+          </ProtectedRoute>
+        } />
+        <Route path="/login" element={<Login />} />
       </Routes>
     </Router>
+  );
+};
+
+function App() {
+  return (
+    <NotificationProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </NotificationProvider>
   );
 }
 

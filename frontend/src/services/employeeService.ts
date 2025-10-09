@@ -1,127 +1,110 @@
 // frontend/src/services/employeeService.ts
-import { Employee, Availability, CreateEmployeeRequest, UpdateEmployeeRequest } from '../types/employee';
-import { authService } from './authService';
+import { Employee, CreateEmployeeRequest, UpdateEmployeeRequest, Availability } from '../types/employee';
 
-const API_BASE = 'http://localhost:3002/api/employees';
+const API_BASE_URL = 'http://localhost:3002/api';
+
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('token');
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`
+  };
+};
 
 export class EmployeeService {
-  // Alle Mitarbeiter abrufen
   async getEmployees(): Promise<Employee[]> {
-    const response = await fetch(`${API_BASE}?_=${Date.now()}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        ...authService.getAuthHeaders()
-      }
+    const response = await fetch(`${API_BASE_URL}/employees`, {
+      headers: getAuthHeaders(),
     });
     
     if (!response.ok) {
-      throw new Error('Fehler beim Laden der Mitarbeiter');
+      throw new Error('Failed to fetch employees');
     }
     
     return response.json();
   }
 
-  // Einzelnen Mitarbeiter abrufen
   async getEmployee(id: string): Promise<Employee> {
-    const response = await fetch(`${API_BASE}/${id}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...authService.getAuthHeaders()
-      }
+    const response = await fetch(`${API_BASE_URL}/employees/${id}`, {
+      headers: getAuthHeaders(),
     });
     
     if (!response.ok) {
-      throw new Error('Mitarbeiter nicht gefunden');
+      throw new Error('Failed to fetch employee');
     }
     
     return response.json();
   }
 
-  // Neuen Mitarbeiter erstellen
-  async createEmployee(employeeData: CreateEmployeeRequest): Promise<Employee> {
-    const response = await fetch(API_BASE, {
+  async createEmployee(employee: CreateEmployeeRequest): Promise<Employee> {
+    const response = await fetch(`${API_BASE_URL}/employees`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...authService.getAuthHeaders()
-      },
-      body: JSON.stringify(employeeData)
+      headers: getAuthHeaders(),
+      body: JSON.stringify(employee),
     });
     
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error || 'Fehler beim Erstellen des Mitarbeiters');
+      throw new Error(error.error || 'Failed to create employee');
     }
     
     return response.json();
   }
 
-  // Mitarbeiter aktualisieren
-  async updateEmployee(id: string, updates: UpdateEmployeeRequest): Promise<Employee> {
-    const response = await fetch(`${API_BASE}/${id}`, {
+  async updateEmployee(id: string, employee: UpdateEmployeeRequest): Promise<Employee> {
+    const response = await fetch(`${API_BASE_URL}/employees/${id}`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...authService.getAuthHeaders()
-      },
-      body: JSON.stringify(updates)
+      headers: getAuthHeaders(),
+      body: JSON.stringify(employee),
     });
     
     if (!response.ok) {
-      throw new Error('Fehler beim Aktualisieren des Mitarbeiters');
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to update employee');
     }
     
     return response.json();
   }
 
-  // Mitarbeiter permanent löschen
   async deleteEmployee(id: string): Promise<void> {
-    const response = await fetch(`${API_BASE}/${id}`, {
+    const response = await fetch(`${API_BASE_URL}/employees/${id}`, {
       method: 'DELETE',
-      headers: {
-        ...authService.getAuthHeaders()
-      }
+      headers: getAuthHeaders(),
     });
     
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Fehler beim Löschen des Mitarbeiters' }));
-      throw new Error(error.error || 'Fehler beim Löschen des Mitarbeiters');
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to delete employee');
     }
   }
 
-  // Verfügbarkeiten abrufen
   async getAvailabilities(employeeId: string): Promise<Availability[]> {
-    const response = await fetch(`${API_BASE}/${employeeId}/availabilities`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...authService.getAuthHeaders()
-      }
+    const response = await fetch(`${API_BASE_URL}/employees/${employeeId}/availabilities`, {
+      headers: getAuthHeaders(),
     });
     
     if (!response.ok) {
-      throw new Error('Fehler beim Laden der Verfügbarkeiten');
+      throw new Error('Failed to fetch availabilities');
     }
     
     return response.json();
   }
 
-  // Verfügbarkeiten aktualisieren
   async updateAvailabilities(employeeId: string, availabilities: Availability[]): Promise<Availability[]> {
-    const response = await fetch(`${API_BASE}/${employeeId}/availabilities`, {
+    const response = await fetch(`${API_BASE_URL}/employees/${employeeId}/availabilities`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...authService.getAuthHeaders()
-      },
-      body: JSON.stringify(availabilities)
+      headers: getAuthHeaders(),
+      body: JSON.stringify(availabilities),
     });
     
     if (!response.ok) {
-      throw new Error('Fehler beim Aktualisieren der Verfügbarkeiten');
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to update availabilities');
     }
     
     return response.json();
   }
-};
+}
+
+// ✅ Exportiere eine Instanz der Klasse
+export const employeeService = new EmployeeService();

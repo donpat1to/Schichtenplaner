@@ -64,7 +64,6 @@ const Setup: React.FC = () => {
       setLoading(true);
       setError('');
 
-      // Create the request payload
       const payload = {
         password: formData.password,
         name: formData.name,
@@ -72,7 +71,7 @@ const Setup: React.FC = () => {
         ...(formData.department ? { department: formData.department } : {})
       };
 
-      console.log('Sending setup request with payload:', payload);
+      console.log('🚀 Sending setup request with payload:', payload);
 
       const response = await fetch('http://localhost:3002/api/setup/admin', {
         method: 'POST',
@@ -82,41 +81,38 @@ const Setup: React.FC = () => {
         body: JSON.stringify(payload),
       });
 
+      const responseText = await response.text();
+      console.log('📨 Setup response:', responseText);
+
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('❌ Failed to parse response as JSON:', responseText);
+        throw new Error('Invalid server response');
+      }
+
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Setup fehlgeschlagen');
+        throw new Error(result.error || 'Setup fehlgeschlagen');
       }
 
-      // Check response format
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text();
-        console.error('Non-JSON response:', text);
-        throw new Error('Server returned non-JSON response');
-      }
+      console.log('✅ Setup successful:', result);
 
-      const result = await response.json();
-      console.log('Setup response:', result);
-
-      // Re-check setup status after successful setup
+      // WICHTIG: Setup Status neu prüfen und dann zu Login navigieren
       await checkSetupStatus();
       
-      // Automatically log in after setup
-      await login({ 
-        email: 'admin@instandhaltung.de', 
-        password: formData.password 
-      });
-
-      navigate('/');
+      // Kurze Verzögerung damit der State aktualisiert werden kann
+      setTimeout(() => {
+        navigate('/login');
+      }, 100);
       
     } catch (err: any) {
-      console.error('Setup error:', err);
+      console.error('❌ Setup error:', err);
       setError(typeof err === 'string' ? err : err.message || 'Ein unerwarteter Fehler ist aufgetreten');
     } finally {
       setLoading(false);
     }
   };
-
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center">
       <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">

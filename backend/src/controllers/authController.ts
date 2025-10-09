@@ -42,29 +42,38 @@ export const login = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body as LoginRequest;
 
+    console.log('🔐 Login attempt for email:', email);
+
     if (!email || !password) {
+      console.log('❌ Missing email or password');
       return res.status(400).json({ error: 'E-Mail und Passwort sind erforderlich' });
     }
 
     // Get user from database
     const user = await db.get<UserWithPassword>(
-      'SELECT id, email, password, name, role, phone, department FROM users WHERE email = ?',
+      'SELECT id, email, password, name, role, phone, department FROM users WHERE email = ? AND is_active = 1',
       [email]
     );
 
+    console.log('🔍 User found:', user ? 'Yes' : 'No');
+
     if (!user) {
+      console.log('❌ No user found with email:', email);
       return res.status(401).json({ error: 'Ungültige Anmeldedaten' });
     }
 
     // Verify password
     const validPassword = await bcrypt.compare(password, user.password);
+    console.log('🔑 Password valid:', validPassword);
+
     if (!validPassword) {
+      console.log('❌ Invalid password for user:', email);
       return res.status(401).json({ error: 'Ungültige Anmeldedaten' });
     }
 
-    // Create token payload
+    // Create token payload - ID als STRING verwenden
     const tokenPayload: JWTPayload = {
-      id: user.id.toString(), // ← Sicherstellen dass es string ist
+      id: user.id.toString(), // ← WICHTIG: Als string
       email: user.email,
       role: user.role
     };
@@ -79,6 +88,8 @@ export const login = async (req: Request, res: Response) => {
     // Remove password from user object
     const { password: _, ...userWithoutPassword } = user;
 
+    console.log('✅ Login successful for:', user.email);
+
     res.json({
       user: userWithoutPassword,
       token
@@ -92,19 +103,26 @@ export const login = async (req: Request, res: Response) => {
 export const getCurrentUser = async (req: Request, res: Response) => {
   try {
     const jwtUser = (req as any).user as JWTPayload;
+    console.log('🔍 Getting current user for ID:', jwtUser?.id);
+    
     if (!jwtUser?.id) {
+      console.log('❌ No user ID in JWT');
       return res.status(401).json({ error: 'Nicht authentifiziert' });
     }
 
     const user = await db.get<User>(
-      'SELECT id, email, name, role, phone, department FROM users WHERE id = ?',
+      'SELECT id, email, name, role, phone, department FROM users WHERE id = ? AND is_active = 1',
       [jwtUser.id]
     );
 
+    console.log('🔍 User found in database:', user ? 'Yes' : 'No');
+
     if (!user) {
+      console.log('❌ User not found in database for ID:', jwtUser.id);
       return res.status(404).json({ error: 'Benutzer nicht gefunden' });
     }
 
+    console.log('✅ Returning user:', user.email);
     res.json({ user });
   } catch (error) {
     console.error('Get current user error:', error);
