@@ -58,17 +58,17 @@ const initializeApp = async () => {
   try {
     // Initialize database with base schema
     await initializeDatabase();
-    console.log('✅ Database initialized successfully');
+    //console.log('✅ Database initialized successfully');
     
     // Apply any pending migrations
     const { applyMigration } = await import('./scripts/applyMigration.js');
     await applyMigration();
-    console.log('✅ Database migrations applied');
+    //console.log('✅ Database migrations applied');
     
     // Setup default template
     await setupDefaultTemplate();
-    console.log('✅ Default template checked/created');
-    
+    //console.log('✅ Default template checked/created');
+
     // Start server only after successful initialization
     app.listen(PORT, () => {
       console.log('🎉 BACKEND STARTED SUCCESSFULLY!');

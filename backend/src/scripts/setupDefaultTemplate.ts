@@ -1,7 +1,7 @@
 // backend/src/scripts/setupDefaultTemplate.ts
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../services/databaseService.js';
-import { DEFAULT_TIME_SLOTS } from '../models/ShiftTemplate.js';
+import { DEFAULT_TIME_SLOTS, TemplateShift } from '../models/ShiftTemplate.js';
 
 interface AdminUser {
   id: string;
@@ -94,6 +94,19 @@ export async function setupDefaultTemplate(): Promise<void> {
       );
 
       console.log('✅ Schichten erstellt');
+
+      // In der problematischen Stelle:
+      const createdTemplate = await db.get(
+        'SELECT * FROM shift_templates WHERE id = ?',
+        [templateId]
+      ) as { name: string } | undefined;
+      console.log('📋 Erstellte Vorlage:', createdTemplate?.name);
+
+      const shiftCount = await db.get(
+        'SELECT COUNT(*) as count FROM template_shifts WHERE template_id = ?',
+        [templateId]
+      ) as { count: number } | undefined;
+      console.log(`📊 Anzahl Schichten: ${shiftCount?.count}`);
 
       await db.run('COMMIT');
       console.log('🎉 Standard-Vorlage erfolgreich initialisiert');

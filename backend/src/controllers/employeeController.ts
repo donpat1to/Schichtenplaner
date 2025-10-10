@@ -144,6 +144,8 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
     const { id } = req.params;
     const { name, role, isActive, employeeType, isSufficientlyIndependent } = req.body;
 
+    console.log('📝 Update Employee Request:', { id, name, role, isActive, employeeType, isSufficientlyIndependent });
+
     // Check if employee exists
     const existingEmployee = await db.get('SELECT * FROM users WHERE id = ?', [id]);
     if (!existingEmployee) {
@@ -162,6 +164,8 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
        WHERE id = ?`,
       [name, role, isActive, employeeType, isSufficientlyIndependent, id]
     );
+
+    console.log('✅ Employee updated successfully');
 
     // Return updated employee
     const updatedEmployee = await db.get<any>(`

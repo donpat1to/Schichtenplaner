@@ -298,44 +298,59 @@ export const deleteShiftPlan = async (req: AuthRequest, res: Response): Promise<
 
 // Helper function to generate shifts from template
 async function generateShiftsFromTemplate(shiftPlanId: string, templateId: string, startDate: string, endDate: string): Promise<void> {
-  // Get template shifts
-  const templateShifts = await db.all<any>(`
-    SELECT * FROM template_shifts 
-    WHERE template_id = ? 
-    ORDER BY day_of_week, start_time
-  `, [templateId]);
+  try {
+    console.log(`🔄 Generiere Schichten von Vorlage ${templateId} für Plan ${shiftPlanId}`);
+    
+    // Get template shifts with time slot information
+    const templateShifts = await db.all<any>(`
+      SELECT ts.*, tts.name as time_slot_name, tts.start_time, tts.end_time
+      FROM template_shifts ts
+      LEFT JOIN template_time_slots tts ON ts.time_slot_id = tts.id
+      WHERE ts.template_id = ? 
+      ORDER BY ts.day_of_week, tts.start_time
+    `, [templateId]);
 
-  const start = new Date(startDate);
-  const end = new Date(endDate);
+    console.log(`📋 Gefundene Template-Schichten: ${templateShifts.length}`);
 
-  // Generate shifts ONLY for days that have template shifts defined
-  for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
-    // Convert JS day (0=Sunday) to our format (1=Monday, 7=Sunday)
-    const dayOfWeek = date.getDay() === 0 ? 7 : date.getDay();
+    const start = new Date(startDate);
+    const end = new Date(endDate);
 
-    // Find template shifts for this day of week
-    const shiftsForDay = templateShifts.filter(shift => shift.day_of_week === dayOfWeek);
+    // Generate shifts ONLY for days that have template shifts defined
+    for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
+      // Convert JS day (0=Sunday) to our format (1=Monday, 7=Sunday)
+      const dayOfWeek = date.getDay() === 0 ? 7 : date.getDay();
 
-    // Only create shifts if there are template shifts defined for this weekday
-    if (shiftsForDay.length > 0) {
-      for (const templateShift of shiftsForDay) {
-        const shiftId = uuidv4();
-        
-        await db.run(
-          `INSERT INTO assigned_shifts (id, shift_plan_id, date, name, start_time, end_time, required_employees, assigned_employees) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            shiftId,
-            shiftPlanId,
-            date.toISOString().split('T')[0],
-            templateShift.name,
-            templateShift.start_time,
-            templateShift.end_time,
-            templateShift.required_employees,
-            JSON.stringify([])
-          ]
-        );
+      // Find template shifts for this day of week
+      const shiftsForDay = templateShifts.filter(shift => shift.day_of_week === dayOfWeek);
+
+      // Only create shifts if there are template shifts defined for this weekday
+      if (shiftsForDay.length > 0) {
+        for (const templateShift of shiftsForDay) {
+          const shiftId = uuidv4();
+          
+          await db.run(
+            `INSERT INTO assigned_shifts (id, shift_plan_id, date, name, start_time, end_time, required_employees, assigned_employees) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              shiftId,
+              shiftPlanId,
+              date.toISOString().split('T')[0], // YYYY-MM-DD format
+              templateShift.time_slot_name || 'Schicht',
+              templateShift.start_time,
+              templateShift.end_time,
+              templateShift.required_employees,
+              JSON.stringify([])
+            ]
+          );
+        }
+        console.log(`✅ ${shiftsForDay.length} Schichten erstellt für ${date.toISOString().split('T')[0]}`);
       }
     }
+
+    console.log(`🎉 Schicht-Generierung abgeschlossen für Plan ${shiftPlanId}`);
+    
+  } catch (error) {
+    console.error('❌ Fehler beim Generieren der Schichten:', error);
+    throw error;
   }
 }

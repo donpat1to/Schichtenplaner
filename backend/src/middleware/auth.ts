@@ -14,7 +14,7 @@ export interface AuthRequest extends Request {
 
 export const authMiddleware = (req: AuthRequest, res: Response, next: NextFunction): void => {
   const authHeader = req.header('Authorization');
-  console.log('🔐 Auth middleware - Authorization header:', authHeader);
+  //console.log('🔐 Auth middleware - Authorization header:', authHeader);
   
   const token = authHeader?.replace('Bearer ', '');
 
@@ -26,7 +26,7 @@ export const authMiddleware = (req: AuthRequest, res: Response, next: NextFuncti
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
-    console.log('✅ Token valid for user:', decoded.email, 'ID:', decoded.id);
+    //console.log('✅ Token valid for user:', decoded.email, 'ID:', decoded.id);
     
     // KORREKTUR: Verwende 'id' aus dem JWT Payload
     req.user = {
