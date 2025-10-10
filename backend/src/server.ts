@@ -15,10 +15,7 @@ const app = express();
 const PORT = 3002;
 
 // CORS und Middleware
-app.use(cors({
-  origin: 'http://localhost:3000',
-  credentials: true
-}));
+app.use(cors());
 app.use(express.json());
 
 // API Routes

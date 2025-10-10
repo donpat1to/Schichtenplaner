@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
   is_sufficiently_independent BOOLEAN DEFAULT FALSE,
   is_active BOOLEAN DEFAULT TRUE,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  last_login DATETIME
+  last_login TEXT || NULL
 );
 
 -- Tabelle für Schichtvorlagen

@@ -2,7 +2,7 @@
 import { ShiftTemplate, TemplateShift } from '../types/shiftTemplate';
 import { authService } from './authService';
 
-const API_BASE = 'http://localhost:3001/api/shift-templates';
+const API_BASE = 'http://localhost:3002/api/shift-templates';
 
 export const shiftTemplateService = {
   async getTemplates(): Promise<ShiftTemplate[]> {

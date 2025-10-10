@@ -1,7 +1,7 @@
 // frontend/src/services/shiftPlanService.ts
 import { authService } from './authService';
 
-const API_BASE = 'http://localhost:3001/api/shift-plans';
+const API_BASE = 'http://localhost:3002/api/shift-plans';
 
 export interface CreateShiftPlanRequest {
   name: string;
