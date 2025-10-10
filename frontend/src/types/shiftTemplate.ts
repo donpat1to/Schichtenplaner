@@ -13,19 +13,19 @@ export interface TemplateShiftSlot {
   id: string;
   templateId?: string;
   dayOfWeek: number;
-  timeRange: TemplateShiftTimeRange;
+  timeSlot: TemplateShiftTimeSlot;
   requiredEmployees: number;
   color?: string;
 }
 
-export interface TemplateShiftTimeRange {
+export interface TemplateShiftTimeSlot {
   id: string;
   name: string;     // e.g., "Frühschicht", "Spätschicht"
   startTime: string;
   endTime: string;
 }
 
-export const DEFAULT_TIME_SLOTS: TemplateShiftTimeRange[] = [
+export const DEFAULT_TIME_SLOTS: TemplateShiftTimeSlot[] = [
   { id: 'morning', name: 'Vormittag', startTime: '08:00', endTime: '12:00' },
   { id: 'afternoon', name: 'Nachmittag', startTime: '11:30', endTime: '15:30' },
 ];

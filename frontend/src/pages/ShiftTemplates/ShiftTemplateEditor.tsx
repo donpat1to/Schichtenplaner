@@ -1,7 +1,7 @@
 // frontend/src/pages/ShiftTemplates/ShiftTemplateEditor.tsx
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { TemplateShiftSlot, TemplateShift, TemplateShiftTimeRange, DEFAULT_DAYS } from '../../types/shiftTemplate';
+import { TemplateShiftSlot, TemplateShift, TemplateShiftTimeSlot, DEFAULT_DAYS } from '../../types/shiftTemplate';
 import { shiftTemplateService } from '../../services/shiftTemplateService';
 import ShiftDayEditor from './components/ShiftDayEditor';
 import DefaultTemplateView from './components/DefaultTemplateView';
@@ -14,7 +14,7 @@ interface ExtendedTemplateShift extends Omit<TemplateShiftSlot, 'id'> {
 
 const defaultShift: ExtendedTemplateShift = {
   dayOfWeek: 1, // Montag
-  timeRange: { id: '', name: '', startTime: '', endTime: '' },
+  timeSlot: { id: '', name: '', startTime: '', endTime: '' },
   requiredEmployees: 1,
   color: '#3498db'
 };
@@ -85,7 +85,7 @@ const ShiftTemplateEditor: React.FC = () => {
       ...defaultShift,
       id: Date.now().toString(),
       dayOfWeek,
-      timeRange: { ...defaultShift.timeRange, id: Date.now().toString() },
+      timeSlot: { ...defaultShift.timeSlot, id: Date.now().toString() },
       requiredEmployees: defaultShift.requiredEmployees,
       color: defaultShift.color
     };

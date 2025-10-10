@@ -38,9 +38,9 @@ const DefaultTemplateView: React.FC<DefaultTemplateViewProps> = ({ template }) =
             <div className={styles.shiftsContainer}>
               {shiftsByDay[dayIndex]?.map(shift => (
                 <div key={shift.id} className={styles.shiftCard}>
-                  <h4>{shift.timeRange.name}</h4>
+                  <h4>{shift.timeSlot.name}</h4>
                   <p>
-                    {formatTime(shift.timeRange.startTime)} - {formatTime(shift.timeRange.endTime)}
+                    {formatTime(shift.timeSlot.startTime)} - {formatTime(shift.timeSlot.endTime)}
                   </p>
                 </div>
               ))}

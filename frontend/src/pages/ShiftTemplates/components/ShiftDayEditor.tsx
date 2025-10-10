@@ -55,8 +55,8 @@ const ShiftDayEditor: React.FC<ShiftDayEditorProps> = ({
               <div className={styles.formGroup}>
                 <input
                   type="text"
-                  value={shift.timeRange.name}
-                  onChange={(e) => onUpdateShift(shift.id, { timeRange: { ...shift.timeRange, name: e.target.value } })}
+                  value={shift.timeSlot.name}
+                  onChange={(e) => onUpdateShift(shift.id, { timeSlot: { ...shift.timeSlot, name: e.target.value } })}
                   placeholder="Schichtname"
                 />
               </div>
@@ -66,8 +66,8 @@ const ShiftDayEditor: React.FC<ShiftDayEditorProps> = ({
                   <label>Start</label>
                   <input
                     type="time"
-                    value={shift.timeRange.startTime}
-                    onChange={(e) => onUpdateShift(shift.id, { timeRange: { ...shift.timeRange, startTime: e.target.value } })}
+                    value={shift.timeSlot.startTime}
+                    onChange={(e) => onUpdateShift(shift.id, { timeSlot: { ...shift.timeSlot, startTime: e.target.value } })}
                   />
                 </div>
 
@@ -75,8 +75,8 @@ const ShiftDayEditor: React.FC<ShiftDayEditorProps> = ({
                   <label>Ende</label>
                   <input
                     type="time"
-                    value={shift.timeRange.endTime}
-                    onChange={(e) => onUpdateShift(shift.id, { timeRange: { ...shift.timeRange, endTime: e.target.value } })}
+                    value={shift.timeSlot.endTime}
+                    onChange={(e) => onUpdateShift(shift.id, { timeSlot: { ...shift.timeSlot, endTime: e.target.value } })}
                   />
                 </div>
               </div>
