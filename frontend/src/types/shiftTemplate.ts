@@ -11,7 +11,7 @@ export interface ShiftTemplate {
 
 export interface TemplateShift {
   id: string;
-  dayOfWeek: number; // 0-6 (Sonntag=0, Montag=1, ...)
+  dayOfWeek: number; // 1-5 (Montag=1, Dienstag=2, ...)
   name: string;
   startTime: string; // "08:00"
   endTime: string;   // "12:00"
@@ -25,6 +25,4 @@ export const DEFAULT_DAYS = [
   { id: 3, name: 'Donnerstag' },
   { id: 4, name: 'Mittwoch' },
   { id: 5, name: 'Freitag' },
-  { id: 6, name: 'Samstag' },
-  { id: 0, name: 'Sonntag' }
 ];

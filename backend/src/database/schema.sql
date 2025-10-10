@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS assigned_shifts (
 CREATE TABLE IF NOT EXISTS employee_availabilities (
   id TEXT PRIMARY KEY,
   employee_id TEXT NOT NULL,
-  day_of_week INTEGER NOT NULL CHECK (day_of_week >= 0 AND day_of_week <= 4),
+  day_of_week INTEGER NOT NULL CHECK (day_of_week >= 1 AND day_of_week <= 5),
   start_time TEXT NOT NULL,
   end_time TEXT NOT NULL,
   is_available BOOLEAN DEFAULT FALSE,
