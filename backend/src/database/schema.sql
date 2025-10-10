@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
   is_sufficiently_independent BOOLEAN DEFAULT FALSE,
   is_active BOOLEAN DEFAULT TRUE,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  last_login TEXT || NULL
+  last_login TEXT DEFAULT NULL
 );
 
 -- Tabelle für Schichtvorlagen
@@ -27,12 +27,12 @@ CREATE TABLE IF NOT EXISTS shift_templates (
 CREATE TABLE IF NOT EXISTS template_shifts (
   id TEXT PRIMARY KEY,
   template_id TEXT NOT NULL,
-  time_range_id TEXT NOT NULL,
+  time_slot_id TEXT NOT NULL,
   day_of_week INTEGER NOT NULL CHECK (day_of_week >= 1 AND day_of_week <= 7),
   required_employees INTEGER DEFAULT 1,
   color TEXT DEFAULT '#3498db',
   FOREIGN KEY (template_id) REFERENCES shift_templates(id) ON DELETE CASCADE,
-  FOREIGN KEY (time_range_id) REFERENCES template_time_slots(id) ON DELETE CASCADE
+  FOREIGN KEY (time_slot_id) REFERENCES template_time_slots(id) ON DELETE CASCADE
 );
 
 -- Tabelle für Zeitbereiche in den Vorlagen

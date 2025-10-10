@@ -10,6 +10,8 @@ import { AuthRequest } from '../middleware/auth.js';
 
 export const getTemplates = async (req: Request, res: Response): Promise<void> => {
   try {
+    console.log('🔍 Lade Vorlagen...');
+
     const templates = await db.all<any>(`
       SELECT st.*, u.name as created_by_name 
       FROM shift_templates st
@@ -17,12 +19,14 @@ export const getTemplates = async (req: Request, res: Response): Promise<void> =
       ORDER BY st.created_at DESC
     `);
 
+    console.log(`✅ ${templates.length} Vorlagen gefunden:`, templates.map(t => t.name));
+
     // Für jede Vorlage die Schichten und Zeit-Slots laden
     const templatesWithShifts = await Promise.all(
       templates.map(async (template) => {
         // Lade Schicht-Slots
         const shiftSlots = await db.all<any>(`
-          SELECT ts.*, tts.name as time_range_name, tts.start_time as time_range_start, tts.end_time as time_range_end
+          SELECT ts.*, tts.name as time_slot_name, tts.start_time as time_slot_start, tts.end_time as time_slot_end
           FROM template_shifts ts
           LEFT JOIN template_time_slots tts ON ts.time_slot_id = tts.id
           WHERE ts.template_id = ? 
@@ -34,18 +38,18 @@ export const getTemplates = async (req: Request, res: Response): Promise<void> =
           SELECT * FROM template_time_slots 
           WHERE template_id = ? 
           ORDER BY start_time
-        `, [template.id]);
+        `, [template.id]);  
 
         return {
           ...template,
           shifts: shiftSlots.map(slot => ({
             id: slot.id,
             dayOfWeek: slot.day_of_week,
-            timeRange: {
+            timeSlot: {
               id: slot.time_slot_id,
-              name: slot.time_range_name,
-              startTime: slot.time_range_start,
-              endTime: slot.time_range_end
+              name: slot.time_slot_name,
+              startTime: slot.time_slot_start,
+              endTime: slot.time_slot_end
             },
             requiredEmployees: slot.required_employees,
             color: slot.color
@@ -86,7 +90,7 @@ export const getTemplate = async (req: Request, res: Response): Promise<void> =>
 
     // Lade Schicht-Slots
     const shiftSlots = await db.all<any>(`
-      SELECT ts.*, tts.name as time_range_name, tts.start_time as time_range_start, tts.end_time as time_range_end
+      SELECT ts.*, tts.name as time_slot_name, tts.start_time as time_slot_start, tts.end_time as time_slot_end
       FROM template_shifts ts
       LEFT JOIN template_time_slots tts ON ts.time_slot_id = tts.id
       WHERE ts.template_id = ? 
@@ -105,11 +109,11 @@ export const getTemplate = async (req: Request, res: Response): Promise<void> =>
       shifts: shiftSlots.map(slot => ({
         id: slot.id,
         dayOfWeek: slot.day_of_week,
-        timeRange: {
+        timeSlot: {
           id: slot.time_slot_id,
-          name: slot.time_range_name,
-          startTime: slot.time_range_start,
-          endTime: slot.time_range_end
+          name: slot.time_slot_name,
+          startTime: slot.time_slot_start,
+          endTime: slot.time_slot_end
         },
         requiredEmployees: slot.required_employees,
         color: slot.color
@@ -240,7 +244,7 @@ export const createTemplate = async (req: Request, res: Response): Promise<void>
         await db.run(
           `INSERT INTO template_shifts (id, template_id, day_of_week, time_slot_id, required_employees, color) 
            VALUES (?, ?, ?, ?, ?, ?)`,
-          [shiftId, templateId, shift.dayOfWeek, shift.timeRange.id, shift.requiredEmployees, shift.color || '#3498db']
+          [shiftId, templateId, shift.dayOfWeek, shift.timeSlot.id, shift.requiredEmployees, shift.color || '#3498db']
         );
       }
 
@@ -329,7 +333,7 @@ export const updateTemplate = async (req: Request, res: Response): Promise<void>
           await db.run(
             `INSERT INTO template_shifts (id, template_id, day_of_week, time_slot_id, required_employees, color) 
              VALUES (?, ?, ?, ?, ?, ?)`,
-            [shiftId, id, shift.dayOfWeek, shift.timeRange.id, shift.requiredEmployees, shift.color || '#3498db']
+            [shiftId, id, shift.dayOfWeek, shift.timeSlot.id, shift.requiredEmployees, shift.color || '#3498db']
           );
         }
       }
@@ -395,7 +399,7 @@ async function getTemplateById(templateId: string): Promise<any> {
 
   // Lade Schicht-Slots
   const shiftSlots = await db.all<any>(`
-    SELECT ts.*, tts.name as time_range_name, tts.start_time as time_range_start, tts.end_time as time_range_end
+    SELECT ts.*, tts.name as time_slot_name, tts.start_time as time_slot_start, tts.end_time as time_slot_end
     FROM template_shifts ts
     LEFT JOIN template_time_slots tts ON ts.time_slot_id = tts.id
     WHERE ts.template_id = ? 
@@ -414,11 +418,11 @@ async function getTemplateById(templateId: string): Promise<any> {
     shifts: shiftSlots.map(slot => ({
       id: slot.id,
       dayOfWeek: slot.day_of_week,
-      timeRange: {
+      timeSlot: {
         id: slot.time_slot_id,
-        name: slot.time_range_name,
-        startTime: slot.time_range_start,
-        endTime: slot.time_range_end
+        name: slot.time_slot_name,
+        startTime: slot.time_slot_start,
+        endTime: slot.time_slot_end
       },
       requiredEmployees: slot.required_employees,
       color: slot.color

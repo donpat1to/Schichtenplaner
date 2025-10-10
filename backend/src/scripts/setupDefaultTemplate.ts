@@ -1,6 +1,7 @@
 // backend/src/scripts/setupDefaultTemplate.ts
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../services/databaseService.js';
+import { DEFAULT_TIME_SLOTS } from '../models/ShiftTemplate.js';
 
 interface AdminUser {
   id: string;
@@ -34,9 +35,13 @@ export async function setupDefaultTemplate(): Promise<void> {
     }
 
     const templateId = uuidv4();
+    console.log('🔄 Erstelle Standard-Vorlage mit ID:', templateId);
 
     // Transaktion starten
     await db.run('BEGIN TRANSACTION');
+
+    const timeSlots = DEFAULT_TIME_SLOTS;
+
 
     try {
       // Standard-Vorlage erstellen
@@ -54,36 +59,51 @@ export async function setupDefaultTemplate(): Promise<void> {
 
       console.log('Standard-Vorlage erstellt:', templateId);
 
-      // Vormittagsschicht Mo-Do
-      for (let day = 1; day <= 5; day++) {
+      for (const slot of timeSlots) {
         await db.run(
-          `INSERT INTO template_shifts (id, template_id, day_of_week, name, start_time, end_time, required_employees) 
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [uuidv4(), templateId, day, 'Vormittagsschicht', '08:00', '12:00', 1]
+          `INSERT INTO template_time_slots (id, template_id, name, start_time, end_time) 
+           VALUES (?, ?, ?, ?, ?)`,
+          [slot.id, templateId, slot.name, slot.startTime, slot.endTime]
         );
       }
 
-      console.log('Vormittagsschichten Mo-Fr erstellt');
+      console.log('✅ Zeit-Slots erstellt');
 
-      // Nachmittagsschicht Mo-Do
+      // Schichten für Mo-Do
       for (let day = 1; day <= 4; day++) {
+        // Vormittagsschicht
         await db.run(
-          `INSERT INTO template_shifts (id, template_id, day_of_week, name, start_time, end_time, required_employees) 
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [uuidv4(), templateId, day, 'Nachmittagsschicht', '11:30', '15:30', 1]
+          `INSERT INTO template_shifts (id, template_id, day_of_week, time_slot_id, required_employees, color) 
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [uuidv4(), templateId, day, timeSlots[0].id, 1, '#3498db']
+        );
+
+        // Nachmittagsschicht
+        await db.run(
+          `INSERT INTO template_shifts (id, template_id, day_of_week, time_slot_id, required_employees, color) 
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [uuidv4(), templateId, day, timeSlots[1].id, 1, '#e74c3c']
         );
       }
 
-      console.log('Nachmittagsschichten Mo-Do erstellt');
+      // Freitag nur Vormittagsschicht
+      await db.run(
+        `INSERT INTO template_shifts (id, template_id, day_of_week, time_slot_id, required_employees, color) 
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [uuidv4(), templateId, 5, timeSlots[0].id, 1, '#3498db']
+      );
+
+      console.log('✅ Schichten erstellt');
 
       await db.run('COMMIT');
-      console.log('Standard-Vorlage erfolgreich initialisiert');
+      console.log('🎉 Standard-Vorlage erfolgreich initialisiert');
+
     } catch (error) {
       await db.run('ROLLBACK');
+      console.error('❌ Fehler beim Erstellen der Vorlage:', error);
       throw error;
     }
   } catch (error) {
-    console.error('Fehler beim Erstellen der Standard-Vorlage:', error);
-    throw error;
+    console.error('❌ Fehler in setupDefaultTemplate:', error);
   }
 }
