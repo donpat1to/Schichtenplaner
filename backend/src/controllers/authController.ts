@@ -198,7 +198,7 @@ export const register = async (req: Request, res: Response) => {
 
     // Get created user
     const newUser = await db.get<User>(
-      'SELECT id, email, name, role, phone, department FROM users WHERE id = ?',
+      'SELECT id, email, name, role FROM users WHERE id = ?',
       [result.lastID]
     );
 
