@@ -1,4 +1,4 @@
-// frontend/src/pages/Employees/EmployeeManagement.tsx - MIT NOTIFICATION SYSTEM
+// frontend/src/pages/Employees/EmployeeManagement.tsx - VOLLSTÄNDIG
 import React, { useState, useEffect } from 'react';
 import { Employee } from '../../types/employee';
 import { employeeService } from '../../services/employeeService';
@@ -15,8 +15,8 @@ const EmployeeManagement: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
-  const { hasRole } = useAuth();
-  const { showNotification, confirmDialog } = useNotification();
+  const { hasRole, user: currentUser } = useAuth();
+  const { showNotification } = useNotification();
 
   useEffect(() => {
     loadEmployees();
@@ -25,15 +25,10 @@ const EmployeeManagement: React.FC = () => {
   const loadEmployees = async () => {
     try {
       setLoading(true);
-      console.log('🔄 Loading employees...');
-      
-      // Add cache-busting parameter to prevent browser caching
       const data = await employeeService.getEmployees();
-      console.log('✅ Employees loaded:', data);
-      
       setEmployees(data);
     } catch (err: any) {
-      console.error('❌ Error loading employees:', err);
+      console.error('Error loading employees:', err);
       showNotification({
         type: 'error',
         title: 'Fehler',
@@ -84,73 +79,58 @@ const EmployeeManagement: React.FC = () => {
     });
   };
 
-  // Verbesserte Lösch-Funktion mit Bestätigungs-Dialog
   const handleDeleteEmployee = async (employee: Employee) => {
-    try {
-      // Bestätigungs-Dialog basierend auf Rolle
-      let confirmMessage = `Möchten Sie den Mitarbeiter "${employee.name}" wirklich PERMANENT LÖSCHEN?\n\nDie Daten des Mitarbeiters werden unwiderruflich gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.`;
-      let confirmTitle = 'Mitarbeiter löschen';
+    // Warnung basierend auf Rolle
+    let confirmMessage = `Möchten Sie den Mitarbeiter "${employee.name}" wirklich löschen?\n\nDiese Aktion kann nicht rückgängig gemacht werden.`;
+    
+    if (employee.role === 'admin') {
+      const adminCount = employees.filter(emp => 
+        emp.role === 'admin' && emp.isActive
+      ).length;
       
-      if (employee.role === 'admin') {
-        const adminCount = employees.filter(emp => 
-          emp.role === 'admin' && emp.isActive
-        ).length;
-        
-        if (adminCount <= 1) {
-          showNotification({
-            type: 'error',
-            title: 'Aktion nicht möglich',
-            message: 'Mindestens ein Administrator muss im System verbleiben'
-          });
-          return;
-        }
-        
-        confirmTitle = 'Administrator löschen';
-        confirmMessage = `Möchten Sie den Administrator "${employee.name}" wirklich PERMANENT LÖSCHEN?\n\nAchtung: Diese Aktion ist permanent und kann nicht rückgängig gemacht werden.`;
-      }
-
-      const confirmed = await confirmDialog({
-        title: confirmTitle,
-        message: confirmMessage,
-        confirmText: 'Permanent löschen',
-        cancelText: 'Abbrechen',
-        type: 'warning'
-      });
-
-      if (!confirmed) return;
-
-      console.log('Starting deletion process for employee:', employee.name);
-      await employeeService.deleteEmployee(employee.id);
-      console.log('Employee deleted, reloading list');
-      
-      // Force a fresh reload of employees
-      const updatedEmployees = await employeeService.getEmployees();
-      setEmployees(updatedEmployees);
-      
-      showNotification({
-        type: 'success',
-        title: 'Erfolg',
-        message: `Mitarbeiter "${employee.name}" wurde erfolgreich gelöscht`
-      });
-
-    } catch (err: any) {
-      if (err.message.includes('Mindestens ein Administrator')) {
+      if (adminCount <= 1) {
         showNotification({
           type: 'error',
           title: 'Aktion nicht möglich',
-          message: err.message
+          message: 'Es muss mindestens ein aktiver Administrator im System verbleiben.'
         });
-      } else {
-        showNotification({
-          type: 'error',
-          title: 'Fehler',
-          message: 'Mitarbeiter konnte nicht gelöscht werden'
-        });
+        return;
       }
+      confirmMessage += '\n\n⚠️ Achtung: Dieser Benutzer ist ein Administrator!';
+    }
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      await employeeService.deleteEmployee(employee.id);
+      await loadEmployees();
+      showNotification({
+        type: 'success',
+        title: 'Erfolg',
+        message: `Mitarbeiter "${employee.name}" wurde gelöscht`
+      });
+    } catch (err: any) {
+      console.error('Error deleting employee:', err);
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: 'Mitarbeiter konnte nicht gelöscht werden: ' + err.message
+      });
     }
   };
 
-  if (loading && viewMode === 'list') {
+  const handleAvailabilitySaved = () => {
+    showNotification({
+      type: 'success',
+      title: 'Erfolg',
+      message: 'Verfügbarkeiten wurden gespeichert'
+    });
+    setViewMode('list');
+  };
+
+  if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '40px' }}>
         <div>⏳ Lade Mitarbeiter...</div>
@@ -159,69 +139,42 @@ const EmployeeManagement: React.FC = () => {
   }
 
   return (
-    <div>
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
-        marginBottom: '30px',
-        flexWrap: 'wrap',
-        gap: '15px'
-      }}>
-        <div>
-          <h1 style={{ margin: 0, color: '#2c3e50' }}>👥 Mitarbeiter Verwaltung</h1>
-          <p style={{ margin: '5px 0 0 0', color: '#7f8c8d' }}>
-            {employees.length} Mitarbeiter gefunden
-          </p>
-        </div>
-
-        {viewMode === 'list' && hasRole(['admin']) && (
-          <button
-            onClick={handleCreateEmployee}
-            style={{
-              padding: '12px 24px',
-              backgroundColor: '#27ae60',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}
-          >
-            <span>+</span>
-            Neuer Mitarbeiter
-          </button>
-        )}
-
-        {viewMode !== 'list' && (
-          <button
-            onClick={handleBackToList}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: '#95a5a6',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer'
-            }}
-          >
-            ← Zurück zur Liste
-          </button>
-        )}
-      </div>
-
-      {/* Inhalt basierend auf View Mode */}
+    <div style={{ padding: '20px' }}>
       {viewMode === 'list' && (
-        <EmployeeList
-          employees={employees}
-          onEdit={handleEditEmployee}
-          onDelete={handleDeleteEmployee} // Jetzt mit Employee-Objekt
-          onManageAvailability={handleManageAvailability}
-          currentUserRole={hasRole(['admin']) ? 'admin' : 'instandhalter'}
-        />
+        <>
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            marginBottom: '30px'
+          }}>
+            <h1>👥 Mitarbeiterverwaltung</h1>
+            {hasRole(['admin', 'instandhalter']) && (
+              <button
+                onClick={handleCreateEmployee}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#27ae60',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                + Neuer Mitarbeiter
+              </button>
+            )}
+          </div>
+
+          <EmployeeList
+            employees={employees}
+            onEdit={handleEditEmployee}
+            onDelete={handleDeleteEmployee}
+            onManageAvailability={handleManageAvailability}
+            currentUserRole={hasRole(['admin']) ? 'admin' : 'instandhalter'}
+          />
+        </>
       )}
 
       {viewMode === 'create' && (
@@ -244,7 +197,7 @@ const EmployeeManagement: React.FC = () => {
       {viewMode === 'availability' && selectedEmployee && (
         <AvailabilityManager
           employee={selectedEmployee}
-          onSave={handleEmployeeUpdated}
+          onSave={handleAvailabilitySaved}
           onCancel={handleBackToList}
         />
       )}

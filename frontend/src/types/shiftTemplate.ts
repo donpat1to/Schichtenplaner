@@ -11,6 +11,7 @@ export interface TemplateShift {
 
 export interface TemplateShiftSlot {
   id: string;
+  templateId?: string;
   dayOfWeek: number;
   timeRange: TemplateShiftTimeRange;
   requiredEmployees: number;
