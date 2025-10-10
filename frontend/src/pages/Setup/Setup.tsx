@@ -1,6 +1,5 @@
-// frontend/src/pages/Setup/Setup.tsx
+// frontend/src/pages/Setup/Setup.tsx - KORRIGIERT
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 const Setup: React.FC = () => {
@@ -8,14 +7,11 @@ const Setup: React.FC = () => {
   const [formData, setFormData] = useState({
     password: '',
     confirmPassword: '',
-    name: '',
-    phone: '',
-    department: ''
+    name: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const navigate = useNavigate();
-  const { login, checkSetupStatus } = useAuth();
+  const { checkSetupStatus } = useAuth();
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -66,12 +62,10 @@ const Setup: React.FC = () => {
 
       const payload = {
         password: formData.password,
-        name: formData.name,
-        ...(formData.phone ? { phone: formData.phone } : {}),
-        ...(formData.department ? { department: formData.department } : {})
+        name: formData.name
       };
 
-      console.log('🚀 Sending setup request with payload:', payload);
+      console.log('🚀 Sending setup request...');
 
       const response = await fetch('http://localhost:3002/api/setup/admin', {
         method: 'POST',
@@ -81,66 +75,110 @@ const Setup: React.FC = () => {
         body: JSON.stringify(payload),
       });
 
-      const responseText = await response.text();
-      console.log('📨 Setup response:', responseText);
-
-      let result;
-      try {
-        result = JSON.parse(responseText);
-      } catch (parseError) {
-        console.error('❌ Failed to parse response as JSON:', responseText);
-        throw new Error('Invalid server response');
-      }
-
       if (!response.ok) {
-        throw new Error(result.error || 'Setup fehlgeschlagen');
+        const data = await response.json();
+        throw new Error(data.error || 'Setup fehlgeschlagen');
       }
 
+      const result = await response.json();
       console.log('✅ Setup successful:', result);
 
-      // WICHTIG: Setup Status neu prüfen und dann zu Login navigieren
+      // Setup Status neu prüfen
       await checkSetupStatus();
-      
-      // Kurze Verzögerung damit der State aktualisiert werden kann
-      setTimeout(() => {
-        navigate('/login');
-      }, 100);
       
     } catch (err: any) {
       console.error('❌ Setup error:', err);
-      setError(typeof err === 'string' ? err : err.message || 'Ein unerwarteter Fehler ist aufgetreten');
+      setError(err.message || 'Ein unerwarteter Fehler ist aufgetreten');
     } finally {
       setLoading(false);
     }
   };
+
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-      <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold mb-2">Erstkonfiguration</h1>
-          <p className="text-gray-600">
-            Konfigurieren Sie den Administrator-Account
+    <div style={{ 
+      minHeight: '100vh', 
+      backgroundColor: '#f8f9fa',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '2rem'
+    }}>
+      <div style={{
+        backgroundColor: 'white',
+        padding: '3rem',
+        borderRadius: '12px',
+        boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
+        width: '100%',
+        maxWidth: '500px',
+        border: '1px solid #e9ecef'
+      }}>
+        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+          <h1 style={{ 
+            fontSize: '2rem', 
+            fontWeight: 'bold', 
+            marginBottom: '0.5rem',
+            color: '#2c3e50'
+          }}>
+            🚀 Erstkonfiguration
+          </h1>
+          <p style={{ 
+            color: '#6c757d',
+            fontSize: '1.1rem'
+          }}>
+            Richten Sie Ihren Administrator-Account ein
           </p>
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+          <div style={{
+            backgroundColor: '#f8d7da',
+            border: '1px solid #f5c6cb',
+            color: '#721c24',
+            padding: '1rem',
+            borderRadius: '6px',
+            marginBottom: '1.5rem'
+          }}>
             {error}
           </div>
         )}
 
         {step === 1 && (
-          <div className="space-y-4">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Admin E-Mail
+              <label style={{ 
+                display: 'block', 
+                marginBottom: '0.5rem', 
+                fontWeight: '600',
+                color: '#495057'
+              }}>
+                Administrator E-Mail
               </label>
-              <div className="p-2 bg-gray-100 border rounded">
+              <div style={{ 
+                padding: '0.75rem', 
+                backgroundColor: '#e9ecef', 
+                border: '1px solid #ced4da',
+                borderRadius: '6px',
+                color: '#495057',
+                fontWeight: '500'
+              }}>
                 admin@instandhaltung.de
               </div>
+              <div style={{ 
+                fontSize: '0.875rem', 
+                color: '#6c757d',
+                marginTop: '0.25rem'
+              }}>
+                Diese E-Mail wird für den Administrator-Account verwendet
+              </div>
             </div>
+            
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label style={{ 
+                display: 'block', 
+                marginBottom: '0.5rem', 
+                fontWeight: '600',
+                color: '#495057'
+              }}>
                 Passwort
               </label>
               <input
@@ -148,13 +186,26 @@ const Setup: React.FC = () => {
                 name="password"
                 value={formData.password}
                 onChange={handleInputChange}
-                className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid #ced4da',
+                  borderRadius: '6px',
+                  fontSize: '1rem',
+                  transition: 'border-color 0.3s ease'
+                }}
                 placeholder="Mindestens 6 Zeichen"
                 required
               />
             </div>
+            
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label style={{ 
+                display: 'block', 
+                marginBottom: '0.5rem', 
+                fontWeight: '600',
+                color: '#495057'
+              }}>
                 Passwort bestätigen
               </label>
               <input
@@ -162,7 +213,14 @@ const Setup: React.FC = () => {
                 name="confirmPassword"
                 value={formData.confirmPassword}
                 onChange={handleInputChange}
-                className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid #ced4da',
+                  borderRadius: '6px',
+                  fontSize: '1rem',
+                  transition: 'border-color 0.3s ease'
+                }}
                 placeholder="Passwort wiederholen"
                 required
               />
@@ -171,76 +229,95 @@ const Setup: React.FC = () => {
         )}
 
         {step === 2 && (
-          <div className="space-y-4">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Name
+              <label style={{ 
+                display: 'block', 
+                marginBottom: '0.5rem', 
+                fontWeight: '600',
+                color: '#495057'
+              }}>
+                Vollständiger Name
               </label>
               <input
                 type="text"
                 name="name"
                 value={formData.name}
                 onChange={handleInputChange}
-                className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Vollständiger Name"
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid #ced4da',
+                  borderRadius: '6px',
+                  fontSize: '1rem'
+                }}
+                placeholder="Max Mustermann"
                 required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Telefon (optional)
-              </label>
-              <input
-                type="tel"
-                name="phone"
-                value={formData.phone}
-                onChange={handleInputChange}
-                className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="+49 123 456789"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Abteilung (optional)
-              </label>
-              <input
-                type="text"
-                name="department"
-                value={formData.department}
-                onChange={handleInputChange}
-                className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="z.B. IT"
               />
             </div>
           </div>
         )}
 
-        <div className="mt-6 flex justify-between">
+        <div style={{ 
+          marginTop: '2rem', 
+          display: 'flex', 
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
           {step === 2 && (
             <button
               onClick={handleBack}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              style={{
+                padding: '0.75rem 1.5rem',
+                color: '#6c757d',
+                border: '1px solid #6c757d',
+                background: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontWeight: '500'
+              }}
               disabled={loading}
             >
-              Zurück
+              ← Zurück
             </button>
           )}
+          
           <button
             onClick={handleNext}
             disabled={loading}
-            className={`px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 ${
-              step === 1 ? 'ml-auto' : ''
-            }`}
+            style={{
+              padding: '0.75rem 2rem',
+              backgroundColor: loading ? '#6c757d' : '#007bff',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              fontWeight: '600',
+              fontSize: '1rem',
+              marginLeft: step === 1 ? 'auto' : '0',
+              transition: 'background-color 0.3s ease'
+            }}
           >
-            {loading ? (
-              '⏳ Verarbeite...'
-            ) : step === 1 ? (
-              'Weiter'
-            ) : (
-              'Setup abschließen'
-            )}
+            {loading ? '⏳ Wird verarbeitet...' : 
+             step === 1 ? 'Weiter →' : 'Setup abschließen'}
           </button>
         </div>
+
+        {step === 2 && (
+          <div style={{ 
+            marginTop: '1.5rem', 
+            textAlign: 'center', 
+            color: '#6c757d', 
+            fontSize: '0.9rem',
+            padding: '1rem',
+            backgroundColor: '#e7f3ff',
+            borderRadius: '6px',
+            border: '1px solid #b6d7e8'
+          }}>
+            💡 Nach dem erfolgreichen Setup werden Sie zur Anmeldeseite weitergeleitet, 
+            wo Sie sich mit Ihren Zugangsdaten anmelden können.
+          </div>
+        )}
       </div>
     </div>
   );

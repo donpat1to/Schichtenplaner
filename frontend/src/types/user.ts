@@ -4,9 +4,12 @@ export interface User {
   email: string;
   name: string;
   role: 'admin' | 'instandhalter' | 'user';
-  phone?: string;
-  department?: string;
-  lastLogin?: string;
+  employeeType: 'chef' | 'neuling' | 'erfahren';
+  isSufficientlyIndependent: boolean;
+  isActive: boolean;
+  createdAt: string;
+  lastLogin?: string | null;
+  notes?: string;
 }
 
 export interface LoginRequest {

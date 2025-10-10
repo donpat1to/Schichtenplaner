@@ -6,11 +6,10 @@ import { useAuth } from '../../../contexts/AuthContext';
 interface EmployeeListProps {
   employees: Employee[];
   onEdit: (employee: Employee) => void;
-  onDelete: (employee: Employee) => void; // Jetzt mit Employee-Objekt
+  onDelete: (employee: Employee) => void;
   onManageAvailability: (employee: Employee) => void;
   currentUserRole: 'admin' | 'instandhalter';
 }
-
 
 const EmployeeList: React.FC<EmployeeListProps> = ({
   employees,
@@ -34,7 +33,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
       return (
         employee.name.toLowerCase().includes(term) ||
         employee.email.toLowerCase().includes(term) ||
-        employee.department?.toLowerCase().includes(term) ||
+        employee.employeeType.toLowerCase().includes(term) ||
         employee.role.toLowerCase().includes(term)
       );
     }
@@ -51,13 +50,28 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
     }
   };
 
+  const getEmployeeTypeBadge = (type: string) => {
+    switch (type) {
+      case 'chef': return { text: '👨‍💼 CHEF', color: '#e74c3c', bgColor: '#fadbd8' };
+      case 'erfahren': return { text: '👴 ERFAHREN', color: '#3498db', bgColor: '#d6eaf8' };
+      case 'neuling': return { text: '👶 NEULING', color: '#27ae60', bgColor: '#d5f4e6' };
+      default: return { text: 'UNBEKANNT', color: '#95a5a6', bgColor: '#ecf0f1' };
+    }
+  };
+
+  const getIndependenceBadge = (isIndependent: boolean) => {
+    return isIndependent 
+      ? { text: '✅ Eigenständig', color: '#27ae60', bgColor: '#d5f4e6' }
+      : { text: '❌ Betreuung', color: '#e74c3c', bgColor: '#fadbd8' };
+  };
+
   const getStatusBadge = (isActive: boolean) => {
     return isActive 
       ? { text: 'Aktiv', color: '#27ae60', bgColor: '#d5f4e6' }
       : { text: 'Inaktiv', color: '#e74c3c', bgColor: '#fadbd8' };
   };
 
-  // NEU: Kann Benutzer löschen?
+  // Kann Benutzer löschen?
   const canDeleteEmployee = (employee: Employee): boolean => {
     // Nur Admins können löschen
     if (currentUserRole !== 'admin') return false;
@@ -71,7 +85,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
     return true;
   };
 
-  // NEU: Kann Benutzer bearbeiten?
+  // Kann Benutzer bearbeiten?
   const canEditEmployee = (employee: Employee): boolean => {
     // Admins können alle bearbeiten
     if (currentUserRole === 'admin') return true;
@@ -134,7 +148,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
           <label style={{ fontWeight: 'bold', color: '#2c3e50' }}>Suchen:</label>
           <input
             type="text"
-            placeholder="Nach Name, E-Mail oder Abteilung suchen..."
+            placeholder="Nach Name, E-Mail oder Typ suchen..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{
@@ -152,7 +166,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
         </div>
       </div>
 
-      {/* Mitarbeiter Tabelle - SYMMETRISCH KORRIGIERT */}
+      {/* Mitarbeiter Tabelle */}
       <div style={{
         backgroundColor: 'white',
         borderRadius: '8px',
@@ -160,10 +174,10 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
         overflow: 'hidden',
         boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
       }}>
-        {/* Tabellen-Header - SYMMETRISCH */}
+        {/* Tabellen-Header */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: '2fr 1.5fr 1fr 1fr 1fr 120px', // Feste Breite für Aktionen
+          gridTemplateColumns: '2fr 1.5fr 1fr 1fr 1fr 1fr 120px',
           gap: '15px',
           padding: '15px 20px',
           backgroundColor: '#f8f9fa',
@@ -173,7 +187,8 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
           alignItems: 'center'
         }}>
           <div>Name & E-Mail</div>
-          <div>Abteilung</div>
+          <div>Typ</div>
+          <div style={{ textAlign: 'center' }}>Eigenständigkeit</div>
           <div style={{ textAlign: 'center' }}>Rolle</div>
           <div style={{ textAlign: 'center' }}>Status</div>
           <div style={{ textAlign: 'center' }}>Letzter Login</div>
@@ -181,7 +196,10 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
         </div>
 
         {filteredEmployees.map(employee => {
-          const status = getStatusBadge(employee.isActive ?? true);
+          const employeeType = getEmployeeTypeBadge(employee.employeeType);
+          const independence = getIndependenceBadge(employee.isSufficientlyIndependent);
+          const roleColor = getRoleBadgeColor(employee.role);
+          const status = getStatusBadge(employee.isActive);
           const canEdit = canEditEmployee(employee);
           const canDelete = canDeleteEmployee(employee);
           
@@ -190,7 +208,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
               key={employee.id}
               style={{
                 display: 'grid',
-                gridTemplateColumns: '2fr 1.5fr 1fr 1fr 1fr 120px', // Gleiche Spalten wie Header
+                gridTemplateColumns: '2fr 1.5fr 1fr 1fr 1fr 1fr 120px',
                 gap: '15px',
                 padding: '15px 20px',
                 borderBottom: '1px solid #f0f0f0',
@@ -217,18 +235,45 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
                 </div>
               </div>
 
-              {/* Abteilung */}
-              <div style={{ color: '#666' }}>
-                {employee.department || (
-                  <span style={{ color: '#999', fontStyle: 'italic' }}>Nicht zugewiesen</span>
-                )}
-              </div>
-
-              {/* Rolle - ZENTRIERT */}
+              {/* Mitarbeiter Typ */}
               <div style={{ textAlign: 'center' }}>
                 <span
                   style={{
-                    backgroundColor: getRoleBadgeColor(employee.role),
+                    backgroundColor: employeeType.bgColor,
+                    color: employeeType.color,
+                    padding: '6px 12px',
+                    borderRadius: '15px',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    display: 'inline-block'
+                  }}
+                >
+                  {employeeType.text}
+                </span>
+              </div>
+
+              {/* Eigenständigkeit */}
+              <div style={{ textAlign: 'center' }}>
+                <span
+                  style={{
+                    backgroundColor: independence.bgColor,
+                    color: independence.color,
+                    padding: '6px 12px',
+                    borderRadius: '15px',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    display: 'inline-block'
+                  }}
+                >
+                  {independence.text}
+                </span>
+              </div>
+
+              {/* Rolle */}
+              <div style={{ textAlign: 'center' }}>
+                <span
+                  style={{
+                    backgroundColor: roleColor,
                     color: 'white',
                     padding: '6px 12px',
                     borderRadius: '15px',
@@ -243,7 +288,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
                 </span>
               </div>
 
-              {/* Status - ZENTRIERT */}
+              {/* Status */}
               <div style={{ textAlign: 'center' }}>
                 <span
                   style={{
@@ -261,7 +306,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
                 </span>
               </div>
 
-              {/* Letzter Login - ZENTRIERT */}
+              {/* Letzter Login */}
               <div style={{ textAlign: 'center', fontSize: '14px', color: '#666' }}>
                 {employee.lastLogin 
                   ? new Date(employee.lastLogin).toLocaleDateString('de-DE')
@@ -269,14 +314,14 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
                 }
               </div>
 
-              {/* Aktionen - ZENTRIERT und SYMMETRISCH */}
+              {/* Aktionen */}
               <div style={{ 
                 display: 'flex', 
                 gap: '8px', 
                 justifyContent: 'center',
                 flexWrap: 'wrap'
               }}>
-                {/* Verfügbarkeit Button - immer sichtbar für berechtigte */}
+                {/* Verfügbarkeit Button */}
                 {(currentUserRole === 'admin' || currentUserRole === 'instandhalter') && (
                   <button
                     onClick={() => onManageAvailability(employee)}
@@ -318,7 +363,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
                   </button>
                 )}
 
-                {/* Löschen Button - NUR FÜR ADMINS */}
+                {/* Löschen Button */}
                 {canDelete && (
                   <button
                     onClick={() => onDelete(employee)}
@@ -333,13 +378,13 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
                       minWidth: '32px',
                       height: '32px'
                     }}
-                    title="Mitarbeiter deaktivieren"
+                    title="Mitarbeiter löschen"
                   >
                     🗑️
                   </button>
                 )}
 
-                {/* Platzhalter für Symmetrie wenn keine Aktionen */}
+                {/* Platzhalter für Symmetrie */}
                 {!canEdit && !canDelete && (currentUserRole !== 'admin' && currentUserRole !== 'instandhalter') && (
                   <div style={{ width: '32px', height: '32px' }}></div>
                 )}
@@ -349,7 +394,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
         })}
       </div>
 
-      {/* NEU: Info-Box über Berechtigungen */}
+      {/* Info-Box über Berechtigungen */}
       <div style={{
         marginTop: '20px',
         padding: '15px',
@@ -366,6 +411,53 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
           <li>Mindestens <strong>ein Admin</strong> muss immer im System vorhanden sein</li>
           <li>Benutzer können sich <strong>nicht selbst löschen</strong></li>
         </ul>
+      </div>
+
+      {/* Legende für Mitarbeiter Typen */}
+      <div style={{
+        marginTop: '20px',
+        padding: '15px',
+        backgroundColor: '#f8f9fa',
+        border: '1px solid #e9ecef',
+        borderRadius: '6px',
+        fontSize: '14px'
+      }}>
+        <strong>🎯 Legende Mitarbeiter Typen:</strong>
+        <div style={{ display: 'flex', gap: '15px', marginTop: '10px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <span style={{
+              backgroundColor: '#fadbd8',
+              color: '#e74c3c',
+              padding: '4px 8px',
+              borderRadius: '12px',
+              fontSize: '11px',
+              fontWeight: 'bold'
+            }}>👨‍💼 CHEF</span>
+            <span style={{ fontSize: '12px', color: '#666' }}>Vollzugriff</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <span style={{
+              backgroundColor: '#d6eaf8',
+              color: '#3498db',
+              padding: '4px 8px',
+              borderRadius: '12px',
+              fontSize: '11px',
+              fontWeight: 'bold'
+            }}>👴 ERFAHREN</span>
+            <span style={{ fontSize: '12px', color: '#666' }}>Langjährige Erfahrung</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <span style={{
+              backgroundColor: '#d5f4e6',
+              color: '#27ae60',
+              padding: '4px 8px',
+              borderRadius: '12px',
+              fontSize: '11px',
+              fontWeight: 'bold'
+            }}>👶 NEULING</span>
+            <span style={{ fontSize: '12px', color: '#666' }}>Benötigt Einarbeitung</span>
+          </div>
+        </div>
       </div>
     </div>
   );

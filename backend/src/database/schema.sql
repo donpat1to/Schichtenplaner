@@ -5,8 +5,8 @@ CREATE TABLE IF NOT EXISTS users (
   password TEXT NOT NULL,
   name TEXT NOT NULL,
   role TEXT CHECK(role IN ('admin', 'user', 'instandhalter')) NOT NULL,
-  phone TEXT,
-  department TEXT,
+  employee_type TEXT CHECK(employee_type IN ('chef', 'neuling', 'erfahren')),
+  is_sufficiently_independent BOOLEAN DEFAULT FALSE,
   is_active BOOLEAN DEFAULT TRUE,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

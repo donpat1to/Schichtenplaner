@@ -1,188 +1,225 @@
 // frontend/src/components/Layout/Navigation.tsx
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 const Navigation: React.FC = () => {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { user, logout, hasRole } = useAuth();
-  const location = useLocation();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const isActive = (path: string) => location.pathname === path;
+  const handleLogout = () => {
+    logout();
+    setIsMobileMenuOpen(false);
+  };
 
-const navigationItems = [
-    { path: '/', label: 'Dashboard', icon: '🏠', roles: ['admin', 'instandhalter', 'user'] },
-    { path: '/shift-plans', label: 'Schichtpläne', icon: '📅', roles: ['admin', 'instandhalter', 'user'] },
-    { path: '/employees', label: 'Mitarbeiter', icon: '👥', roles: ['admin', 'instandhalter'] },
-    { path: '/settings', label: 'Einstellungen', icon: '⚙️', roles: ['admin'] },
-    { path: '/help', label: 'Hilfe', icon: '❓', roles: ['admin', 'instandhalter', 'user'] },
-];
+  const toggleMobileMenu = () => {
+    setIsMobileMenuOpen(!isMobileMenuOpen);
+  };
+
+  const navigationItems = [
+    { path: '/', label: '📊 Dashboard', roles: ['admin', 'instandhalter', 'user'] },
+    { path: '/shift-plans', label: '📅 Schichtpläne', roles: ['admin', 'instandhalter', 'user'] },
+    { path: '/employees', label: '👥 Mitarbeiter', roles: ['admin', 'instandhalter'] },
+    { path: '/help', label: '❓ Hilfe & Support', roles: ['admin', 'instandhalter', 'user'] },
+    { path: '/settings', label: '⚙️ Einstellungen', roles: ['admin'] },
+  ];
 
   const filteredNavigation = navigationItems.filter(item => 
     hasRole(item.roles)
   );
 
+  const styles = {
+    header: {
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      color: 'white',
+      boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+      position: 'sticky' as const,
+      top: 0,
+      zIndex: 1000,
+    },
+    headerContent: {
+      maxWidth: '1200px',
+      margin: '0 auto',
+      padding: '0 20px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      height: '70px',
+    },
+    logo: {
+      flex: 1,
+    },
+    logoH1: {
+      margin: 0,
+      fontSize: '1.5rem',
+      fontWeight: 700,
+    },
+    desktopNav: {
+      display: 'flex',
+      gap: '2rem',
+      alignItems: 'center',
+    },
+    navLink: {
+      color: 'white',
+      textDecoration: 'none',
+      padding: '0.5rem 1rem',
+      borderRadius: '6px',
+      transition: 'all 0.3s ease',
+      fontWeight: 500,
+    },
+    userMenu: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '1rem',
+      marginLeft: '2rem',
+    },
+    userInfo: {
+      fontWeight: 500,
+    },
+    logoutBtn: {
+      background: 'rgba(255, 255, 255, 0.1)',
+      color: 'white',
+      border: '1px solid rgba(255, 255, 255, 0.3)',
+      padding: '0.5rem 1rem',
+      borderRadius: '6px',
+      cursor: 'pointer',
+      transition: 'all 0.3s ease',
+    },
+    mobileMenuBtn: {
+      display: 'none',
+      background: 'none',
+      border: 'none',
+      color: 'white',
+      fontSize: '1.5rem',
+      cursor: 'pointer',
+      padding: '0.5rem',
+    },
+    mobileNav: {
+      display: isMobileMenuOpen ? 'flex' : 'none',
+      flexDirection: 'column' as const,
+      background: 'white',
+      padding: '1rem',
+      boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+    },
+    mobileNavLink: {
+      color: '#333',
+      textDecoration: 'none',
+      padding: '1rem',
+      borderBottom: '1px solid #eee',
+      transition: 'background-color 0.3s ease',
+    },
+    mobileUserInfo: {
+      padding: '1rem',
+      borderTop: '1px solid #eee',
+      marginTop: '1rem',
+      color: '#333',
+    },
+    mobileLogoutBtn: {
+      background: '#667eea',
+      color: 'white',
+      border: 'none',
+      padding: '0.5rem 1rem',
+      borderRadius: '6px',
+      cursor: 'pointer',
+      marginTop: '0.5rem',
+      width: '100%',
+    },
+  };
+
   return (
-    <>
-      {/* Desktop Navigation */}
-      <nav style={{
-        backgroundColor: '#2c3e50',
-        padding: '0 20px',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-      }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          maxWidth: '1200px',
-          margin: '0 auto'
-        }}>
-          {/* Logo/Brand */}
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <Link 
-              to="/" 
-              style={{
-                color: 'white',
-                textDecoration: 'none',
-                fontSize: '20px',
-                fontWeight: 'bold',
-                padding: '15px 0'
+    <header style={styles.header}>
+      <div style={styles.headerContent}>
+        <div style={styles.logo}>
+          <h1 style={styles.logoH1}>🔄 Schichtenplaner</h1>
+        </div>
+        
+        {/* Desktop Navigation */}
+        <nav style={styles.desktopNav}>
+          {filteredNavigation.map((item) => (
+            <a 
+              key={item.path} 
+              href={item.path}
+              style={styles.navLink}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'none';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                window.location.href = item.path;
               }}
             >
-              🗓️ SchichtPlaner
-            </Link>
-          </div>
+              {item.label}
+            </a>
+          ))}
+        </nav>
 
-          {/* Desktop Menu */}
-          <div style={{ 
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px'
-          }}>
-            {filteredNavigation.map(item => (
-              <Link
-                key={item.path}
-                to={item.path}
-                style={{
-                  color: 'white',
-                  textDecoration: 'none',
-                  padding: '15px 20px',
-                  borderRadius: '4px',
-                  backgroundColor: isActive(item.path) ? '#3498db' : 'transparent',
-                  transition: 'background-color 0.2s',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive(item.path)) {
-                    e.currentTarget.style.backgroundColor = '#34495e';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive(item.path)) {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                  }
-                }}
-              >
-                <span>{item.icon}</span>
-                {item.label}
-              </Link>
-            ))}
-          </div>
+        {/* User Menu */}
+        <div style={styles.userMenu}>
+          <span style={styles.userInfo}>
+            {user?.name} ({user?.role})
+          </span>
+          <button 
+            onClick={handleLogout} 
+            style={styles.logoutBtn}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+            }}
+          >
+            Abmelden
+          </button>
+        </div>
 
-          {/* User Menu */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-            <span style={{ color: 'white', fontSize: '14px' }}>
-              {user?.name} ({user?.role})
-            </span>
-            <button
-              onClick={logout}
-              style={{
-                background: 'none',
-                border: '1px solid #e74c3c',
-                color: '#e74c3c',
-                padding: '8px 16px',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                transition: 'all 0.2s'
-              }}
+        {/* Mobile Menu Button */}
+        <button 
+          style={styles.mobileMenuBtn}
+          onClick={toggleMobileMenu}
+        >
+          ☰
+        </button>
+      </div>
+
+      {/* Mobile Navigation */}
+      {isMobileMenuOpen && (
+        <nav style={styles.mobileNav}>
+          {filteredNavigation.map((item) => (
+            <a 
+              key={item.path} 
+              href={item.path}
+              style={styles.mobileNavLink}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#e74c3c';
-                e.currentTarget.style.color = 'white';
+                e.currentTarget.style.backgroundColor = '#f5f5f5';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = 'transparent';
-                e.currentTarget.style.color = '#e74c3c';
               }}
+              onClick={(e) => {
+                e.preventDefault();
+                window.location.href = item.path;
+                setIsMobileMenuOpen(false);
+              }}
+            >
+              {item.label}
+            </a>
+          ))}
+          <div style={styles.mobileUserInfo}>
+            <span>{user?.name} ({user?.role})</span>
+            <button 
+              onClick={handleLogout} 
+              style={styles.mobileLogoutBtn}
             >
               Abmelden
             </button>
           </div>
-
-          {/* Mobile Menu Button */}
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            style={{
-              display: 'block',
-              background: 'none',
-              border: 'none',
-              color: 'white',
-              fontSize: '24px',
-              cursor: 'pointer'
-            }}
-          >
-            ☰
-          </button>
-        </div>
-
-        {/* Mobile Menu */}
-        {mobileMenuOpen && (
-          <div style={{
-            display: 'block',
-            backgroundColor: '#34495e',
-            padding: '10px 0'
-          }}>
-            {filteredNavigation.map(item => (
-              <Link
-                key={item.path}
-                to={item.path}
-                onClick={() => setMobileMenuOpen(false)}
-                style={{
-                  display: 'block',
-                  color: 'white',
-                  textDecoration: 'none',
-                  padding: '12px 20px',
-                  borderBottom: '1px solid #2c3e50'
-                }}
-              >
-                <span style={{ marginRight: '10px' }}>{item.icon}</span>
-                {item.label}
-              </Link>
-            ))}
-          </div>
-        )}
-      </nav>
-
-      {/* Breadcrumbs */}
-      <div style={{
-        backgroundColor: '#ecf0f1',
-        padding: '10px 20px',
-        borderBottom: '1px solid #bdc3c7',
-        fontSize: '14px'
-      }}>
-        <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-          {/* Breadcrumb wird dynamisch basierend auf der Route gefüllt */}
-          <span style={{ color: '#7f8c8d' }}>
-            🏠 Dashboard {location.pathname !== '/' && '>'} 
-            {location.pathname === '/shift-plans' && ' 📅 Schichtpläne'}
-            {location.pathname === '/employees' && ' 👥 Mitarbeiter'}
-            {location.pathname === '/settings' && ' ⚙️ Einstellungen'}
-            {location.pathname === '/help' && ' ❓ Hilfe'}
-          </span>
-        </div>
-      </div>
-    </>
+        </nav>
+      )}
+    </header>
   );
 };
 

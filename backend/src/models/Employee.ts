@@ -2,23 +2,14 @@
 export interface Employee {
   id: string;
   email: string;
-  password: string;
   name: string;
   role: 'admin' | 'instandhalter' | 'user';
+  employeeType: 'chef' | 'neuling' | 'erfahren';
+  isSufficientlyIndependent: boolean;
   isActive: boolean;
-  phone?: string;
-  department?: string;
+  notes?: string;
   createdAt: string;
   lastLogin?: string | null;
-}
-
-export interface Availability {
-  id: string;
-  employeeId: string;
-  dayOfWeek: number;
-  startTime: string;
-  endTime: string;
-  isAvailable: boolean;
 }
 
 export interface CreateEmployeeRequest {
@@ -26,14 +17,20 @@ export interface CreateEmployeeRequest {
   password: string;
   name: string;
   role: 'admin' | 'instandhalter' | 'user';
-  phone?: string;
-  department?: string;
+  employeeType: 'chef' | 'neuling' | 'erfahren';
+  isSufficientlyIndependent: boolean;
+  notes?: string;
 }
 
 export interface UpdateEmployeeRequest {
   name?: string;
   role?: 'admin' | 'instandhalter' | 'user';
+  employeeType?: 'chef' | 'neuling' | 'erfahren';
+  isSufficientlyIndependent?: boolean;
   isActive?: boolean;
-  phone?: string;
-  department?: string;
+  notes?: string;
+}
+
+export interface EmployeeWithPassword extends Employee {
+  password: string;
 }

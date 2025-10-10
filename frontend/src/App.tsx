@@ -1,4 +1,4 @@
-// frontend/src/App.tsx - KORRIGIERTE VERSION
+// frontend/src/App.tsx - KORRIGIERT MIT LAYOUT
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -47,28 +47,13 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[] }> 
   return <Layout>{children}</Layout>;
 };
 
-// SetupWrapper Component
-const SetupWrapper: React.FC = () => {
-  return (
-    <Router>
-      <Setup />
-    </Router>
-  );
-};
-
-// LoginWrapper Component  
-const LoginWrapper: React.FC = () => {
-  return (
-    <Router>
-      <Login />
-    </Router>
-  );
-};
-
 // Main App Content
 const AppContent: React.FC = () => {
   const { loading, needsSetup, user } = useAuth();
 
+  console.log('🏠 AppContent rendering - loading:', loading, 'needsSetup:', needsSetup, 'user:', user);
+
+  // Während des Ladens
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '40px' }}>
@@ -77,56 +62,59 @@ const AppContent: React.FC = () => {
     );
   }
 
-  console.log('AppContent - needsSetup:', needsSetup, 'user:', user);
-
-  // Wenn Setup benötigt wird → Setup zeigen (mit Router)
+  // Setup benötigt
   if (needsSetup) {
-    return <SetupWrapper />;
+    console.log('🔧 Showing setup page');
+    return <Setup />;
   }
 
-  // Wenn kein User eingeloggt ist → Login zeigen (mit Router)
+  // Kein User eingeloggt
   if (!user) {
-    return <LoginWrapper />;
+    console.log('🔐 Showing login page');
+    return <Login />;
   }
 
-  // Wenn User eingeloggt ist → Geschützte Routen zeigen
+  // User eingeloggt - Geschützte Routen
+  console.log('✅ Showing protected routes for user:', user.email);
   return (
-    <Router>
-      <NotificationContainer />
-      <Routes>
-        <Route path="/" element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        } />
-        <Route path="/shift-plans" element={
-          <ProtectedRoute>
-            <ShiftPlanList />
-          </ProtectedRoute>
-        } />
-        <Route path="/shift-plans/new" element={
-          <ProtectedRoute roles={['admin', 'instandhalter']}>
-            <ShiftPlanCreate />
-          </ProtectedRoute>
-        } />
-        <Route path="/employees" element={
-          <ProtectedRoute roles={['admin', 'instandhalter']}>
-            <EmployeeManagement />
-          </ProtectedRoute>
-        } />
-        <Route path="/settings" element={
-          <ProtectedRoute roles={['admin']}>
-            <Settings />
-          </ProtectedRoute>
-        } />
-        <Route path="/help" element={
-          <ProtectedRoute>
-            <Help />
-          </ProtectedRoute>
-        } />
-        <Route path="/login" element={<Login />} />
-      </Routes>
-    </Router>
+    <Routes>
+      <Route path="/" element={
+        <ProtectedRoute>
+          <Dashboard />
+        </ProtectedRoute>
+      } />
+      <Route path="/shift-plans" element={
+        <ProtectedRoute>
+          <ShiftPlanList />
+        </ProtectedRoute>
+      } />
+      <Route path="/shift-plans/new" element={
+        <ProtectedRoute roles={['admin', 'instandhalter']}>
+          <ShiftPlanCreate />
+        </ProtectedRoute>
+      } />
+      <Route path="/employees" element={
+        <ProtectedRoute roles={['admin', 'instandhalter']}>
+          <EmployeeManagement />
+        </ProtectedRoute>
+      } />
+      <Route path="/settings" element={
+        <ProtectedRoute roles={['admin']}>
+          <Settings />
+        </ProtectedRoute>
+      } />
+      <Route path="/help" element={
+        <ProtectedRoute>
+          <Help />
+        </ProtectedRoute>
+      } />
+      <Route path="/login" element={<Login />} />
+      <Route path="*" element={
+        <ProtectedRoute>
+          <Dashboard />
+        </ProtectedRoute>
+      } />
+    </Routes>
   );
 };
 
@@ -134,7 +122,10 @@ function App() {
   return (
     <NotificationProvider>
       <AuthProvider>
-        <AppContent />
+        <Router>
+          <NotificationContainer />
+          <AppContent />
+        </Router>
       </AuthProvider>
     </NotificationProvider>
   );

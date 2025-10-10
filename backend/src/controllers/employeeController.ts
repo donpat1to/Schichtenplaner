@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcryptjs';
 import { db } from '../services/databaseService.js';
 import { AuthRequest } from '../middleware/auth.js';
+import { CreateEmployeeRequest } from '../models/Employee.js';
 
 export const getEmployees = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -12,7 +13,9 @@ export const getEmployees = async (req: AuthRequest, res: Response): Promise<voi
     const employees = await db.all<any>(`
       SELECT 
         id, email, name, role, is_active as isActive, 
-        phone, department, created_at as createdAt, 
+        employee_type as employeeType, 
+        is_sufficiently_independent as isSufficientlyIndependent, 
+        created_at as createdAt, 
         last_login as lastLogin
       FROM users 
       WHERE is_active = 1
@@ -36,7 +39,9 @@ export const getEmployee = async (req: AuthRequest, res: Response): Promise<void
     const employee = await db.get<any>(`
       SELECT 
         id, email, name, role, is_active as isActive, 
-        phone, department, created_at as createdAt, 
+        employee_type as employeeType, 
+        is_sufficiently_independent as isSufficientlyIndependent,  
+        created_at as createdAt, 
         last_login as lastLogin
       FROM users 
       WHERE id = ?
@@ -61,19 +66,22 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
       password: '***hidden***'
     });
 
-    const { email, password, name, role, phone, department } = req.body as {
-      email: string;
-      password: string;
-      name: string;
-      role: string;
-      phone?: string;
-      department?: string;
-    };
+    const { 
+      email, 
+      password, 
+      name, 
+      role, 
+      employeeType, 
+      isSufficientlyIndependent,
+      notes 
+    } = req.body as CreateEmployeeRequest;
 
     // Validierung
-    if (!email || !password || !name || !role) {
+    if (!email || !password || !name || !role || !employeeType) {
       console.log('❌ Validation failed: Missing required fields');
-      res.status(400).json({ error: 'Email, password, name and role are required' });
+      res.status(400).json({ 
+        error: 'Email, password, name, role und employeeType sind erforderlich' 
+      });
       return;
     }
 
@@ -83,13 +91,8 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    // First check for ANY user with this email to debug
-    const allUsersWithEmail = await db.all<any>('SELECT id, email, is_active FROM users WHERE email = ?', [email]);
-    console.log('🔍 Found existing users with this email:', allUsersWithEmail);
-
-    // Check if email already exists among active users only
-    const existingActiveUser = await db.get<any>('SELECT id, is_active FROM users WHERE email = ? AND is_active = 1', [email]);
-    console.log('🔍 Checking active users with this email:', existingActiveUser);
+    // Check if email already exists
+    const existingActiveUser = await db.get<any>('SELECT id FROM users WHERE email = ? AND is_active = 1', [email]);
     
     if (existingActiveUser) {
       console.log('❌ Email exists for active user:', existingActiveUser);
@@ -102,16 +105,30 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
     const employeeId = uuidv4();
 
     await db.run(
-      `INSERT INTO users (id, email, password, name, role, phone, department, is_active) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [employeeId, email, hashedPassword, name, role, phone, department, 1]
+      `INSERT INTO users (
+        id, email, password, name, role, employee_type, is_sufficiently_independent, 
+        notes, is_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        employeeId, 
+        email, 
+        hashedPassword, 
+        name, 
+        role, 
+        employeeType, 
+        isSufficientlyIndependent ? 1 : 0,
+        notes || null,
+        1
+      ]
     );
 
-    // Return employee without password
+    // Return created employee
     const newEmployee = await db.get<any>(`
       SELECT 
-        id, email, name, role, is_active as isActive, 
-        phone, department, created_at as createdAt, 
+        id, email, name, role, is_active as isActive,
+        employee_type as employeeType, 
+        is_sufficiently_independent as isSufficientlyIndependent, 
+        notes, created_at as createdAt, 
         last_login as lastLogin
       FROM users 
       WHERE id = ?
@@ -127,7 +144,7 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
 export const updateEmployee = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, role, isActive, phone, department } = req.body;
+    const { name, role, isActive, employeeType, isSufficientlyIndependent } = req.body;
 
     // Check if employee exists
     const existingEmployee = await db.get('SELECT * FROM users WHERE id = ?', [id]);
@@ -142,17 +159,19 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
        SET name = COALESCE(?, name),
            role = COALESCE(?, role),
            is_active = COALESCE(?, is_active),
-           phone = COALESCE(?, phone),
-           department = COALESCE(?, department)
+           employee_type = COALESCE(?, employee_type),
+           is_sufficiently_independent = COALESCE(?, is_sufficiently_independent)
        WHERE id = ?`,
-      [name, role, isActive, phone, department, id]
+      [name, role, isActive, employeeType, isSufficientlyIndependent, id]
     );
 
     // Return updated employee
     const updatedEmployee = await db.get<any>(`
       SELECT 
         id, email, name, role, is_active as isActive, 
-        phone, department, created_at as createdAt, 
+        employee_type as employeeType, 
+        is_sufficiently_independent as isSufficientlyIndependent,
+        created_at as createdAt, 
         last_login as lastLogin
       FROM users 
       WHERE id = ?

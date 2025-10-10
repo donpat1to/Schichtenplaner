@@ -1,4 +1,4 @@
-// frontend/src/pages/Employees/components/EmployeeForm.tsx
+// frontend/src/pages/Employees/components/EmployeeForm.tsx - VEREINFACHT
 import React, { useState, useEffect } from 'react';
 import { Employee, CreateEmployeeRequest, UpdateEmployeeRequest } from '../../../types/employee';
 import { employeeService } from '../../../services/employeeService';
@@ -18,6 +18,28 @@ const ROLE_OPTIONS = [
   { value: 'admin', label: 'Administrator', description: 'Voller Zugriff auf alle Funktionen' }
 ] as const;
 
+// Mitarbeiter Typen Definition
+const EMPLOYEE_TYPE_OPTIONS = [
+  { 
+    value: 'chef', 
+    label: '👨‍💼 Chef/Administrator', 
+    description: 'Vollzugriff auf alle Funktionen und Mitarbeiterverwaltung',
+    color: '#e74c3c'
+  },
+  { 
+    value: 'erfahren', 
+    label: '👴 Erfahren', 
+    description: 'Langjährige Erfahrung, kann komplexe Aufgaben übernehmen',
+    color: '#3498db'
+  },
+  { 
+    value: 'neuling', 
+    label: '👶 Neuling', 
+    description: 'Benötigt Einarbeitung und Unterstützung',
+    color: '#27ae60'
+  }
+] as const;
+
 const EmployeeForm: React.FC<EmployeeFormProps> = ({
   mode,
   employee,
@@ -29,8 +51,9 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
     email: '',
     password: '',
     role: 'user' as 'admin' | 'instandhalter' | 'user',
-    phone: '',
-    department: '',
+    employeeType: 'neuling' as 'chef' | 'neuling' | 'erfahren',
+    isSufficientlyIndependent: false,
+    notes: '',
     isActive: true
   });
   const [loading, setLoading] = useState(false);
@@ -42,16 +65,17 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
       setFormData({
         name: employee.name,
         email: employee.email,
-        password: '', // Passwort wird beim Editieren nicht angezeigt
+        password: '',
         role: employee.role,
-        phone: employee.phone || '',
-        department: employee.department || '',
+        employeeType: employee.employeeType,
+        isSufficientlyIndependent: employee.isSufficientlyIndependent,
+        notes: employee.notes || '',
         isActive: employee.isActive
       });
     }
   }, [mode, employee]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
     setFormData(prev => ({
       ...prev,
@@ -59,11 +83,20 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
     }));
   };
 
-  // NEU: Checkbox für Rollen
   const handleRoleChange = (roleValue: 'admin' | 'instandhalter' | 'user') => {
     setFormData(prev => ({
       ...prev,
       role: roleValue
+    }));
+  };
+
+  const handleEmployeeTypeChange = (employeeType: 'chef' | 'neuling' | 'erfahren') => {
+    setFormData(prev => ({
+      ...prev,
+      employeeType,
+      // Automatische Werte basierend auf Typ
+      isSufficientlyIndependent: employeeType === 'chef' ? true : 
+                                employeeType === 'erfahren' ? true : false
     }));
   };
 
@@ -79,17 +112,19 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
           email: formData.email,
           password: formData.password,
           role: formData.role,
-          phone: formData.phone || undefined,
-          department: formData.department || undefined
+          employeeType: formData.employeeType,
+          isSufficientlyIndependent: formData.isSufficientlyIndependent,
+          notes: formData.notes || undefined
         };
         await employeeService.createEmployee(createData);
       } else if (employee) {
         const updateData: UpdateEmployeeRequest = {
           name: formData.name,
           role: formData.role,
+          employeeType: formData.employeeType,
+          isSufficientlyIndependent: formData.isSufficientlyIndependent,
           isActive: formData.isActive,
-          phone: formData.phone || undefined,
-          department: formData.department || undefined
+          notes: formData.notes || undefined
         };
         await employeeService.updateEmployee(employee.id, updateData);
       }
@@ -111,22 +146,21 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
     return formData.name.trim() && formData.email.trim();
   };
 
-  // Bestimme welche Rollen der aktuelle Benutzer vergeben darf
   const getAvailableRoles = () => {
     if (hasRole(['admin'])) {
-      return ROLE_OPTIONS; // Admins können alle Rollen vergeben
+      return ROLE_OPTIONS;
     }
     if (hasRole(['instandhalter'])) {
-      return ROLE_OPTIONS.filter(role => role.value !== 'admin'); // Instandhalter können keine Admins erstellen
+      return ROLE_OPTIONS.filter(role => role.value !== 'admin');
     }
-    return ROLE_OPTIONS.filter(role => role.value === 'user'); // Normale User können gar nichts (sollte nicht vorkommen)
+    return ROLE_OPTIONS.filter(role => role.value === 'user');
   };
 
   const availableRoles = getAvailableRoles();
 
   return (
     <div style={{
-      maxWidth: '600px',
+      maxWidth: '700px',
       margin: '0 auto',
       backgroundColor: 'white',
       padding: '30px',
@@ -158,179 +192,119 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
 
       <form onSubmit={handleSubmit}>
         <div style={{ display: 'grid', gap: '20px' }}>
-          {/* Name */}
-          <div>
-            <label style={{ 
-              display: 'block', 
-              marginBottom: '8px', 
-              fontWeight: 'bold',
-              color: '#2c3e50'
-            }}>
-              Vollständiger Name *
-            </label>
-            <input
-              type="text"
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              required
-              style={{
-                width: '100%',
-                padding: '10px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                fontSize: '16px'
-              }}
-              placeholder="Max Mustermann"
-            />
-          </div>
+          
+          {/* Grundinformationen */}
+          <div style={{
+            padding: '20px',
+            backgroundColor: '#f8f9fa',
+            borderRadius: '8px',
+            border: '1px solid #e9ecef'
+          }}>
+            <h3 style={{ margin: '0 0 15px 0', color: '#495057' }}>📋 Grundinformationen</h3>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#2c3e50' }}>
+                  Vollständiger Name *
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '16px'
+                  }}
+                  placeholder="Max Mustermann"
+                />
+              </div>
 
-          {/* E-Mail */}
-          <div>
-            <label style={{ 
-              display: 'block', 
-              marginBottom: '8px', 
-              fontWeight: 'bold',
-              color: '#2c3e50'
-            }}>
-              E-Mail Adresse *
-            </label>
-            <input
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              required
-              style={{
-                width: '100%',
-                padding: '10px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                fontSize: '16px'
-              }}
-              placeholder="max.mustermann@example.com"
-            />
-          </div>
-
-          {/* Passwort (nur bei Erstellung) */}
-          {mode === 'create' && (
-            <div>
-              <label style={{ 
-                display: 'block', 
-                marginBottom: '8px', 
-                fontWeight: 'bold',
-                color: '#2c3e50'
-              }}>
-                Passwort *
-              </label>
-              <input
-                type="password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                required
-                minLength={6}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  fontSize: '16px'
-                }}
-                placeholder="Mindestens 6 Zeichen"
-              />
-              <div style={{ fontSize: '12px', color: '#7f8c8d', marginTop: '5px' }}>
-                Das Passwort muss mindestens 6 Zeichen lang sein.
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#2c3e50' }}>
+                  E-Mail Adresse *
+                </label>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '16px'
+                  }}
+                  placeholder="max.mustermann@example.com"
+                />
               </div>
             </div>
-          )}
 
-          
-
-          {/* Telefon */}
-          <div>
-            <label style={{ 
-              display: 'block', 
-              marginBottom: '8px', 
-              fontWeight: 'bold',
-              color: '#2c3e50'
-            }}>
-              Telefonnummer
-            </label>
-            <input
-              type="tel"
-              name="phone"
-              value={formData.phone}
-              onChange={handleChange}
-              style={{
-                width: '100%',
-                padding: '10px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                fontSize: '16px'
-              }}
-              placeholder="+49 123 456789"
-            />
+            {mode === 'create' && (
+              <div style={{ marginTop: '15px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#2c3e50' }}>
+                  Passwort *
+                </label>
+                <input
+                  type="password"
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  required
+                  minLength={6}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '16px'
+                  }}
+                  placeholder="Mindestens 6 Zeichen"
+                />
+                <div style={{ fontSize: '12px', color: '#7f8c8d', marginTop: '5px' }}>
+                  Das Passwort muss mindestens 6 Zeichen lang sein.
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Abteilung */}
-          <div>
-            <label style={{ 
-              display: 'block', 
-              marginBottom: '8px', 
-              fontWeight: 'bold',
-              color: '#2c3e50'
-            }}>
-              Abteilung
-            </label>
-            <input
-              type="text"
-              name="department"
-              value={formData.department}
-              onChange={handleChange}
-              style={{
-                width: '100%',
-                padding: '10px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                fontSize: '16px'
-              }}
-              placeholder="z.B. Produktion, Logistik, Verwaltung"
-            />
-          </div>
-
-          {/* NEU: Rollen als Checkboxes */}
-          <div>
-            <label style={{ 
-              display: 'block', 
-              marginBottom: '12px', 
-              fontWeight: 'bold',
-              color: '#2c3e50'
-            }}>
-              Rolle *
-            </label>
+          {/* Mitarbeiter Kategorie */}
+          <div style={{
+            padding: '20px',
+            backgroundColor: '#f8f9fa',
+            borderRadius: '8px',
+            border: '1px solid #e9ecef'
+          }}>
+            <h3 style={{ margin: '0 0 15px 0', color: '#495057' }}>👥 Mitarbeiter Kategorie</h3>
+            
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {availableRoles.map(role => (
+              {EMPLOYEE_TYPE_OPTIONS.map(type => (
                 <div 
-                  key={role.value}
+                  key={type.value}
                   style={{
                     display: 'flex',
                     alignItems: 'flex-start',
-                    padding: '5px',
-                    border: `2px solid ${formData.role === role.value ? '#3498db' : '#e0e0e0'}`,
+                    padding: '15px',
+                    border: `2px solid ${formData.employeeType === type.value ? type.color : '#e0e0e0'}`,
                     borderRadius: '8px',
-                    backgroundColor: formData.role === role.value ? '#f8fafc' : 'white',
+                    backgroundColor: formData.employeeType === type.value ? '#f8fafc' : 'white',
                     cursor: 'pointer',
                     transition: 'all 0.2s'
                   }}
-                  onClick={() => handleRoleChange(role.value)}
+                  onClick={() => handleEmployeeTypeChange(type.value)}
                 >
                   <input
                     type="radio"
-                    name="role"
-                    value={role.value}
-                    checked={formData.role === role.value}
-                    onChange={() => handleRoleChange(role.value)}
+                    name="employeeType"
+                    value={type.value}
+                    checked={formData.employeeType === type.value}
+                    onChange={() => handleEmployeeTypeChange(type.value)}
                     style={{
                       marginRight: '12px',
                       marginTop: '2px',
@@ -342,52 +316,179 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                     <div style={{ 
                       fontWeight: 'bold', 
                       color: '#2c3e50',
-                      marginBottom: '4px'
+                      marginBottom: '4px',
+                      fontSize: '16px'
                     }}>
-                      {role.label}
+                      {type.label}
                     </div>
                     <div style={{ 
                       fontSize: '14px', 
                       color: '#7f8c8d',
                       lineHeight: '1.4'
                     }}>
-                      {role.description}
+                      {type.description}
                     </div>
                   </div>
-                  {/* Role Badge */}
                   <div style={{
-                    padding: '4px 8px',
-                    backgroundColor: 
-                      role.value === 'admin' ? '#e74c3c' :
-                      role.value === 'instandhalter' ? '#3498db' : '#27ae60',
+                    padding: '6px 12px',
+                    backgroundColor: type.color,
                     color: 'white',
-                    borderRadius: '12px',
+                    borderRadius: '15px',
                     fontSize: '12px',
                     fontWeight: 'bold'
                   }}>
-                    {role.value.toUpperCase()}
+                    {type.value.toUpperCase()}
                   </div>
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Eigenständigkeit */}
+          <div style={{
+            padding: '20px',
+            backgroundColor: '#f8f9fa',
+            borderRadius: '8px',
+            border: '1px solid #e9ecef'
+          }}>
+            <h3 style={{ margin: '0 0 15px 0', color: '#495057' }}>🎯 Eigenständigkeit</h3>
             
-            {/* Info über Berechtigungen */}
             <div style={{ 
-              marginTop: '10px', 
-              padding: '10px',
-              backgroundColor: '#e8f4fd',
-              border: '1px solid #b6d7e8',
-              borderRadius: '4px',
-              fontSize: '12px',
-              color: '#2c3e50'
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '15px',
+              padding: '15px',
+              border: '1px solid #e0e0e0',
+              borderRadius: '6px',
+              backgroundColor: '#fff'
             }}>
-              <strong>Info:</strong> { 
-                formData.role === 'admin' ? 'Administratoren haben vollen Zugriff auf alle Funktionen.' :
-                formData.role === 'instandhalter' ? 'Instandhalter können Schichtpläne erstellen und Mitarbeiter verwalten.' :
-                'Mitarbeiter können ihre eigenen Schichten und Verfügbarkeiten einsehen.'
-              }
+              <input
+                type="checkbox"
+                name="isSufficientlyIndependent"
+                id="isSufficientlyIndependent"
+                checked={formData.isSufficientlyIndependent}
+                onChange={handleChange}
+                disabled={formData.employeeType === 'chef'}
+                style={{ 
+                  width: '20px', 
+                  height: '20px',
+                  opacity: formData.employeeType === 'chef' ? 0.5 : 1
+                }}
+              />
+              <div style={{ flex: 1 }}>
+                <label htmlFor="isSufficientlyIndependent" style={{ 
+                  fontWeight: 'bold', 
+                  color: '#2c3e50', 
+                  display: 'block',
+                  opacity: formData.employeeType === 'chef' ? 0.5 : 1
+                }}>
+                  Als ausreichend eigenständig markieren
+                  {formData.employeeType === 'chef' && ' (Automatisch für Chefs)'}
+                </label>
+                <div style={{ fontSize: '14px', color: '#7f8c8d' }}>
+                  {formData.employeeType === 'chef' 
+                    ? 'Chefs sind automatisch als eigenständig markiert.'
+                    : 'Dieser Mitarbeiter kann komplexe Aufgaben eigenständig lösen und benötigt keine ständige Betreuung.'
+                  }
+                </div>
+              </div>
+              <div style={{
+                padding: '6px 12px',
+                backgroundColor: formData.isSufficientlyIndependent ? '#27ae60' : '#e74c3c',
+                color: 'white',
+                borderRadius: '15px',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                opacity: formData.employeeType === 'chef' ? 0.7 : 1
+              }}>
+                {formData.isSufficientlyIndependent ? 'EIGENSTÄNDIG' : 'BETREUUNG'}
+              </div>
             </div>
           </div>
+
+          {/* Bemerkungen */}
+          <div style={{
+            padding: '20px',
+            backgroundColor: '#f8f9fa',
+            borderRadius: '8px',
+            border: '1px solid #e9ecef'
+          }}>
+            <h3 style={{ margin: '0 0 15px 0', color: '#495057' }}>ℹ️ Bemerkungen</h3>
+            
+            <div>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#2c3e50' }}>
+                Notizen & Hinweise
+              </label>
+              <textarea
+                name="notes"
+                value={formData.notes}
+                onChange={handleChange}
+                rows={3}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px',
+                  resize: 'vertical'
+                }}
+                placeholder="Besondere Fähigkeiten, Einschränkungen, Schulungen, wichtige Hinweise..."
+              />
+              <div style={{ fontSize: '12px', color: '#7f8c8d', marginTop: '5px' }}>
+                Optionale Notizen für interne Zwecke
+              </div>
+            </div>
+          </div>
+
+          {/* Systemrolle (nur für Admins) */}
+          {hasRole(['admin']) && (
+            <div style={{
+              padding: '20px',
+              backgroundColor: '#fff3cd',
+              borderRadius: '8px',
+              border: '1px solid #ffeaa7'
+            }}>
+              <h3 style={{ margin: '0 0 15px 0', color: '#856404' }}>⚙️ Systemrolle</h3>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {availableRoles.map(role => (
+                  <div 
+                    key={role.value}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      padding: '12px',
+                      border: `2px solid ${formData.role === role.value ? '#f39c12' : '#e0e0e0'}`,
+                      borderRadius: '6px',
+                      backgroundColor: formData.role === role.value ? '#fef9e7' : 'white',
+                      cursor: 'pointer'
+                    }}
+                    onClick={() => handleRoleChange(role.value)}
+                  >
+                    <input
+                      type="radio"
+                      name="role"
+                      value={role.value}
+                      checked={formData.role === role.value}
+                      onChange={() => handleRoleChange(role.value)}
+                      style={{
+                        marginRight: '10px',
+                        marginTop: '2px'
+                      }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 'bold', color: '#2c3e50' }}>
+                        {role.label}
+                      </div>
+                      <div style={{ fontSize: '14px', color: '#7f8c8d' }}>
+                        {role.description}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Aktiv Status (nur beim Bearbeiten) */}
           {mode === 'edit' && (

@@ -1,3 +1,4 @@
+// backend/src/controllers/authController.ts
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
@@ -9,8 +10,6 @@ export interface User {
   email: string;
   name: string;
   role: string;
-  phone?: string;
-  department?: string;
 }
 
 export interface UserWithPassword extends User {
@@ -34,8 +33,8 @@ export interface RegisterRequest {
   email: string;
   password: string;
   name: string;
-  phone?: string;
-  department?: string;
+  //employee_type?: string;
+  //is_sufficiently_independent?: string;
   role?: string;
 }
 
@@ -52,7 +51,7 @@ export const login = async (req: Request, res: Response) => {
 
     // Get user from database
     const user = await db.get<UserWithPassword>(
-      'SELECT id, email, password, name, role, phone, department FROM users WHERE email = ? AND is_active = 1',
+      'SELECT id, email, password, name, role FROM users WHERE email = ? AND is_active = 1',
       [email]
     );
 
@@ -116,7 +115,7 @@ export const getCurrentUser = async (req: Request, res: Response) => {
     }
 
     const user = await db.get<User>(
-      'SELECT id, email, name, role, phone, department FROM users WHERE id = ? AND is_active = 1',
+      'SELECT id, email, name, role FROM users WHERE id = ? AND is_active = 1',
       [jwtUser.userId] // ← HIER: userId verwenden
     );
 
@@ -162,7 +161,7 @@ export const validateToken = async (req: Request, res: Response) => {
 
 export const register = async (req: Request, res: Response) => {
   try {
-    const { email, password, name, phone, department, role = 'user' } = req.body as RegisterRequest;
+    const { email, password, name, role = 'user' } = req.body as RegisterRequest;
 
     // Validate required fields
     if (!email || !password || !name) {
@@ -188,9 +187,9 @@ export const register = async (req: Request, res: Response) => {
 
     // Insert user
     const result = await db.run(
-      `INSERT INTO users (email, password, name, role, phone, department) 
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [email, hashedPassword, name, role, phone, department]
+      `INSERT INTO users (email, password, name, role) 
+       VALUES (?, ?, ?, ?)`,
+      [email, hashedPassword, name, role]
     );
 
     if (!result.lastID) {

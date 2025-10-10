@@ -44,10 +44,10 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    const { password, name, phone, department } = req.body;
+    const { password, name } = req.body;
     const email = 'admin@instandhaltung.de'; // Fixed admin email
 
-    console.log('👤 Creating admin with data:', { name, email, phone, department });
+    console.log('👤 Creating admin with data:', { name, email });
 
     // Validation
     if (!password || !name) {
@@ -63,16 +63,16 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
-    const adminId = uuidv4();
+    const adminId = randomUUID();
 
     console.log('📝 Inserting admin user with ID:', adminId);
 
     try {
       // Create admin user
       await db.run(
-        `INSERT INTO users (id, email, password, name, role, phone, department, is_active) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [adminId, email, hashedPassword, name, 'admin', phone || null, department || null, 1]
+        `INSERT INTO users (id, email, password, name, role, is_active) 
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [adminId, email, hashedPassword, name, 'admin', 1]
       );
 
       console.log('✅ Admin user created successfully');

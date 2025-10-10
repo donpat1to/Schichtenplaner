@@ -1,4 +1,3 @@
-// frontend/src/contexts/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Employee } from '../types/employee';
 
@@ -27,7 +26,7 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<Employee | null>(null);
   const [loading, setLoading] = useState(true);
-  const [needsSetup, setNeedsSetup] = useState(false);
+  const [needsSetup, setNeedsSetup] = useState<boolean | null>(null); // ← Start mit null
 
   // Token aus localStorage laden
   const getStoredToken = (): string | null => {
@@ -46,16 +45,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const checkSetupStatus = async (): Promise<void> => {
     try {
+      console.log('🔍 Checking setup status...');
       const response = await fetch('http://localhost:3002/api/setup/status');
       if (!response.ok) {
         throw new Error('Setup status check failed');
       }
       const data = await response.json();
-      console.log('Setup status response:', data);
+      console.log('✅ Setup status response:', data);
       setNeedsSetup(data.needsSetup === true);
     } catch (error) {
-      console.error('Error checking setup status:', error);
-      setNeedsSetup(false);
+      console.error('❌ Error checking setup status:', error);
+      setNeedsSetup(true); // Bei Fehler Setup annehmen
     }
   };
 
@@ -65,7 +65,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.log('🔄 Refreshing user, token exists:', !!token);
       
       if (!token) {
-        setLoading(false);
+        console.log('ℹ️ No token found, user not logged in');
+        setUser(null);
         return;
       }
 
@@ -85,11 +86,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUser(null);
       }
     } catch (error) {
-      console.error('Error refreshing user:', error);
+      console.error('❌ Error refreshing user:', error);
       removeStoredToken();
       setUser(null);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -117,7 +116,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setStoredToken(data.token);
       setUser(data.user);
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('❌ Login error:', error);
       throw error;
     }
   };
@@ -129,24 +128,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const hasRole = (roles: string[]): boolean => {
-    console.log('🔐 Checking roles - User:', user, 'Required roles:', roles);
-    
-    if (!user) {
-      console.log('❌ No user found');
-      return false;
-    }
-    
-    const hasRequiredRole = roles.includes(user.role);
-    console.log('✅ User role:', user.role, 'Has required role:', hasRequiredRole);
-    
-    return hasRequiredRole;
+    if (!user) return false;
+    return roles.includes(user.role);
   };
 
   useEffect(() => {
     const initializeAuth = async () => {
       console.log('🚀 Initializing authentication...');
-      await checkSetupStatus();
-      await refreshUser();
+      try {
+        await checkSetupStatus();
+        await refreshUser();
+      } catch (error) {
+        console.error('❌ Error during auth initialization:', error);
+      } finally {
+        setLoading(false);
+        console.log('✅ Auth initialization complete - needsSetup:', needsSetup, 'user:', user);
+      }
     };
 
     initializeAuth();
@@ -159,18 +156,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     hasRole,
     loading,
     refreshUser,
-    needsSetup,
+    needsSetup: needsSetup === null ? true : needsSetup, // Falls null, true annehmen
     checkSetupStatus,
   };
-
-  useEffect(() => {
-    console.log('🔄 Auth state changed - user:', user, 'loading:', loading);
-  }, [user, loading]);
-
-  useEffect(() => {
-    const token = getStoredToken();
-    console.log('💾 Stored token on mount:', token ? 'Exists' : 'None');
-  }, []);
 
   return (
     <AuthContext.Provider value={value}>
