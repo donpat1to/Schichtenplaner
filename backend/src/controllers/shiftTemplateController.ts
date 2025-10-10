@@ -3,9 +3,6 @@ import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../services/databaseService.js';
 import { 
-  ShiftTemplate, 
-  TemplateShiftSlot, 
-  TemplateShiftTimeRange, 
   CreateShiftTemplateRequest, 
   UpdateShiftTemplateRequest 
 } from '../models/ShiftTemplate.js';
@@ -233,7 +230,7 @@ export const createTemplate = async (req: Request, res: Response): Promise<void>
         await db.run(
           `INSERT INTO template_time_slots (id, template_id, name, start_time, end_time, description) 
            VALUES (?, ?, ?, ?, ?, ?)`,
-          [timeSlotId, templateId, timeSlot.name, timeSlot.startTime, timeSlot.endTime, timeSlot.description]
+          [timeSlotId, templateId, timeSlot.name, timeSlot.startTime, timeSlot.endTime, description]
         );
       }
 
@@ -316,7 +313,7 @@ export const updateTemplate = async (req: Request, res: Response): Promise<void>
           await db.run(
             `INSERT INTO template_time_slots (id, template_id, name, start_time, end_time, description) 
              VALUES (?, ?, ?, ?, ?, ?)`,
-            [timeSlotId, id, timeSlot.name, timeSlot.startTime, timeSlot.endTime, timeSlot.description]
+            [timeSlotId, id, timeSlot.name, timeSlot.startTime, timeSlot.endTime, description]
           );
         }
       }

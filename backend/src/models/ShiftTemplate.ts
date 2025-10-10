@@ -11,6 +11,7 @@ export interface TemplateShift {
 
 export interface TemplateShiftSlot {
   id: string;
+  templateId: string;
   dayOfWeek: number;
   timeRange: TemplateShiftTimeRange;
   requiredEmployees: number;
@@ -28,14 +29,14 @@ export interface CreateShiftTemplateRequest {
   name: string;
   description?: string;
   isDefault: boolean;
-  shifts: Omit<TemplateShift, 'id' | 'templateId'>[];
-  timeSlots: Omit<TemplateShiftTimeRange, 'id'>[];
+  shifts: Omit<TemplateShiftSlot, 'id' | 'templateId'>[];
+  timeSlots: TemplateShiftTimeRange[];
 }
 
 export interface UpdateShiftTemplateRequest {
   name?: string;
   description?: string;
   isDefault?: boolean;
-  shifts?: Omit<TemplateShift, 'id' | 'templateId'>[];
-  timeSlots?: Omit<TemplateShiftTimeRange, 'id'>[];
+  shifts?: Omit<TemplateShiftSlot, 'id' | 'templateId'>[];
+  timeSlots?: TemplateShiftTimeRange[];
 }
