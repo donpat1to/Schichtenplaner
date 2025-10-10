@@ -73,7 +73,6 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
       role, 
       employeeType, 
       isSufficientlyIndependent,
-      notes 
     } = req.body as CreateEmployeeRequest;
 
     // Validierung
@@ -107,8 +106,8 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
     await db.run(
       `INSERT INTO users (
         id, email, password, name, role, employee_type, is_sufficiently_independent, 
-        notes, is_active
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        is_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         employeeId, 
         email, 
@@ -117,7 +116,6 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
         role, 
         employeeType, 
         isSufficientlyIndependent ? 1 : 0,
-        notes || null,
         1
       ]
     );
@@ -128,7 +126,7 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
         id, email, name, role, is_active as isActive,
         employee_type as employeeType, 
         is_sufficiently_independent as isSufficientlyIndependent, 
-        notes, created_at as createdAt, 
+        created_at as createdAt, 
         last_login as lastLogin
       FROM users 
       WHERE id = ?

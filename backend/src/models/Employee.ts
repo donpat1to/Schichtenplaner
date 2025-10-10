@@ -7,7 +7,6 @@ export interface Employee {
   employeeType: 'chef' | 'neuling' | 'erfahren';
   isSufficientlyIndependent: boolean;
   isActive: boolean;
-  notes?: string;
   createdAt: string;
   lastLogin?: string | null;
 }
@@ -19,7 +18,6 @@ export interface CreateEmployeeRequest {
   role: 'admin' | 'instandhalter' | 'user';
   employeeType: 'chef' | 'neuling' | 'erfahren';
   isSufficientlyIndependent: boolean;
-  notes?: string;
 }
 
 export interface UpdateEmployeeRequest {
@@ -28,7 +26,6 @@ export interface UpdateEmployeeRequest {
   employeeType?: 'chef' | 'neuling' | 'erfahren';
   isSufficientlyIndependent?: boolean;
   isActive?: boolean;
-  notes?: string;
 }
 
 export interface EmployeeWithPassword extends Employee {

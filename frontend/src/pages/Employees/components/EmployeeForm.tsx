@@ -53,7 +53,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
     role: 'user' as 'admin' | 'instandhalter' | 'user',
     employeeType: 'neuling' as 'chef' | 'neuling' | 'erfahren',
     isSufficientlyIndependent: false,
-    notes: '',
     isActive: true
   });
   const [loading, setLoading] = useState(false);
@@ -69,7 +68,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
         role: employee.role,
         employeeType: employee.employeeType,
         isSufficientlyIndependent: employee.isSufficientlyIndependent,
-        notes: employee.notes || '',
         isActive: employee.isActive
       });
     }
@@ -114,7 +112,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
           role: formData.role,
           employeeType: formData.employeeType,
           isSufficientlyIndependent: formData.isSufficientlyIndependent,
-          notes: formData.notes || undefined
         };
         await employeeService.createEmployee(createData);
       } else if (employee) {
@@ -124,7 +121,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
           employeeType: formData.employeeType,
           isSufficientlyIndependent: formData.isSufficientlyIndependent,
           isActive: formData.isActive,
-          notes: formData.notes || undefined
         };
         await employeeService.updateEmployee(employee.id, updateData);
       }
@@ -402,40 +398,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                 opacity: formData.employeeType === 'chef' ? 0.7 : 1
               }}>
                 {formData.isSufficientlyIndependent ? 'EIGENSTÄNDIG' : 'BETREUUNG'}
-              </div>
-            </div>
-          </div>
-
-          {/* Bemerkungen */}
-          <div style={{
-            padding: '20px',
-            backgroundColor: '#f8f9fa',
-            borderRadius: '8px',
-            border: '1px solid #e9ecef'
-          }}>
-            <h3 style={{ margin: '0 0 15px 0', color: '#495057' }}>ℹ️ Bemerkungen</h3>
-            
-            <div>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#2c3e50' }}>
-                Notizen & Hinweise
-              </label>
-              <textarea
-                name="notes"
-                value={formData.notes}
-                onChange={handleChange}
-                rows={3}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  fontSize: '16px',
-                  resize: 'vertical'
-                }}
-                placeholder="Besondere Fähigkeiten, Einschränkungen, Schulungen, wichtige Hinweise..."
-              />
-              <div style={{ fontSize: '12px', color: '#7f8c8d', marginTop: '5px' }}>
-                Optionale Notizen für interne Zwecke
               </div>
             </div>
           </div>

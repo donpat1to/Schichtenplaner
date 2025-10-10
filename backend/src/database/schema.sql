@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS users (
   employee_type TEXT CHECK(employee_type IN ('chef', 'neuling', 'erfahren')),
   is_sufficiently_independent BOOLEAN DEFAULT FALSE,
   is_active BOOLEAN DEFAULT TRUE,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  last_login DATETIME
 );
 
 -- Tabelle für Schichtvorlagen
