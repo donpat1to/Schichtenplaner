@@ -96,6 +96,7 @@ export const getShiftPlan = async (req: AuthRequest, res: Response): Promise<voi
       shifts: assignedShifts.map(shift => ({
         id: shift.id,
         date: shift.date,
+        name: shift.name,
         startTime: shift.start_time,
         endTime: shift.end_time,
         requiredEmployees: shift.required_employees,
@@ -163,6 +164,7 @@ export const createShiftPlan = async (req: AuthRequest, res: Response): Promise<
         shifts: assignedShifts.map(shift => ({
           id: shift.id,
           date: shift.date,
+          name: shift.name,
           startTime: shift.start_time,
           endTime: shift.end_time,
           requiredEmployees: shift.required_employees,
@@ -308,7 +310,8 @@ async function generateShiftsFromTemplate(shiftPlanId: string, templateId: strin
 
   // Generate shifts for each day in the date range
   for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
-    const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    // Convert JS day (0=Sunday) to our format (1=Monday, 7=Sunday)
+    const dayOfWeek = date.getDay() === 0 ? 7 : date.getDay();
 
     // Find template shifts for this day of week
     const shiftsForDay = templateShifts.filter(shift => shift.day_of_week === dayOfWeek);
@@ -317,12 +320,13 @@ async function generateShiftsFromTemplate(shiftPlanId: string, templateId: strin
       const shiftId = uuidv4();
       
       await db.run(
-        `INSERT INTO assigned_shifts (id, shift_plan_id, date, start_time, end_time, required_employees, assigned_employees) 
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO assigned_shifts (id, shift_plan_id, date, name, start_time, end_time, required_employees, assigned_employees) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           shiftId,
           shiftPlanId,
           date.toISOString().split('T')[0],
+          templateShift.name,
           templateShift.start_time,
           templateShift.end_time,
           templateShift.required_employees,

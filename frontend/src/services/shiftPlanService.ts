@@ -26,6 +26,7 @@ export interface ShiftPlanShift {
   id: string;
   shiftPlanId: string;
   date: string;
+  name: string;
   startTime: string;
   endTime: string;
   requiredEmployees: number;
