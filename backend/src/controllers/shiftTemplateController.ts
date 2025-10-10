@@ -2,37 +2,63 @@
 import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../services/databaseService.js';
-import { ShiftTemplate, CreateShiftTemplateRequest, UpdateShiftTemplateRequest } from '../models/ShiftTemplate.js';
+import { 
+  ShiftTemplate, 
+  TemplateShiftSlot, 
+  TemplateShiftTimeRange, 
+  CreateShiftTemplateRequest, 
+  UpdateShiftTemplateRequest 
+} from '../models/ShiftTemplate.js';
 import { AuthRequest } from '../middleware/auth.js';
 
 export const getTemplates = async (req: Request, res: Response): Promise<void> => {
   try {
-    const templates = await db.all<ShiftTemplate>(`
+    const templates = await db.all<any>(`
       SELECT st.*, u.name as created_by_name 
       FROM shift_templates st
       LEFT JOIN users u ON st.created_by = u.id
       ORDER BY st.created_at DESC
     `);
 
-    // Für jede Vorlage die Schichten laden
+    // Für jede Vorlage die Schichten und Zeit-Slots laden
     const templatesWithShifts = await Promise.all(
       templates.map(async (template) => {
-        const shifts = await db.all<any>(`
-          SELECT * FROM template_shifts 
+        // Lade Schicht-Slots
+        const shiftSlots = await db.all<any>(`
+          SELECT ts.*, tts.name as time_range_name, tts.start_time as time_range_start, tts.end_time as time_range_end
+          FROM template_shifts ts
+          LEFT JOIN template_time_slots tts ON ts.time_slot_id = tts.id
+          WHERE ts.template_id = ? 
+          ORDER BY ts.day_of_week, tts.start_time
+        `, [template.id]);
+
+        // Lade Zeit-Slots
+        const timeSlots = await db.all<any>(`
+          SELECT * FROM template_time_slots 
           WHERE template_id = ? 
-          ORDER BY day_of_week, start_time
+          ORDER BY start_time
         `, [template.id]);
 
         return {
           ...template,
-          shifts: shifts.map(shift => ({
-            id: shift.id,
-            dayOfWeek: shift.day_of_week,
-            name: shift.name,
-            startTime: shift.start_time,
-            endTime: shift.end_time,
-            requiredEmployees: shift.required_employees,
-            color: shift.color
+          shifts: shiftSlots.map(slot => ({
+            id: slot.id,
+            dayOfWeek: slot.day_of_week,
+            timeRange: {
+              id: slot.time_slot_id,
+              name: slot.time_range_name,
+              startTime: slot.time_range_start,
+              endTime: slot.time_range_end
+            },
+            requiredEmployees: slot.required_employees,
+            color: slot.color
+          })),
+          timeSlots: timeSlots.map(slot => ({
+            id: slot.id,
+            name: slot.name,
+            startTime: slot.start_time,
+            endTime: slot.end_time,
+            description: slot.description
           }))
         };
       })
@@ -49,7 +75,7 @@ export const getTemplate = async (req: Request, res: Response): Promise<void> =>
   try {
     const { id } = req.params;
 
-    const template = await db.get<ShiftTemplate>(`
+    const template = await db.get<any>(`
       SELECT st.*, u.name as created_by_name 
       FROM shift_templates st
       LEFT JOIN users u ON st.created_by = u.id
@@ -61,26 +87,46 @@ export const getTemplate = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    const shifts = await db.all<any>(`
-      SELECT * FROM template_shifts 
-      WHERE template_id = ? 
-      ORDER BY day_of_week, start_time
+    // Lade Schicht-Slots
+    const shiftSlots = await db.all<any>(`
+      SELECT ts.*, tts.name as time_range_name, tts.start_time as time_range_start, tts.end_time as time_range_end
+      FROM template_shifts ts
+      LEFT JOIN template_time_slots tts ON ts.time_slot_id = tts.id
+      WHERE ts.template_id = ? 
+      ORDER BY ts.day_of_week, tts.start_time
     `, [id]);
 
-    const templateWithShifts = {
+    // Lade Zeit-Slots
+    const timeSlots = await db.all<any>(`
+      SELECT * FROM template_time_slots 
+      WHERE template_id = ? 
+      ORDER BY start_time
+    `, [id]);
+
+    const templateWithData = {
       ...template,
-      shifts: shifts.map(shift => ({
-        id: shift.id,
-        dayOfWeek: shift.day_of_week,
-        name: shift.name,
-        startTime: shift.start_time,
-        endTime: shift.end_time,
-        requiredEmployees: shift.required_employees,
-        color: shift.color
+      shifts: shiftSlots.map(slot => ({
+        id: slot.id,
+        dayOfWeek: slot.day_of_week,
+        timeRange: {
+          id: slot.time_slot_id,
+          name: slot.time_range_name,
+          startTime: slot.time_range_start,
+          endTime: slot.time_range_end
+        },
+        requiredEmployees: slot.required_employees,
+        color: slot.color
+      })),
+      timeSlots: timeSlots.map(slot => ({
+        id: slot.id,
+        name: slot.name,
+        startTime: slot.start_time,
+        endTime: slot.end_time,
+        description: slot.description
       }))
     };
 
-    res.json(templateWithShifts);
+    res.json(templateWithData);
   } catch (error) {
     console.error('Error fetching template:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -98,32 +144,46 @@ export const createDefaultTemplate = async (userId: string): Promise<string> => 
       await db.run(
         `INSERT INTO shift_templates (id, name, description, is_default, created_by) 
          VALUES (?, ?, ?, ?, ?)`,
-        [templateId, 'Standardwoche', 'Mo-Do: 2 Schichten, Fr: 1 Schicht', true, userId]
+        [templateId, 'Standardwoche', 'Standard Vorlage mit konfigurierten Zeit-Slots', true, userId]
       );
 
-      // Vormittagsschicht Mo-Do
-      for (let day = 1; day <= 4; day++) {
+      // Füge Zeit-Slots hinzu
+      const timeSlots = [
+        { id: uuidv4(), name: 'Vormittag', startTime: '08:00', endTime: '12:00', description: 'Vormittagsschicht' },
+        { id: uuidv4(), name: 'Nachmittag', startTime: '12:00', endTime: '16:00', description: 'Nachmittagsschicht' },
+        { id: uuidv4(), name: 'Abend', startTime: '16:00', endTime: '20:00', description: 'Abendschicht' }
+      ];
+
+      for (const slot of timeSlots) {
         await db.run(
-          `INSERT INTO template_shifts (id, template_id, day_of_week, name, start_time, end_time, required_employees) 
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [uuidv4(), templateId, day, 'Vormittagsschicht', '08:00', '12:00', 1]
+          `INSERT INTO template_time_slots (id, template_id, name, start_time, end_time, description) 
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [slot.id, templateId, slot.name, slot.startTime, slot.endTime, slot.description]
         );
       }
 
-      // Nachmittagsschicht Mo-Do
+      // Erstelle Schichten für Mo-Do mit Zeit-Slot Referenzen
       for (let day = 1; day <= 4; day++) {
+        // Vormittagsschicht
         await db.run(
-          `INSERT INTO template_shifts (id, template_id, day_of_week, name, start_time, end_time, required_employees) 
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [uuidv4(), templateId, day, 'Nachmittagsschicht', '11:30', '15:30', 1]
+          `INSERT INTO template_shifts (id, template_id, day_of_week, time_slot_id, required_employees, color) 
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [uuidv4(), templateId, day, timeSlots[0].id, 1, '#3498db']
+        );
+
+        // Nachmittagsschicht
+        await db.run(
+          `INSERT INTO template_shifts (id, template_id, day_of_week, time_slot_id, required_employees, color) 
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [uuidv4(), templateId, day, timeSlots[1].id, 1, '#e74c3c']
         );
       }
 
       // Freitag nur Vormittagsschicht
       await db.run(
-        `INSERT INTO template_shifts (id, template_id, day_of_week, name, start_time, end_time, required_employees) 
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [uuidv4(), templateId, 5, 'Vormittagsschicht', '08:00', '12:00', 1]
+        `INSERT INTO template_shifts (id, template_id, day_of_week, time_slot_id, required_employees, color) 
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [uuidv4(), templateId, 5, timeSlots[0].id, 1, '#3498db']
       );
 
       await db.run('COMMIT');
@@ -140,7 +200,7 @@ export const createDefaultTemplate = async (userId: string): Promise<string> => 
 
 export const createTemplate = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, description, isDefault, shifts }: CreateShiftTemplateRequest = req.body;
+    const { name, description, isDefault, shifts, timeSlots }: CreateShiftTemplateRequest = req.body;
     const userId = (req as AuthRequest).user?.userId;
 
     if (!userId) {
@@ -167,13 +227,23 @@ export const createTemplate = async (req: Request, res: Response): Promise<void>
         [templateId, name, description, isDefault ? 1 : 0, userId]
       );
 
+      // Insert time slots
+      for (const timeSlot of timeSlots) {
+        const timeSlotId = timeSlot.id || uuidv4();
+        await db.run(
+          `INSERT INTO template_time_slots (id, template_id, name, start_time, end_time, description) 
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [timeSlotId, templateId, timeSlot.name, timeSlot.startTime, timeSlot.endTime, timeSlot.description]
+        );
+      }
+
       // Insert shifts
       for (const shift of shifts) {
         const shiftId = uuidv4();
         await db.run(
-          `INSERT INTO template_shifts (id, template_id, day_of_week, name, start_time, end_time, required_employees, color) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [shiftId, templateId, shift.dayOfWeek, shift.name, shift.startTime, shift.endTime, shift.requiredEmployees, shift.color || '#3498db']
+          `INSERT INTO template_shifts (id, template_id, day_of_week, time_slot_id, required_employees, color) 
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [shiftId, templateId, shift.dayOfWeek, shift.timeRange.id, shift.requiredEmployees, shift.color || '#3498db']
         );
       }
 
@@ -188,31 +258,8 @@ export const createTemplate = async (req: Request, res: Response): Promise<void>
       await db.run('COMMIT');
 
       // Return created template
-      const createdTemplate = await db.get<ShiftTemplate>(`
-        SELECT st.*, u.name as created_by_name 
-        FROM shift_templates st
-        LEFT JOIN users u ON st.created_by = u.id
-        WHERE st.id = ?
-      `, [templateId]);
-
-      const templateShifts = await db.all<any>(`
-        SELECT * FROM template_shifts 
-        WHERE template_id = ? 
-        ORDER BY day_of_week, start_time
-      `, [templateId]);
-
-      res.status(201).json({
-        ...createdTemplate,
-        shifts: templateShifts.map(shift => ({
-          id: shift.id,
-          dayOfWeek: shift.day_of_week,
-          name: shift.name,
-          startTime: shift.start_time,
-          endTime: shift.end_time,
-          requiredEmployees: shift.required_employees,
-          color: shift.color
-        }))
-      });
+      const createdTemplate = await getTemplateById(templateId);
+      res.status(201).json(createdTemplate);
 
     } catch (error) {
       await db.run('ROLLBACK');
@@ -228,7 +275,7 @@ export const createTemplate = async (req: Request, res: Response): Promise<void>
 export const updateTemplate = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, description, isDefault, shifts }: UpdateShiftTemplateRequest = req.body;
+    const { name, description, isDefault, shifts, timeSlots }: UpdateShiftTemplateRequest = req.body;
 
     // Check if template exists
     const existingTemplate = await db.get('SELECT * FROM shift_templates WHERE id = ?', [id]);
@@ -258,6 +305,22 @@ export const updateTemplate = async (req: Request, res: Response): Promise<void>
         );
       }
 
+      // If updating time slots, replace all time slots
+      if (timeSlots) {
+        // Delete existing time slots
+        await db.run('DELETE FROM template_time_slots WHERE template_id = ?', [id]);
+
+        // Insert new time slots
+        for (const timeSlot of timeSlots) {
+          const timeSlotId = timeSlot.id || uuidv4();
+          await db.run(
+            `INSERT INTO template_time_slots (id, template_id, name, start_time, end_time, description) 
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [timeSlotId, id, timeSlot.name, timeSlot.startTime, timeSlot.endTime, timeSlot.description]
+          );
+        }
+      }
+
       // If updating shifts, replace all shifts
       if (shifts) {
         // Delete existing shifts
@@ -267,9 +330,9 @@ export const updateTemplate = async (req: Request, res: Response): Promise<void>
         for (const shift of shifts) {
           const shiftId = uuidv4();
           await db.run(
-            `INSERT INTO template_shifts (id, template_id, day_of_week, name, start_time, end_time, required_employees, color) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [shiftId, id, shift.dayOfWeek, shift.name, shift.startTime, shift.endTime, shift.requiredEmployees, shift.color || '#3498db']
+            `INSERT INTO template_shifts (id, template_id, day_of_week, time_slot_id, required_employees, color) 
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [shiftId, id, shift.dayOfWeek, shift.timeRange.id, shift.requiredEmployees, shift.color || '#3498db']
           );
         }
       }
@@ -285,31 +348,8 @@ export const updateTemplate = async (req: Request, res: Response): Promise<void>
       await db.run('COMMIT');
 
       // Return updated template
-      const updatedTemplate = await db.get<ShiftTemplate>(`
-        SELECT st.*, u.name as created_by_name 
-        FROM shift_templates st
-        LEFT JOIN users u ON st.created_by = u.id
-        WHERE st.id = ?
-      `, [id]);
-
-      const templateShifts = await db.all<any>(`
-        SELECT * FROM template_shifts 
-        WHERE template_id = ? 
-        ORDER BY day_of_week, start_time
-      `, [id]);
-
-      res.json({
-        ...updatedTemplate,
-        shifts: templateShifts.map(shift => ({
-          id: shift.id,
-          dayOfWeek: shift.day_of_week,
-          name: shift.name,
-          startTime: shift.start_time,
-          endTime: shift.end_time,
-          requiredEmployees: shift.required_employees,
-          color: shift.color
-        }))
-      });
+      const updatedTemplate = await getTemplateById(id);
+      res.json(updatedTemplate);
 
     } catch (error) {
       await db.run('ROLLBACK');
@@ -334,7 +374,7 @@ export const deleteTemplate = async (req: Request, res: Response): Promise<void>
     }
 
     await db.run('DELETE FROM shift_templates WHERE id = ?', [id]);
-    // Template shifts will be automatically deleted due to CASCADE
+    // Template shifts and time slots will be automatically deleted due to CASCADE
 
     res.status(204).send();
   } catch (error) {
@@ -342,3 +382,56 @@ export const deleteTemplate = async (req: Request, res: Response): Promise<void>
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+// Helper function to get template by ID
+async function getTemplateById(templateId: string): Promise<any> {
+  const template = await db.get<any>(`
+    SELECT st.*, u.name as created_by_name 
+    FROM shift_templates st
+    LEFT JOIN users u ON st.created_by = u.id
+    WHERE st.id = ?
+  `, [templateId]);
+
+  if (!template) {
+    return null;
+  }
+
+  // Lade Schicht-Slots
+  const shiftSlots = await db.all<any>(`
+    SELECT ts.*, tts.name as time_range_name, tts.start_time as time_range_start, tts.end_time as time_range_end
+    FROM template_shifts ts
+    LEFT JOIN template_time_slots tts ON ts.time_slot_id = tts.id
+    WHERE ts.template_id = ? 
+    ORDER BY ts.day_of_week, tts.start_time
+  `, [templateId]);
+
+  // Lade Zeit-Slots
+  const timeSlots = await db.all<any>(`
+    SELECT * FROM template_time_slots 
+    WHERE template_id = ? 
+    ORDER BY start_time
+  `, [templateId]);
+
+  return {
+    ...template,
+    shifts: shiftSlots.map(slot => ({
+      id: slot.id,
+      dayOfWeek: slot.day_of_week,
+      timeRange: {
+        id: slot.time_slot_id,
+        name: slot.time_range_name,
+        startTime: slot.time_range_start,
+        endTime: slot.time_range_end
+      },
+      requiredEmployees: slot.required_employees,
+      color: slot.color
+    })),
+    timeSlots: timeSlots.map(slot => ({
+      id: slot.id,
+      name: slot.name,
+      startTime: slot.start_time,
+      endTime: slot.end_time,
+      description: slot.description
+    }))
+  };
+}

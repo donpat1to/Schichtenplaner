@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Employee, Availability } from '../../../types/employee';
 import { employeeService } from '../../../services/employeeService';
+import { shiftPlanService, ShiftPlan, ShiftPlanShift } from '../../../services/shiftPlanService';
 
 interface AvailabilityManagerProps {
   employee: Employee;
@@ -9,12 +10,18 @@ interface AvailabilityManagerProps {
   onCancel: () => void;
 }
 
+// Verfügbarkeits-Level
+export type AvailabilityLevel = 1 | 2 | 3; // 1: bevorzugt, 2: möglich, 3: nicht möglich
+
 const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
   employee,
   onSave,
   onCancel
 }) => {
   const [availabilities, setAvailabilities] = useState<Availability[]>([]);
+  const [shiftPlans, setShiftPlans] = useState<ShiftPlan[]>([]);
+  const [selectedPlanId, setSelectedPlanId] = useState<string>('');
+  const [selectedPlan, setSelectedPlan] = useState<ShiftPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -29,53 +36,112 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
     { id: 0, name: 'Sonntag' }
   ];
 
-  const defaultTimeSlots = [
-    { name: 'Vormittag', start: '08:00', end: '12:00' },
-    { name: 'Nachmittag', start: '12:00', end: '16:00' },
-    { name: 'Abend', start: '16:00', end: '20:00' }
+  // Verfügbarkeits-Level mit Farben und Beschreibungen
+  const availabilityLevels = [
+    { level: 1 as AvailabilityLevel, label: 'Bevorzugt', color: '#27ae60', bgColor: '#d5f4e6', description: 'Ideale Zeit' },
+    { level: 2 as AvailabilityLevel, label: 'Möglich', color: '#f39c12', bgColor: '#fef5e7', description: 'Akzeptable Zeit' },
+    { level: 3 as AvailabilityLevel, label: 'Nicht möglich', color: '#e74c3c', bgColor: '#fadbd8', description: 'Nicht verfügbar' }
   ];
 
   useEffect(() => {
-    loadAvailabilities();
+    loadData();
   }, [employee.id]);
 
-  const loadAvailabilities = async () => {
+  useEffect(() => {
+    if (selectedPlanId) {
+      loadSelectedPlan();
+    }
+  }, [selectedPlanId]);
+
+  const loadData = async () => {
     try {
       setLoading(true);
-      const data = await employeeService.getAvailabilities(employee.id);
-      setAvailabilities(data);
+      
+      // Load availabilities
+      try {
+        const availData = await employeeService.getAvailabilities(employee.id);
+        setAvailabilities(availData);
+      } catch (err) {
+        // Falls keine Verfügbarkeiten existieren, erstelle Standard-Einträge (Level 3: nicht möglich)
+        const defaultAvailabilities: Availability[] = daysOfWeek.flatMap(day => [
+          {
+            id: `temp-${day.id}-morning`,
+            employeeId: employee.id,
+            dayOfWeek: day.id,
+            startTime: '08:00',
+            endTime: '12:00',
+            isAvailable: false,
+            availabilityLevel: 3 as AvailabilityLevel
+          },
+          {
+            id: `temp-${day.id}-afternoon`,
+            employeeId: employee.id,
+            dayOfWeek: day.id,
+            startTime: '12:00',
+            endTime: '16:00',
+            isAvailable: false,
+            availabilityLevel: 3 as AvailabilityLevel
+          },
+          {
+            id: `temp-${day.id}-evening`,
+            employeeId: employee.id,
+            dayOfWeek: day.id,
+            startTime: '16:00',
+            endTime: '20:00',
+            isAvailable: false,
+            availabilityLevel: 3 as AvailabilityLevel
+          }
+        ]);
+        setAvailabilities(defaultAvailabilities);
+      }
+
+      // Load shift plans
+      const plans = await shiftPlanService.getShiftPlans();
+      setShiftPlans(plans);
+
+      // Auto-select the first published plan or the first draft
+      if (plans.length > 0) {
+        const publishedPlan = plans.find(plan => plan.status === 'published');
+        const firstPlan = publishedPlan || plans[0];
+        setSelectedPlanId(firstPlan.id);
+      }
     } catch (err: any) {
-      // Falls keine Verfügbarkeiten existieren, erstelle Standard-Einträge
-      const defaultAvailabilities = daysOfWeek.flatMap(day =>
-        defaultTimeSlots.map(slot => ({
-          id: `temp-${day.id}-${slot.name}`,
-          employeeId: employee.id,
-          dayOfWeek: day.id,
-          startTime: slot.start,
-          endTime: slot.end,
-          isAvailable: false
-        }))
-      );
-      setAvailabilities(defaultAvailabilities);
+      console.error('Error loading data:', err);
+      setError('Daten konnten nicht geladen werden');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAvailabilityChange = (id: string, isAvailable: boolean) => {
+  const loadSelectedPlan = async () => {
+    try {
+      const plan = await shiftPlanService.getShiftPlan(selectedPlanId);
+      setSelectedPlan(plan);
+    } catch (err: any) {
+      console.error('Error loading shift plan:', err);
+      setError('Schichtplan konnte nicht geladen werden');
+    }
+  };
+
+  const handleAvailabilityLevelChange = (dayId: number, timeSlot: string, level: AvailabilityLevel) => {
     setAvailabilities(prev =>
       prev.map(avail =>
-        avail.id === id ? { ...avail, isAvailable } : avail
+        avail.dayOfWeek === dayId && getTimeSlotName(avail.startTime, avail.endTime) === timeSlot
+          ? { 
+              ...avail, 
+              availabilityLevel: level,
+              isAvailable: level !== 3
+            }
+          : avail
       )
     );
   };
 
-  const handleTimeChange = (id: string, field: 'startTime' | 'endTime', value: string) => {
-    setAvailabilities(prev =>
-      prev.map(avail =>
-        avail.id === id ? { ...avail, [field]: value } : avail
-      )
-    );
+  const getTimeSlotName = (startTime: string, endTime: string): string => {
+    if (startTime === '08:00' && endTime === '12:00') return 'Vormittag';
+    if (startTime === '12:00' && endTime === '16:00') return 'Nachmittag';
+    if (startTime === '16:00' && endTime === '20:00') return 'Abend';
+    return `${startTime}-${endTime}`;
   };
 
   const handleSave = async () => {
@@ -92,8 +158,91 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
     }
   };
 
-  const getAvailabilitiesForDay = (dayId: number) => {
-    return availabilities.filter(avail => avail.dayOfWeek === dayId);
+  // Get availability level for a specific shift
+  const getAvailabilityForShift = (shift: ShiftPlanShift): AvailabilityLevel => {
+    const shiftDate = new Date(shift.date);
+    const dayOfWeek = shiftDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    
+    // Find matching availability for this day and time
+    const matchingAvailabilities = availabilities.filter(avail => 
+      avail.dayOfWeek === dayOfWeek &&
+      avail.availabilityLevel !== 3 && // Nur Level 1 und 2 berücksichtigen
+      isTimeOverlap(avail.startTime, avail.endTime, shift.startTime, shift.endTime)
+    );
+    
+    if (matchingAvailabilities.length === 0) {
+      return 3; // Nicht möglich, wenn keine Übereinstimmung
+    }
+    
+    // Nehme das beste (niedrigste) Verfügbarkeits-Level
+    const minLevel = Math.min(...matchingAvailabilities.map(avail => avail.availabilityLevel));
+    return minLevel as AvailabilityLevel;
+  };
+
+  // Helper function to check time overlap
+  const isTimeOverlap = (availStart: string, availEnd: string, shiftStart: string, shiftEnd: string): boolean => {
+    const availStartMinutes = timeToMinutes(availStart);
+    const availEndMinutes = timeToMinutes(availEnd);
+    const shiftStartMinutes = timeToMinutes(shiftStart);
+    const shiftEndMinutes = timeToMinutes(shiftEnd);
+    
+    return shiftStartMinutes < availEndMinutes && shiftEndMinutes > availStartMinutes;
+  };
+
+  const timeToMinutes = (time: string): number => {
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours * 60 + minutes;
+  };
+
+  // Group shifts by weekday for timetable display
+  const getTimetableData = () => {
+    if (!selectedPlan) return { shiftsByDay: {}, weekdays: [] };
+
+    const shiftsByDay: Record<number, ShiftPlanShift[]> = {};
+    
+    // Initialize empty arrays for each day
+    daysOfWeek.forEach(day => {
+      shiftsByDay[day.id] = [];
+    });
+
+    // Group shifts by weekday
+    selectedPlan.shifts.forEach(shift => {
+      const shiftDate = new Date(shift.date);
+      const dayOfWeek = shiftDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+      shiftsByDay[dayOfWeek].push(shift);
+    });
+
+    // Remove duplicate shifts (same name and time on same day)
+    Object.keys(shiftsByDay).forEach(day => {
+      const dayNum = parseInt(day);
+      const uniqueShifts: ShiftPlanShift[] = [];
+      const seen = new Set();
+      
+      shiftsByDay[dayNum].forEach(shift => {
+        const key = `${shift.name}|${shift.startTime}|${shift.endTime}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          uniqueShifts.push(shift);
+        }
+      });
+      
+      shiftsByDay[dayNum] = uniqueShifts;
+    });
+
+    return {
+      shiftsByDay,
+      weekdays: daysOfWeek
+    };
+  };
+
+  const timetableData = getTimetableData();
+
+  // Get availability for a specific day and time slot
+  const getAvailabilityForDayAndSlot = (dayId: number, timeSlot: string): AvailabilityLevel => {
+    const availability = availabilities.find(avail => 
+      avail.dayOfWeek === dayId && getTimeSlotName(avail.startTime, avail.endTime) === timeSlot
+    );
+    return availability?.availabilityLevel || 3;
   };
 
   if (loading) {
@@ -106,7 +255,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
 
   return (
     <div style={{
-      maxWidth: '800px',
+      maxWidth: '1200px',
       margin: '0 auto',
       backgroundColor: 'white',
       padding: '30px',
@@ -128,7 +277,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
           {employee.name}
         </h3>
         <p style={{ margin: 0, color: '#7f8c8d' }}>
-          Legen Sie fest, an welchen Tagen und Zeiten {employee.name} verfügbar ist.
+          Legen Sie die Verfügbarkeit für {employee.name} fest (1: bevorzugt, 2: möglich, 3: nicht möglich).
         </p>
       </div>
 
@@ -145,132 +294,234 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         </div>
       )}
 
-      {/* Verfügbarkeiten Tabelle */}
+      {/* Verfügbarkeits-Legende */}
       <div style={{
-        border: '1px solid #e0e0e0',
+        marginBottom: '30px',
+        padding: '20px',
+        backgroundColor: '#f8f9fa',
         borderRadius: '8px',
-        overflow: 'hidden',
-        marginBottom: '30px'
+        border: '1px solid #e9ecef'
       }}>
-        {daysOfWeek.map((day, dayIndex) => {
-          const dayAvailabilities = getAvailabilitiesForDay(day.id);
-          const isLastDay = dayIndex === daysOfWeek.length - 1;
-          
-          return (
-            <div key={day.id} style={{
-              borderBottom: isLastDay ? 'none' : '1px solid #f0f0f0'
-            }}>
-              {/* Tag Header */}
-              <div style={{
-                backgroundColor: '#f8f9fa',
-                padding: '15px 20px',
-                fontWeight: 'bold',
-                color: '#2c3e50',
-                borderBottom: '1px solid #e0e0e0'
-              }}>
-                {day.name}
-              </div>
-
-              {/* Zeit-Slots */}
-              <div style={{ padding: '15px 20px' }}>
-                {dayAvailabilities.map((availability, availabilityIndex) => {
-                  const isLastAvailability = availabilityIndex === dayAvailabilities.length - 1;
-                  
-                  return (
-                    <div
-                      key={availability.id}
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr auto auto auto',
-                        gap: '15px',
-                        alignItems: 'center',
-                        padding: '10px 0',
-                        borderBottom: isLastAvailability ? 'none' : '1px solid #f8f9fa'
-                      }}
-                    >
-                      {/* Verfügbarkeit Toggle */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <input
-                          type="checkbox"
-                          id={`avail-${availability.id}`}
-                          checked={availability.isAvailable}
-                          onChange={(e) => handleAvailabilityChange(availability.id, e.target.checked)}
-                          style={{ width: '18px', height: '18px' }}
-                        />
-                        <label 
-                          htmlFor={`avail-${availability.id}`}
-                          style={{ 
-                            fontWeight: 'bold',
-                            color: availability.isAvailable ? '#27ae60' : '#95a5a6'
-                          }}
-                        >
-                          {availability.isAvailable ? 'Verfügbar' : 'Nicht verfügbar'}
-                        </label>
-                      </div>
-
-                      {/* Startzeit */}
-                      <div>
-                        <label style={{ fontSize: '12px', color: '#7f8c8d', display: 'block', marginBottom: '4px' }}>
-                          Von
-                        </label>
-                        <input
-                          type="time"
-                          value={availability.startTime}
-                          onChange={(e) => handleTimeChange(availability.id, 'startTime', e.target.value)}
-                          disabled={!availability.isAvailable}
-                          style={{
-                            padding: '6px 8px',
-                            border: `1px solid ${availability.isAvailable ? '#ddd' : '#f0f0f0'}`,
-                            borderRadius: '4px',
-                            backgroundColor: availability.isAvailable ? 'white' : '#f8f9fa',
-                            color: availability.isAvailable ? '#333' : '#999'
-                          }}
-                        />
-                      </div>
-
-                      {/* Endzeit */}
-                      <div>
-                        <label style={{ fontSize: '12px', color: '#7f8c8d', display: 'block', marginBottom: '4px' }}>
-                          Bis
-                        </label>
-                        <input
-                          type="time"
-                          value={availability.endTime}
-                          onChange={(e) => handleTimeChange(availability.id, 'endTime', e.target.value)}
-                          disabled={!availability.isAvailable}
-                          style={{
-                            padding: '6px 8px',
-                            border: `1px solid ${availability.isAvailable ? '#ddd' : '#f0f0f0'}`,
-                            borderRadius: '4px',
-                            backgroundColor: availability.isAvailable ? 'white' : '#f8f9fa',
-                            color: availability.isAvailable ? '#333' : '#999'
-                          }}
-                        />
-                      </div>
-
-                      {/* Status Badge */}
-                      <div>
-                        <span
-                          style={{
-                            backgroundColor: availability.isAvailable ? '#d5f4e6' : '#fadbd8',
-                            color: availability.isAvailable ? '#27ae60' : '#e74c3c',
-                            padding: '4px 8px',
-                            borderRadius: '12px',
-                            fontSize: '12px',
-                            fontWeight: 'bold'
-                          }}
-                        >
-                          {availability.isAvailable ? 'Aktiv' : 'Inaktiv'}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
+        <h4 style={{ margin: '0 0 15px 0', color: '#495057' }}>
+          Verfügbarkeits-Level
+        </h4>
+        
+        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+          {availabilityLevels.map(level => (
+            <div key={level.level} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div
+                style={{
+                  width: '20px',
+                  height: '20px',
+                  backgroundColor: level.bgColor,
+                  border: `2px solid ${level.color}`,
+                  borderRadius: '4px'
+                }}
+              />
+              <div>
+                <div style={{ fontWeight: 'bold', color: level.color }}>
+                  {level.level}: {level.label}
+                </div>
+                <div style={{ fontSize: '12px', color: '#666' }}>
+                  {level.description}
+                </div>
               </div>
             </div>
-          );
-        })}
+          ))}
+        </div>
       </div>
+
+      {/* Schichtplan Auswahl */}
+      <div style={{
+        marginBottom: '30px',
+        padding: '20px',
+        backgroundColor: '#f8f9fa',
+        borderRadius: '8px',
+        border: '1px solid #e9ecef'
+      }}>
+        <h4 style={{ margin: '0 0 15px 0', color: '#495057' }}>
+          Verfügbarkeit für Schichtplan prüfen
+        </h4>
+        
+        <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#2c3e50' }}>
+              Schichtplan auswählen:
+            </label>
+            <select
+              value={selectedPlanId}
+              onChange={(e) => setSelectedPlanId(e.target.value)}
+              style={{
+                padding: '8px 12px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                minWidth: '250px'
+              }}
+            >
+              <option value="">Bitte auswählen...</option>
+              {shiftPlans.map(plan => (
+                <option key={plan.id} value={plan.id}>
+                  {plan.name} ({plan.status === 'published' ? 'Veröffentlicht' : 'Entwurf'})
+                </option>
+              ))}
+            </select>
+          </div>
+          
+          {selectedPlan && (
+            <div style={{ fontSize: '14px', color: '#666' }}>
+              Zeitraum: {new Date(selectedPlan.startDate).toLocaleDateString('de-DE')} - {new Date(selectedPlan.endDate).toLocaleDateString('de-DE')}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Verfügbarkeits-Timetable mit Dropdown-Menüs */}
+      {selectedPlan && (
+        <div style={{
+          marginBottom: '30px',
+          border: '1px solid #e0e0e0',
+          borderRadius: '8px',
+          overflow: 'hidden'
+        }}>
+          <div style={{
+            backgroundColor: '#2c3e50',
+            color: 'white',
+            padding: '15px 20px',
+            fontWeight: 'bold'
+          }}>
+            Verfügbarkeit für: {selectedPlan.name}
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{
+              width: '100%',
+              borderCollapse: 'collapse',
+              backgroundColor: 'white'
+            }}>
+              <thead>
+                <tr style={{ backgroundColor: '#f8f9fa' }}>
+                  <th style={{
+                    padding: '12px 16px',
+                    textAlign: 'left',
+                    border: '1px solid #dee2e6',
+                    fontWeight: 'bold',
+                    minWidth: '150px'
+                  }}>
+                    Zeit
+                  </th>
+                  {timetableData.weekdays.map(weekday => (
+                    <th key={weekday.id} style={{
+                      padding: '12px 16px',
+                      textAlign: 'center',
+                      border: '1px solid #dee2e6',
+                      fontWeight: 'bold',
+                      minWidth: '150px'
+                    }}>
+                      {weekday.name}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {['Vormittag', 'Nachmittag', 'Abend'].map((timeSlot, timeIndex) => (
+                  <tr key={timeSlot} style={{
+                    backgroundColor: timeIndex % 2 === 0 ? 'white' : '#f8f9fa'
+                  }}>
+                    <td style={{
+                      padding: '12px 16px',
+                      border: '1px solid #dee2e6',
+                      fontWeight: '500',
+                      backgroundColor: '#f8f9fa'
+                    }}>
+                      {timeSlot}
+                      <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+                        {timeSlot === 'Vormittag' ? '08:00-12:00' : 
+                         timeSlot === 'Nachmittag' ? '12:00-16:00' : '16:00-20:00'}
+                      </div>
+                    </td>
+                    {timetableData.weekdays.map(weekday => {
+                      const currentLevel = getAvailabilityForDayAndSlot(weekday.id, timeSlot);
+                      const levelConfig = availabilityLevels.find(l => l.level === currentLevel);
+                      
+                      return (
+                        <td key={weekday.id} style={{
+                          padding: '12px 16px',
+                          border: '1px solid #dee2e6',
+                          textAlign: 'center',
+                          backgroundColor: levelConfig?.bgColor
+                        }}>
+                          <select
+                            value={currentLevel}
+                            onChange={(e) => handleAvailabilityLevelChange(weekday.id, timeSlot, parseInt(e.target.value) as AvailabilityLevel)}
+                            style={{
+                              padding: '8px 12px',
+                              border: `2px solid ${levelConfig?.color || '#ddd'}`,
+                              borderRadius: '6px',
+                              backgroundColor: levelConfig?.bgColor || 'white',
+                              color: levelConfig?.color || '#333',
+                              fontWeight: 'bold',
+                              minWidth: '120px',
+                              cursor: 'pointer',
+                              textAlign: 'center'
+                            }}
+                          >
+                            {availabilityLevels.map(level => (
+                              <option 
+                                key={level.level} 
+                                value={level.level}
+                                style={{
+                                  backgroundColor: level.bgColor,
+                                  color: level.color,
+                                  fontWeight: 'bold'
+                                }}
+                              >
+                                {level.level}: {level.label}
+                              </option>
+                            ))}
+                          </select>
+                          <div style={{ 
+                            fontSize: '11px', 
+                            color: levelConfig?.color,
+                            marginTop: '4px',
+                            fontWeight: 'bold'
+                          }}>
+                            {levelConfig?.description}
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Legende */}
+          <div style={{
+            padding: '12px 16px',
+            backgroundColor: '#e8f4fd',
+            borderTop: '1px solid #b8d4f0',
+            fontSize: '14px',
+            color: '#2c3e50'
+          }}>
+            <strong>Legende:</strong> 
+            {availabilityLevels.map(level => (
+              <span key={level.level} style={{ marginLeft: '15px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                <div
+                  style={{
+                    width: '12px',
+                    height: '12px',
+                    backgroundColor: level.bgColor,
+                    border: `1px solid ${level.color}`,
+                    borderRadius: '2px'
+                  }}
+                />
+                <strong style={{ color: level.color }}>{level.level}</strong>: {level.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Info Text */}
       <div style={{
@@ -282,8 +533,10 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       }}>
         <h4 style={{ margin: '0 0 8px 0', color: '#2c3e50' }}>💡 Information</h4>
         <p style={{ margin: 0, color: '#546e7a', fontSize: '14px' }}>
-          Verfügbarkeiten bestimmen, wann dieser Mitarbeiter für Schichten eingeplant werden kann.
-          Nur als "verfügbar" markierte Zeitfenster werden bei der automatischen Schichtplanung berücksichtigt.
+          <strong>1: Bevorzugt</strong> - Ideale Zeit für diesen Mitarbeiter<br/>
+          <strong>2: Möglich</strong> - Akzeptable Zeit, falls benötigt<br/>
+          <strong>3: Nicht möglich</strong> - Mitarbeiter ist nicht verfügbar<br/>
+          Das System priorisiert Mitarbeiter mit Level 1 für Schichtzuweisungen.
         </p>
       </div>
 

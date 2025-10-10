@@ -1,17 +1,17 @@
 // frontend/src/pages/ShiftTemplates/ShiftTemplateList.tsx
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ShiftTemplate } from '../../types/shiftTemplate';
+import { TemplateShift } from '../../types/shiftTemplate';
 import { shiftTemplateService } from '../../services/shiftTemplateService';
 import { useAuth } from '../../contexts/AuthContext';
 import DefaultTemplateView from './components/DefaultTemplateView';
 import styles from './ShiftTemplateList.module.css';
 
 const ShiftTemplateList: React.FC = () => {
-  const [templates, setTemplates] = useState<ShiftTemplate[]>([]);
+  const [templates, setTemplates] = useState<TemplateShift[]>([]);
   const [loading, setLoading] = useState(true);
   const { hasRole } = useAuth();
-  const [selectedTemplate, setSelectedTemplate] = useState<ShiftTemplate | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateShift | null>(null);
 
   useEffect(() => {
     loadTemplates();

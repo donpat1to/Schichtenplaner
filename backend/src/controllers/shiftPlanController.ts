@@ -308,7 +308,7 @@ async function generateShiftsFromTemplate(shiftPlanId: string, templateId: strin
   const start = new Date(startDate);
   const end = new Date(endDate);
 
-  // Generate shifts for each day in the date range
+  // Generate shifts ONLY for days that have template shifts defined
   for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
     // Convert JS day (0=Sunday) to our format (1=Monday, 7=Sunday)
     const dayOfWeek = date.getDay() === 0 ? 7 : date.getDay();
@@ -316,23 +316,26 @@ async function generateShiftsFromTemplate(shiftPlanId: string, templateId: strin
     // Find template shifts for this day of week
     const shiftsForDay = templateShifts.filter(shift => shift.day_of_week === dayOfWeek);
 
-    for (const templateShift of shiftsForDay) {
-      const shiftId = uuidv4();
-      
-      await db.run(
-        `INSERT INTO assigned_shifts (id, shift_plan_id, date, name, start_time, end_time, required_employees, assigned_employees) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          shiftId,
-          shiftPlanId,
-          date.toISOString().split('T')[0],
-          templateShift.name,
-          templateShift.start_time,
-          templateShift.end_time,
-          templateShift.required_employees,
-          JSON.stringify([])
-        ]
-      );
+    // Only create shifts if there are template shifts defined for this weekday
+    if (shiftsForDay.length > 0) {
+      for (const templateShift of shiftsForDay) {
+        const shiftId = uuidv4();
+        
+        await db.run(
+          `INSERT INTO assigned_shifts (id, shift_plan_id, date, name, start_time, end_time, required_employees, assigned_employees) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            shiftId,
+            shiftPlanId,
+            date.toISOString().split('T')[0],
+            templateShift.name,
+            templateShift.start_time,
+            templateShift.end_time,
+            templateShift.required_employees,
+            JSON.stringify([])
+          ]
+        );
+      }
     }
   }
 }

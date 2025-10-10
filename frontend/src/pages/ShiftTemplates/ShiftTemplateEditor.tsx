@@ -1,22 +1,20 @@
 // frontend/src/pages/ShiftTemplates/ShiftTemplateEditor.tsx
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ShiftTemplate, TemplateShift, DEFAULT_DAYS } from '../../types/shiftTemplate';
+import { TemplateShiftSlot, TemplateShift, TemplateShiftTimeRange, DEFAULT_DAYS } from '../../types/shiftTemplate';
 import { shiftTemplateService } from '../../services/shiftTemplateService';
 import ShiftDayEditor from './components/ShiftDayEditor';
 import DefaultTemplateView from './components/DefaultTemplateView';
 import styles from './ShiftTemplateEditor.module.css';
 
-interface ExtendedTemplateShift extends Omit<TemplateShift, 'id'> {
+interface ExtendedTemplateShift extends Omit<TemplateShiftSlot, 'id'> {
   id?: string;
   isPreview?: boolean;
 }
 
 const defaultShift: ExtendedTemplateShift = {
   dayOfWeek: 1, // Montag
-  name: '',
-  startTime: '08:00',
-  endTime: '12:00',
+  timeRange: { id: '', name: '', startTime: '', endTime: '' },
   requiredEmployees: 1,
   color: '#3498db'
 };
@@ -26,7 +24,7 @@ const ShiftTemplateEditor: React.FC = () => {
   const navigate = useNavigate();
   const isEditing = !!id;
 
-  const [template, setTemplate] = useState<Omit<ShiftTemplate, 'id' | 'createdAt' | 'createdBy'>>({
+  const [template, setTemplate] = useState<Omit<TemplateShift, 'id' | 'createdAt' | 'createdBy'>>({
     name: '',
     description: '',
     shifts: [],
@@ -83,11 +81,13 @@ const ShiftTemplateEditor: React.FC = () => {
   };
 
   const addShift = (dayOfWeek: number) => {
-    const newShift: TemplateShift = {
+    const newShift: TemplateShiftSlot = {
       ...defaultShift,
       id: Date.now().toString(),
       dayOfWeek,
-      name: `Schicht ${template.shifts.filter(s => s.dayOfWeek === dayOfWeek).length + 1}`
+      timeRange: { ...defaultShift.timeRange, id: Date.now().toString() },
+      requiredEmployees: defaultShift.requiredEmployees,
+      color: defaultShift.color
     };
     
     setTemplate(prev => ({
@@ -113,7 +113,7 @@ const ShiftTemplateEditor: React.FC = () => {
   };
 
   // Preview-Daten für die DefaultTemplateView vorbereiten
-  const previewTemplate: ShiftTemplate = {
+  const previewTemplate: TemplateShift = {
     id: 'preview',
     name: template.name || 'Vorschau',
     description: template.description,

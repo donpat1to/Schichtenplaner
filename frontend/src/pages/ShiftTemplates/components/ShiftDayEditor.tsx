@@ -1,13 +1,13 @@
 // frontend/src/pages/ShiftTemplates/components/ShiftDayEditor.tsx
 import React from 'react';
-import { TemplateShift } from '../../../types/shiftTemplate';
+import { TemplateShiftSlot } from '../../../types/shiftTemplate';
 import styles from './ShiftDayEditor.module.css';
 
 interface ShiftDayEditorProps {
   day: { id: number; name: string };
-  shifts: TemplateShift[];
+  shifts: TemplateShiftSlot[];
   onAddShift: () => void;
-  onUpdateShift: (shiftId: string, updates: Partial<TemplateShift>) => void;
+  onUpdateShift: (shiftId: string, updates: Partial<TemplateShiftSlot>) => void;
   onRemoveShift: (shiftId: string) => void;
 }
 
@@ -55,8 +55,8 @@ const ShiftDayEditor: React.FC<ShiftDayEditorProps> = ({
               <div className={styles.formGroup}>
                 <input
                   type="text"
-                  value={shift.name}
-                  onChange={(e) => onUpdateShift(shift.id, { name: e.target.value })}
+                  value={shift.timeRange.name}
+                  onChange={(e) => onUpdateShift(shift.id, { timeRange: { ...shift.timeRange, name: e.target.value } })}
                   placeholder="Schichtname"
                 />
               </div>
@@ -66,8 +66,8 @@ const ShiftDayEditor: React.FC<ShiftDayEditorProps> = ({
                   <label>Start</label>
                   <input
                     type="time"
-                    value={shift.startTime}
-                    onChange={(e) => onUpdateShift(shift.id, { startTime: e.target.value })}
+                    value={shift.timeRange.startTime}
+                    onChange={(e) => onUpdateShift(shift.id, { timeRange: { ...shift.timeRange, startTime: e.target.value } })}
                   />
                 </div>
 
@@ -75,8 +75,8 @@ const ShiftDayEditor: React.FC<ShiftDayEditorProps> = ({
                   <label>Ende</label>
                   <input
                     type="time"
-                    value={shift.endTime}
-                    onChange={(e) => onUpdateShift(shift.id, { endTime: e.target.value })}
+                    value={shift.timeRange.endTime}
+                    onChange={(e) => onUpdateShift(shift.id, { timeRange: { ...shift.timeRange, endTime: e.target.value } })}
                   />
                 </div>
               </div>

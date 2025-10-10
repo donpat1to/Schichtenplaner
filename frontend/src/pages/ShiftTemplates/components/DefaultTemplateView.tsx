@@ -1,10 +1,10 @@
 // frontend/src/pages/ShiftTemplates/components/DefaultTemplateView.tsx
 import React from 'react';
-import { ShiftTemplate } from '../../../types/shiftTemplate';
+import { TemplateShift } from '../../../types/shiftTemplate';
 import styles from './DefaultTemplateView.module.css';
 
 interface DefaultTemplateViewProps {
-  template: ShiftTemplate;
+  template: TemplateShift;
 }
 
 const DefaultTemplateView: React.FC<DefaultTemplateViewProps> = ({ template }) => {
@@ -38,9 +38,9 @@ const DefaultTemplateView: React.FC<DefaultTemplateViewProps> = ({ template }) =
             <div className={styles.shiftsContainer}>
               {shiftsByDay[dayIndex]?.map(shift => (
                 <div key={shift.id} className={styles.shiftCard}>
-                  <h4>{shift.name}</h4>
+                  <h4>{shift.timeRange.name}</h4>
                   <p>
-                    {formatTime(shift.startTime)} - {formatTime(shift.endTime)}
+                    {formatTime(shift.timeRange.startTime)} - {formatTime(shift.timeRange.endTime)}
                   </p>
                 </div>
               ))}

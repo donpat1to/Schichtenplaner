@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { shiftTemplateService } from '../../services/shiftTemplateService';
 import { shiftPlanService } from '../../services/shiftPlanService';
-import { ShiftTemplate } from '../../types/shiftTemplate';
+import { TemplateShift } from '../../types/shiftTemplate';
 import styles from './ShiftPlanCreate.module.css';
 
 const ShiftPlanCreate: React.FC = () => {
@@ -14,7 +14,7 @@ const ShiftPlanCreate: React.FC = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState('');
-  const [templates, setTemplates] = useState<ShiftTemplate[]>([]);
+  const [templates, setTemplates] = useState<TemplateShift[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

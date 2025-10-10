@@ -9,6 +9,8 @@ import Login from './pages/Auth/Login';
 import Dashboard from './pages/Dashboard/Dashboard';
 import ShiftPlanList from './pages/ShiftPlans/ShiftPlanList';
 import ShiftPlanCreate from './pages/ShiftPlans/ShiftPlanCreate';
+import ShiftPlanEdit from './pages/ShiftPlans/ShiftPlanEdit';
+import ShiftPlanView from './pages/ShiftPlans/ShiftPlanView';
 import EmployeeManagement from './pages/Employees/EmployeeManagement';
 import Settings from './pages/Settings/Settings';
 import Help from './pages/Help/Help';
@@ -91,6 +93,16 @@ const AppContent: React.FC = () => {
       <Route path="/shift-plans/new" element={
         <ProtectedRoute roles={['admin', 'instandhalter']}>
           <ShiftPlanCreate />
+        </ProtectedRoute>
+      } />
+      <Route path="/shift-plans/:id/edit" element={
+        <ProtectedRoute roles={['admin', 'instandhalter']}>
+          <ShiftPlanEdit />
+        </ProtectedRoute>
+      } />
+      <Route path="/shift-plans/:id" element={
+        <ProtectedRoute>
+          <ShiftPlanView />
         </ProtectedRoute>
       } />
       <Route path="/employees" element={

@@ -1,23 +1,34 @@
 // frontend/src/types/shiftTemplate.ts
-export interface ShiftTemplate {
+export interface TemplateShift {
   id: string;
   name: string;
   description?: string;
-  shifts: TemplateShift[];
+  isDefault: boolean;
   createdBy: string;
   createdAt: string;
-  isDefault: boolean;
+  shifts: TemplateShiftSlot[];
 }
 
-export interface TemplateShift {
+export interface TemplateShiftSlot {
   id: string;
-  dayOfWeek: number; // 1-5 (Montag=1, Dienstag=2, ...)
-  name: string;
-  startTime: string; // "08:00"
-  endTime: string;   // "12:00"
+  dayOfWeek: number;
+  timeRange: TemplateShiftTimeRange;
   requiredEmployees: number;
-  color?: string; // Für visuelle Darstellung
+  color?: string;
 }
+
+export interface TemplateShiftTimeRange {
+  id: string;
+  name: string;     // e.g., "Frühschicht", "Spätschicht"
+  startTime: string;
+  endTime: string;
+}
+
+export const DEFAULT_TIME_SLOTS: TemplateShiftTimeRange[] = [
+  { id: 'morning', name: 'Vormittag', startTime: '08:00', endTime: '12:00' },
+  { id: 'afternoon', name: 'Nachmittag', startTime: '11:30', endTime: '15:30' },
+];
+
 
 export const DEFAULT_DAYS = [
   { id: 1, name: 'Montag' },
@@ -25,4 +36,6 @@ export const DEFAULT_DAYS = [
   { id: 3, name: 'Donnerstag' },
   { id: 4, name: 'Mittwoch' },
   { id: 5, name: 'Freitag' },
+  { id: 6, name: 'Samstag' },
+  { id: 7, name: 'Sonntag' }
 ];

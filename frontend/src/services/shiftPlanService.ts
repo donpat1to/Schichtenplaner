@@ -50,7 +50,20 @@ export const shiftPlanService = {
       throw new Error('Fehler beim Laden der Schichtpläne');
     }
     
-    return response.json();
+    const data = await response.json();
+    
+    // Convert snake_case to camelCase
+    return data.map((plan: any) => ({
+      id: plan.id,
+      name: plan.name,
+      startDate: plan.start_date, // Convert here
+      endDate: plan.end_date,     // Convert here
+      templateId: plan.template_id,
+      status: plan.status,
+      createdBy: plan.created_by,
+      createdAt: plan.created_at,
+      shifts: plan.shifts || []
+    }));
   },
 
   async getShiftPlan(id: string): Promise<ShiftPlan> {
@@ -69,7 +82,20 @@ export const shiftPlanService = {
       throw new Error('Schichtplan nicht gefunden');
     }
     
-    return response.json();
+    const data = await response.json();
+    
+    // Convert snake_case to camelCase
+    return {
+      id: data.id,
+      name: data.name,
+      startDate: data.start_date, // Convert here
+      endDate: data.end_date,     // Convert here
+      templateId: data.template_id,
+      status: data.status,
+      createdBy: data.created_by,
+      createdAt: data.created_at,
+      shifts: data.shifts || []
+    };
   },
 
   async createShiftPlan(plan: CreateShiftPlanRequest): Promise<ShiftPlan> {
@@ -129,6 +155,61 @@ export const shiftPlanService = {
         throw new Error('Nicht authorisiert - bitte erneut anmelden');
       }
       throw new Error('Fehler beim Löschen des Schichtplans');
+    }
+  },
+
+  async updateShiftPlanShift(planId: string, shift: ShiftPlanShift): Promise<void> {
+    const response = await fetch(`${API_BASE}/${planId}/shifts/${shift.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authService.getAuthHeaders()
+      },
+      body: JSON.stringify(shift)
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        authService.logout();
+        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+      }
+      throw new Error('Fehler beim Aktualisieren der Schicht');
+    }
+  },
+
+  async addShiftPlanShift(planId: string, shift: Omit<ShiftPlanShift, 'id' | 'shiftPlanId' | 'assignedEmployees'>): Promise<void> {
+    const response = await fetch(`${API_BASE}/${planId}/shifts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authService.getAuthHeaders()
+      },
+      body: JSON.stringify(shift)
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        authService.logout();
+        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+      }
+      throw new Error('Fehler beim Hinzufügen der Schicht');
+    }
+  },
+
+  async deleteShiftPlanShift(planId: string, shiftId: string): Promise<void> {
+    const response = await fetch(`${API_BASE}/${planId}/shifts/${shiftId}`, {
+      method: 'DELETE',
+      headers: {
+        ...authService.getAuthHeaders()
+      }
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        authService.logout();
+        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+      }
+      throw new Error('Fehler beim Löschen der Schicht');
     }
   }
 };

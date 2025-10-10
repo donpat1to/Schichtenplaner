@@ -1,11 +1,11 @@
 // frontend/src/services/shiftTemplateService.ts
-import { ShiftTemplate, TemplateShift } from '../types/shiftTemplate';
+import { TemplateShift } from '../types/shiftTemplate';
 import { authService } from './authService';
 
-const API_BASE = 'http://localhost:3002/api/shift-templates';
+const API_BASE = 'http://localhost:3001/api/shift-templates';
 
 export const shiftTemplateService = {
-  async getTemplates(): Promise<ShiftTemplate[]> {
+  async getTemplates(): Promise<TemplateShift[]> {
     const response = await fetch(API_BASE, {
       headers: {
         'Content-Type': 'application/json',
@@ -23,14 +23,14 @@ export const shiftTemplateService = {
     
     const templates = await response.json();
     // Sortiere die Vorlagen so, dass die Standard-Vorlage immer zuerst kommt
-    return templates.sort((a: ShiftTemplate, b: ShiftTemplate) => {
+    return templates.sort((a: TemplateShift, b: TemplateShift) => {
       if (a.isDefault && !b.isDefault) return -1;
       if (!a.isDefault && b.isDefault) return 1;
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
   },
 
-  async getTemplate(id: string): Promise<ShiftTemplate> {
+  async getTemplate(id: string): Promise<TemplateShift> {
     const response = await fetch(`${API_BASE}/${id}`, {
       headers: {
         'Content-Type': 'application/json',
@@ -49,7 +49,7 @@ export const shiftTemplateService = {
     return response.json();
   },
 
-  async createTemplate(template: Omit<ShiftTemplate, 'id' | 'createdAt' | 'createdBy'>): Promise<ShiftTemplate> {
+  async createTemplate(template: Omit<TemplateShift, 'id' | 'createdAt' | 'createdBy'>): Promise<TemplateShift> {
     // Wenn diese Vorlage als Standard markiert ist,
     // fragen wir den Benutzer, ob er wirklich die Standard-Vorlage ändern möchte
     if (template.isDefault) {
@@ -81,7 +81,7 @@ export const shiftTemplateService = {
     return response.json();
   },
 
-  async updateTemplate(id: string, template: Partial<ShiftTemplate>): Promise<ShiftTemplate> {
+  async updateTemplate(id: string, template: Partial<TemplateShift>): Promise<TemplateShift> {
     const response = await fetch(`${API_BASE}/${id}`, {
       method: 'PUT',
       headers: {

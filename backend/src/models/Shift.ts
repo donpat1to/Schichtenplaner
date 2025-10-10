@@ -1,17 +1,37 @@
 // backend/src/models/Shift.ts
-export interface ShiftTemplate {
+export interface Shift {
   id: string;
   name: string;
-  shifts: TemplateShift[];
+  description?: string;
+  isDefault: boolean;
   createdBy: string;
+  createdAt: string;
+  shifts: ShiftSlot[];
 }
 
-export interface TemplateShift {
-  dayOfWeek: number; // 0-6
+export interface ShiftSlot {
+  id: string;
+  shiftId: string;
+  dayOfWeek: number;
   name: string;
-  startTime: string; // "08:00"
-  endTime: string;   // "12:00"
+  startTime: string;
+  endTime: string;
   requiredEmployees: number;
+  color?: string;
+}
+
+export interface CreateShiftRequest {
+  name: string;
+  description?: string;
+  isDefault: boolean;
+  shifts: Omit<ShiftSlot, 'id' | 'shiftId'>[];
+}
+
+export interface UpdateShiftSlotRequest {
+  name?: string;
+  description?: string;
+  isDefault?: boolean;
+  shifts?: Omit<ShiftSlot, 'id' | 'shiftId'>[];
 }
 
 export interface ShiftPlan {

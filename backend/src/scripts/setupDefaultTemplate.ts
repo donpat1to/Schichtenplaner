@@ -55,7 +55,7 @@ export async function setupDefaultTemplate(): Promise<void> {
       console.log('Standard-Vorlage erstellt:', templateId);
 
       // Vormittagsschicht Mo-Do
-      for (let day = 1; day <= 4; day++) {
+      for (let day = 1; day <= 5; day++) {
         await db.run(
           `INSERT INTO template_shifts (id, template_id, day_of_week, name, start_time, end_time, required_employees) 
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -63,7 +63,7 @@ export async function setupDefaultTemplate(): Promise<void> {
         );
       }
 
-      console.log('Vormittagsschichten Mo-Do erstellt');
+      console.log('Vormittagsschichten Mo-Fr erstellt');
 
       // Nachmittagsschicht Mo-Do
       for (let day = 1; day <= 4; day++) {
@@ -75,15 +75,6 @@ export async function setupDefaultTemplate(): Promise<void> {
       }
 
       console.log('Nachmittagsschichten Mo-Do erstellt');
-
-      // Freitag nur Vormittagsschicht
-      await db.run(
-        `INSERT INTO template_shifts (id, template_id, day_of_week, name, start_time, end_time, required_employees) 
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [uuidv4(), templateId, 5, 'Vormittagsschicht', '08:00', '12:00', 1]
-      );
-
-      console.log('Freitag Vormittagsschicht erstellt');
 
       await db.run('COMMIT');
       console.log('Standard-Vorlage erfolgreich initialisiert');

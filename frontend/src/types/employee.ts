@@ -35,4 +35,5 @@ export interface Availability {
   startTime: string;
   endTime: string;
   isAvailable: boolean;
+  availabilityLevel: 1 | 2 | 3; // 1: bevorzugt, 2: möglich, 3: nicht möglich
 }
