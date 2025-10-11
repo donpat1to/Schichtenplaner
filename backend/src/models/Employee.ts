@@ -3,9 +3,10 @@ export interface Employee {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'instandhalter' | 'user';
-  employeeType: 'chef' | 'neuling' | 'erfahren';
-  isSufficientlyIndependent: boolean;
+  role: 'admin' | 'maintenance' | 'user';
+  employeeType: 'manager' | 'trainee' | 'experienced';
+  contractType: 'small' | 'large';
+  canWorkAlone: boolean;
   isActive: boolean;
   createdAt: string;
   lastLogin?: string | null;
@@ -15,19 +16,60 @@ export interface CreateEmployeeRequest {
   email: string;
   password: string;
   name: string;
-  role: 'admin' | 'instandhalter' | 'user';
-  employeeType: 'chef' | 'neuling' | 'erfahren';
-  isSufficientlyIndependent: boolean;
+  role: 'admin' | 'maintenance' | 'user';
+  employeeType: 'manager' | 'trainee' | 'experienced';
+  contractType: 'small' | 'large';
+  canWorkAlone: boolean;
 }
 
 export interface UpdateEmployeeRequest {
   name?: string;
-  role?: 'admin' | 'instandhalter' | 'user';
-  employeeType?: 'chef' | 'neuling' | 'erfahren';
-  isSufficientlyIndependent?: boolean;
+  role?: 'admin' | 'maintenance' | 'user';
+  employeeType?: 'manager' | 'trainee' | 'experienced';
+  contractType?: 'small' | 'large';
+  canWorkAlone?: boolean;
   isActive?: boolean;
 }
 
 export interface EmployeeWithPassword extends Employee {
   password: string;
+}
+
+export interface EmployeeAvailability {
+  id: string;
+  employeeId: string;
+  planId: string;
+  dayOfWeek: number; // 1=Monday, 7=Sunday
+  timeSlotId: string;
+  preferenceLevel: 1 | 2 | 3; // 1:preferred, 2:available, 3:unavailable
+  notes?: string;
+}
+
+export interface ManagerAvailability {
+  id: string;
+  employeeId: string;
+  planId: string;
+  dayOfWeek: number; // 1=Monday, 7=Sunday
+  timeSlotId: string;
+  isAvailable: boolean; // Simple available/not available
+  assignedBy: string; // Always self for manager
+}
+
+export interface CreateAvailabilityRequest {
+  planId: string;
+  availabilities: Omit<EmployeeAvailability, 'id' | 'employeeId'>[];
+}
+
+export interface UpdateAvailabilityRequest {
+  planId: string;
+  availabilities: Omit<EmployeeAvailability, 'id' | 'employeeId'>[];
+}
+
+export interface ManagerSelfAssignmentRequest {
+  planId: string;
+  assignments: Omit<ManagerAvailability, 'id' | 'employeeId' | 'assignedBy'>[];
+}
+
+export interface EmployeeWithAvailabilities extends Employee {
+  availabilities: EmployeeAvailability[];
 }

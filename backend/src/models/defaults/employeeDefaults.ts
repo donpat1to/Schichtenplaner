@@ -1,0 +1,85 @@
+// backend/src/models/defaults/employeeDefaults.ts
+import { EmployeeAvailability, ManagerAvailability } from '../Employee.js';
+
+// Default employee data for quick creation
+export const EMPLOYEE_DEFAULTS = {
+  role: 'user' as const,
+  employeeType: 'experienced' as const,
+  contractType: 'small' as const,
+  canWorkAlone: false,
+  isActive: true
+};
+
+// Manager-specific defaults
+export const MANAGER_DEFAULTS = {
+  role: 'admin' as const,
+  employeeType: 'manager' as const,
+  contractType: 'large' as const, // Not really used but required by DB
+  canWorkAlone: true,
+  isActive: true
+};
+
+// Contract type descriptions
+export const CONTRACT_TYPE_DESCRIPTIONS = {
+  small: '1 Schicht pro Woche',
+  large: '2 Schichten pro Woche',
+  manager: 'Kein Vertragslimit - Immer MO und DI verfügbar'
+} as const;
+
+// Employee type descriptions
+export const EMPLOYEE_TYPE_DESCRIPTIONS = {
+  manager: 'Chef - Immer MO und DI in beiden Schichten, kann eigene Schichten festlegen',
+  trainee: 'Neuling - Darf nicht alleine sein, benötigt erfahrene Begleitung',
+  experienced: 'Erfahren - Kann alleine arbeiten (wenn freigegeben)'
+} as const;
+
+// Availability preference descriptions
+export const AVAILABILITY_PREFERENCES = {
+  1: { label: 'Bevorzugt', color: '#10b981', description: 'Möchte diese Schicht arbeiten' },
+  2: { label: 'Möglich', color: '#f59e0b', description: 'Kann diese Schicht arbeiten' },
+  3: { label: 'Nicht möglich', color: '#ef4444', description: 'Kann diese Schicht nicht arbeiten' }
+} as const;
+
+// Default availability for new employees (all shifts unavailable as level 3)
+export function createDefaultAvailabilities(employeeId: string, planId: string, timeSlotIds: string[]): Omit<EmployeeAvailability, 'id'>[] {
+  const availabilities: Omit<EmployeeAvailability, 'id'>[] = [];
+  
+  // Monday to Friday (1-5)
+  for (let day = 1; day <= 5; day++) {
+    for (const timeSlotId of timeSlotIds) {
+      availabilities.push({
+        employeeId,
+        planId,
+        dayOfWeek: day,
+        timeSlotId,
+        preferenceLevel: 3 // Default to "unavailable" - employees must explicitly set availability
+      });
+    }
+  }
+  
+  return availabilities;
+}
+
+// Create complete manager availability for all days (default: only Mon-Tue available)
+export function createManagerDefaultSchedule(managerId: string, planId: string, timeSlotIds: string[]): Omit<ManagerAvailability, 'id'>[] {
+  const assignments: Omit<ManagerAvailability, 'id'>[] = [];
+  
+  // Monday to Sunday (1-7)
+  for (let dayOfWeek = 1; dayOfWeek <= 7; dayOfWeek++) {
+    for (const timeSlotId of timeSlotIds) {
+      // Default: available only on Monday (1) and Tuesday (2)
+      const isAvailable = dayOfWeek === 1 || dayOfWeek === 2;
+      
+      assignments.push({
+        employeeId: managerId,
+        planId,
+        dayOfWeek,
+        timeSlotId,
+        isAvailable,
+        assignedBy: managerId
+      });
+    }
+  }
+  
+  return assignments;
+}

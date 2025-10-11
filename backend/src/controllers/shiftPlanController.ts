@@ -3,34 +3,7 @@ import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../services/databaseService.js';
 import { AuthRequest } from '../middleware/auth.js';
-
-export interface ShiftPlan {
-  id: string;
-  name: string;
-  startDate: string;
-  endDate: string;
-  templateId?: string;
-  status: 'draft' | 'published';
-  createdBy: string;
-  createdAt: string;
-}
-
-export interface AssignedShift {
-  id: string;
-  shiftPlanId: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-  requiredEmployees: number;
-  assignedEmployees: string[];
-}
-
-export interface CreateShiftPlanRequest {
-  name: string;
-  startDate: string;
-  endDate: string;
-  templateId?: string;
-}
+import { ShiftPlan, CreateShiftPlanRequest } from '../models/ShiftPlan.js';
 
 export const getShiftPlans = async (req: AuthRequest, res: Response): Promise<void> => {
   try {

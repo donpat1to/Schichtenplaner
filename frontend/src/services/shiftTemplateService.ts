@@ -1,11 +1,11 @@
 // frontend/src/services/shiftTemplateService.ts
-import { TemplateShift } from '../types/shiftTemplate';
+import { ShiftPlan } from '../../../backend/src/models/shiftTemplate.js';
 import { authService } from './authService';
 
 const API_BASE = 'http://localhost:3002/api/shift-templates';
 
 export const shiftTemplateService = {
-  async getTemplates(): Promise<TemplateShift[]> {
+  async getTemplates(): Promise<ShiftPlan[]> {
     const response = await fetch(API_BASE, {
       headers: {
         'Content-Type': 'application/json',

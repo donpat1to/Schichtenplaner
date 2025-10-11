@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { shiftPlanService, ShiftPlan } from '../../services/shiftPlanService';
+import { shiftPlanService } from '../../services/shiftPlanService';
+import { ShiftPlan, Shift, TimeSlot } from '../../../../backend/src/models/shiftPlan.js';
 import { useNotification } from '../../contexts/NotificationContext';
 
 const ShiftPlanView: React.FC = () => {
@@ -63,7 +64,7 @@ const ShiftPlanView: React.FC = () => {
     // Get all unique shift types (name + time combination)
     const shiftTypes = Array.from(new Set(
       shiftPlan.shifts.map(shift => 
-        `${shift.name}|${shift.startTime}|${shift.endTime}`
+        `${shift.timeSlot.name}|${shift.timeSlot.startTime}|${shift.timeSlot.endTime}`
       )
     )).map(shiftKey => {
       const [name, startTime, endTime] = shiftKey.split('|');
@@ -83,15 +84,15 @@ const ShiftPlanView: React.FC = () => {
           const date = new Date(shift.date);
           const dayOfWeek = date.getDay() === 0 ? 7 : date.getDay(); // Convert to 1-7 (Mon-Sun)
           return dayOfWeek === weekday && 
-                 shift.name === shiftType.name &&
-                 shift.startTime === shiftType.startTime &&
-                 shift.endTime === shiftType.endTime;
+                 shift.timeSlot.name === shiftType.name &&
+                 shift.timeSlot.startTime === shiftType.startTime &&
+                 shift.timeSlot.endTime === shiftType.endTime;
         });
 
         if (shiftsOnDay.length === 0) {
           weekdayData[weekday] = '';
         } else {
-          const totalAssigned = shiftsOnDay.reduce((sum, shift) => sum + shift.assignedEmployees.length, 0);
+          const totalAssigned = shiftsOnDay.reduce((sum, shift) => sum + shift.timeSlot.assignedEmployees.length, 0);
           const totalRequired = shiftsOnDay.reduce((sum, shift) => sum + shift.requiredEmployees, 0);
           weekdayData[weekday] = `${totalAssigned}/${totalRequired}`;
         }

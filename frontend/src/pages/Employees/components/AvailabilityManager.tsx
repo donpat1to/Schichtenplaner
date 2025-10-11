@@ -1,8 +1,11 @@
-// frontend/src/pages/Employees/components/AvailabilityManager.tsx
+// frontend/src/pages/Employees/components/AvailabilityManager.tsx - KORRIGIERT
 import React, { useState, useEffect } from 'react';
-import { Employee, Availability } from '../../../types/employee';
+import { Employee, Availability } from '../../../../../backend/src/models/employee';
 import { employeeService } from '../../../services/employeeService';
-import { shiftPlanService, ShiftPlan, ShiftPlanShift } from '../../../services/shiftPlanService';
+import { shiftPlanService } from '../../../services/shiftPlanService';
+import { ShiftPlan, TimeSlot } from '../../../../../backend/src/models/shiftPlan';
+import { shiftTemplateService } from '../../../services/shiftTemplateService';
+import { time } from 'console';
 
 interface AvailabilityManagerProps {
   employee: Employee;
@@ -11,7 +14,17 @@ interface AvailabilityManagerProps {
 }
 
 // Verfügbarkeits-Level
-export type AvailabilityLevel = 1 | 2 | 3; // 1: bevorzugt, 2: möglich, 3: nicht möglich
+export type AvailabilityLevel = 1 | 2 | 3;
+
+// Interface für Zeit-Slots
+interface TimeSlot {
+  id: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  displayName: string;
+  source: string;
+}
 
 const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
   employee,
@@ -22,6 +35,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
   const [shiftPlans, setShiftPlans] = useState<ShiftPlan[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState<string>('');
   const [selectedPlan, setSelectedPlan] = useState<ShiftPlan | null>(null);
+  const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -36,7 +50,6 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
     { id: 0, name: 'Sonntag' }
   ];
 
-  // Verfügbarkeits-Level mit Farben und Beschreibungen
   const availabilityLevels = [
     { level: 1 as AvailabilityLevel, label: 'Bevorzugt', color: '#27ae60', bgColor: '#d5f4e6', description: 'Ideale Zeit' },
     { level: 2 as AvailabilityLevel, label: 'Möglich', color: '#f39c12', bgColor: '#fef5e7', description: 'Akzeptable Zeit' },
@@ -53,60 +66,191 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
     }
   }, [selectedPlanId]);
 
+  // NEU: Hole Zeit-Slots aus Schichtvorlagen als Hauptquelle
+  const loadTimeSlotsFromTemplates = async (): Promise<TimeSlot[]> => {
+    try {
+      console.log('🔄 LADE ZEIT-SLOTS AUS SCHICHTVORLAGEN...');
+      const shiftPlan = await shiftPlanService.getShiftPlans();
+      console.log('✅ SCHICHTVORLAGEN GELADEN:', shiftPlan);
+
+      const allTimeSlots = new Map<string, TimeSlot>();
+
+      shiftPlan.forEach(plan => {
+        console.log(`📋 VORLAGE: ${plan.name}`, plan);
+
+        // Extrahiere Zeit-Slots aus den Schicht-Zeitbereichen
+        if (plan.shifts && plan.shifts.length > 0) {
+          plan.shifts.forEach(shift => {
+            const key = `${shift.timeSlot.startTime}-${shift.timeSlot.endTime}`;
+            if (!allTimeSlots.has(key)) {
+              allTimeSlots.set(key, {
+                id: shift.id || `slot-${shift.timeSlot.startTime.replace(/:/g, '')}-${shift.timeSlot.endTime.replace(/:/g, '')}`,
+                name: shift.timeSlot.name || 'Schicht',
+                startTime: shift.timeSlot.startTime,
+                endTime: shift.timeSlot.endTime,
+                displayName: `${shift.timeSlot.name || 'Schicht'} (${formatTime(shift.timeSlot.startTime)}-${formatTime(shift.timeSlot.endTime)})`,
+                source: `Vorlage: ${plan.name}`
+              });
+            }
+          });
+        }
+      });
+
+      const result = Array.from(allTimeSlots.values()).sort((a, b) => 
+        a.startTime.localeCompare(b.startTime)
+      );
+
+      console.log('✅ ZEIT-SLOTS AUS VORLAGEN:', result);
+      return result;
+    } catch (error) {
+      console.error('❌ FEHLER BEIM LADEN DER VORLAGEN:', error);
+      return getDefaultTimeSlots();
+    }
+  };
+
+  // NEU: Alternative Methode - Extrahiere aus Schichtplänen
+  const extractTimeSlotsFromPlans = (plans: ShiftPlan[]): TimeSlot[] => {
+    console.log('🔄 EXTRAHIERE ZEIT-SLOTS AUS SCHICHTPLÄNEN:', plans);
+    
+    const allTimeSlots = new Map<string, TimeSlot>();
+    
+    plans.forEach(plan => {
+      console.log(`📋 ANALYSIERE PLAN: ${plan.name}`, {
+        id: plan.id,
+        shifts: plan.shifts
+      });
+
+      // Prüfe ob Schichten existieren und ein Array sind
+      if (plan.shifts && Array.isArray(plan.shifts)) {
+        plan.shifts.forEach(shift => {
+          console.log(`   🔍 SCHICHT:`, shift);
+
+          if (shift.timeSlot.startTime && shift.timeSlot.endTime) {
+            const key = `${shift.timeSlot.startTime}-${shift.timeSlot.endTime}`;
+            if (!allTimeSlots.has(key)) {
+              allTimeSlots.set(key, {
+                id: `slot-${shift.timeSlot.startTime.replace(/:/g, '')}-${shift.timeSlot.endTime.replace(/:/g, '')}`,
+                name: shift.timeSlot.name || 'Schicht',
+                startTime: shift.timeSlot.startTime,
+                endTime: shift.timeSlot.endTime,
+                displayName: `${shift.timeSlot.name || 'Schicht'} (${formatTime(shift.timeSlot.startTime)}-${formatTime(shift.timeSlot.endTime)})`,
+                source: `Plan: ${plan.name}`
+              });
+            }
+          }
+        });
+      } else {
+        console.log(`   ❌ KEINE SCHICHTEN IN PLAN ${plan.name} oder keine Array-Struktur`);
+      }
+    });
+
+    const result = Array.from(allTimeSlots.values()).sort((a, b) => 
+      a.startTime.localeCompare(b.startTime)
+    );
+
+    console.log('✅ ZEIT-SLOTS AUS PLÄNEN:', result);
+    return result;
+  };
+
+  const getDefaultTimeSlots = (): TimeSlot[] => {
+    console.log('⚠️ VERWENDE STANDARD-ZEIT-SLOTS');
+    return [
+      {
+        id: 'slot-0800-1200',
+        name: 'Vormittag',
+        startTime: '08:00',
+        endTime: '12:00',
+        displayName: 'Vormittag (08:00-12:00)',
+        source: 'Standard'
+      },
+      {
+        id: 'slot-1200-1600',
+        name: 'Nachmittag',
+        startTime: '12:00',
+        endTime: '16:00',
+        displayName: 'Nachmittag (12:00-16:00)',
+        source: 'Standard'
+      },
+      {
+        id: 'slot-1600-2000',
+        name: 'Abend',
+        startTime: '16:00',
+        endTime: '20:00',
+        displayName: 'Abend (16:00-20:00)',
+        source: 'Standard'
+      }
+    ];
+  };
+
+  const formatTime = (time: string): string => {
+    return time.substring(0, 5);
+  };
+
   const loadData = async () => {
     try {
       setLoading(true);
+      console.log('🔄 LADE DATEN FÜR MITARBEITER:', employee.id);
       
-      // Load availabilities
+      // 1. Lade Verfügbarkeiten
+      let existingAvailabilities: Availability[] = [];
       try {
-        const availData = await employeeService.getAvailabilities(employee.id);
-        setAvailabilities(availData);
+        existingAvailabilities = await employeeService.getAvailabilities(employee.id);
+        console.log('✅ VERFÜGBARKEITEN GELADEN:', existingAvailabilities.length);
       } catch (err) {
-        // Falls keine Verfügbarkeiten existieren, erstelle Standard-Einträge (Level 3: nicht möglich)
-        const defaultAvailabilities: Availability[] = daysOfWeek.flatMap(day => [
-          {
-            id: `temp-${day.id}-morning`,
-            employeeId: employee.id,
-            dayOfWeek: day.id,
-            startTime: '08:00',
-            endTime: '12:00',
-            isAvailable: false,
-            availabilityLevel: 3 as AvailabilityLevel
-          },
-          {
-            id: `temp-${day.id}-afternoon`,
-            employeeId: employee.id,
-            dayOfWeek: day.id,
-            startTime: '12:00',
-            endTime: '16:00',
-            isAvailable: false,
-            availabilityLevel: 3 as AvailabilityLevel
-          },
-          {
-            id: `temp-${day.id}-evening`,
-            employeeId: employee.id,
-            dayOfWeek: day.id,
-            startTime: '16:00',
-            endTime: '20:00',
-            isAvailable: false,
-            availabilityLevel: 3 as AvailabilityLevel
-          }
-        ]);
-        setAvailabilities(defaultAvailabilities);
+        console.log('⚠️ KEINE VERFÜGBARKEITEN GEFUNDEN');
       }
 
-      // Load shift plans
+      // 2. Lade Schichtpläne
+      console.log('🔄 LADE SCHICHTPLÄNE...');
       const plans = await shiftPlanService.getShiftPlans();
+      console.log('✅ SCHICHTPLÄNE GELADEN:', plans.length, plans);
+
+      // 3. VERSUCH 1: Lade Zeit-Slots aus Schichtvorlagen (bessere Quelle)
+      let extractedTimeSlots = await loadTimeSlotsFromTemplates();
+      
+      // VERSUCH 2: Falls keine Zeit-Slots aus Vorlagen, versuche es mit Schichtplänen
+      if (extractedTimeSlots.length === 0) {
+        console.log('⚠️ KEINE ZEIT-SLOTS AUS VORLAGEN, VERSUCHE SCHICHTPLÄNE...');
+        extractedTimeSlots = extractTimeSlotsFromPlans(plans);
+      }
+
+      // VERSUCH 3: Falls immer noch keine, verwende Standard-Slots
+      if (extractedTimeSlots.length === 0) {
+        console.log('⚠️ KEINE ZEIT-SLOTS GEFUNDEN, VERWENDE STANDARD-SLOTS');
+        extractedTimeSlots = getDefaultTimeSlots();
+      }
+
+      setTimeSlots(extractedTimeSlots);
       setShiftPlans(plans);
 
-      // Auto-select the first published plan or the first draft
+      // 4. Erstelle Standard-Verfügbarkeiten falls nötig
+      if (existingAvailabilities.length === 0) {
+        const defaultAvailabilities: Availability[] = daysOfWeek.flatMap(day =>
+          extractedTimeSlots.map(slot => ({
+            id: `temp-${day.id}-${slot.id}`,
+            employeeId: employee.id,
+            dayOfWeek: day.id,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            isAvailable: false,
+            availabilityLevel: 3 as AvailabilityLevel
+          }))
+        );
+        setAvailabilities(defaultAvailabilities);
+        console.log('✅ STANDARD-VERFÜGBARKEITEN ERSTELLT:', defaultAvailabilities.length);
+      } else {
+        setAvailabilities(existingAvailabilities);
+      }
+
+      // 5. Wähle ersten Plan aus
       if (plans.length > 0) {
         const publishedPlan = plans.find(plan => plan.status === 'published');
         const firstPlan = publishedPlan || plans[0];
         setSelectedPlanId(firstPlan.id);
+        console.log('✅ SCHICHTPLAN AUSGEWÄHLT:', firstPlan.name);
       }
     } catch (err: any) {
-      console.error('Error loading data:', err);
+      console.error('❌ FEHLER BEIM LADEN DER DATEN:', err);
       setError('Daten konnten nicht geladen werden');
     } finally {
       setLoading(false);
@@ -115,33 +259,82 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
 
   const loadSelectedPlan = async () => {
     try {
+      console.log('🔄 LADE AUSGEWÄHLTEN SCHICHTPLAN:', selectedPlanId);
       const plan = await shiftPlanService.getShiftPlan(selectedPlanId);
       setSelectedPlan(plan);
+      console.log('✅ SCHICHTPLAN GELADEN:', {
+        name: plan.name,
+        shiftsCount: plan.shifts?.length || 0,
+        shifts: plan.shifts
+      });
     } catch (err: any) {
-      console.error('Error loading shift plan:', err);
+      console.error('❌ FEHLER BEIM LADEN DES SCHICHTPLANS:', err);
       setError('Schichtplan konnte nicht geladen werden');
     }
   };
 
-  const handleAvailabilityLevelChange = (dayId: number, timeSlot: string, level: AvailabilityLevel) => {
-    setAvailabilities(prev =>
-      prev.map(avail =>
-        avail.dayOfWeek === dayId && getTimeSlotName(avail.startTime, avail.endTime) === timeSlot
-          ? { 
-              ...avail, 
-              availabilityLevel: level,
-              isAvailable: level !== 3
-            }
-          : avail
-      )
-    );
+  const handleAvailabilityLevelChange = (dayId: number, timeSlotId: string, level: AvailabilityLevel) => {
+    console.log(`🔄 ÄNDERE VERFÜGBARKEIT: Tag ${dayId}, Slot ${timeSlotId}, Level ${level}`);
+    
+    setAvailabilities(prev => {
+      const timeSlot = timeSlots.find(s => s.id === timeSlotId);
+      if (!timeSlot) {
+        console.log('❌ ZEIT-SLOT NICHT GEFUNDEN:', timeSlotId);
+        return prev;
+      }
+
+      const existingIndex = prev.findIndex(avail => 
+        avail.dayOfWeek === dayId && 
+        avail.startTime === timeSlot.startTime && 
+        avail.endTime === timeSlot.endTime
+      );
+
+      console.log(`🔍 EXISTIERENDE VERFÜGBARKEIT GEFUNDEN AN INDEX:`, existingIndex);
+
+      if (existingIndex >= 0) {
+        // Update existing availability
+        const updated = [...prev];
+        updated[existingIndex] = {
+          ...updated[existingIndex],
+          availabilityLevel: level,
+          isAvailable: level !== 3
+        };
+        console.log('✅ VERFÜGBARKEIT AKTUALISIERT:', updated[existingIndex]);
+        return updated;
+      } else {
+        // Create new availability
+        const newAvailability: Availability = {
+          id: `temp-${dayId}-${timeSlotId}-${Date.now()}`,
+          employeeId: employee.id,
+          dayOfWeek: dayId,
+          startTime: timeSlot.startTime,
+          endTime: timeSlot.endTime,
+          isAvailable: level !== 3,
+          availabilityLevel: level
+        };
+        console.log('🆕 NEUE VERFÜGBARKEIT ERSTELLT:', newAvailability);
+        return [...prev, newAvailability];
+      }
+    });
   };
 
-  const getTimeSlotName = (startTime: string, endTime: string): string => {
-    if (startTime === '08:00' && endTime === '12:00') return 'Vormittag';
-    if (startTime === '12:00' && endTime === '16:00') return 'Nachmittag';
-    if (startTime === '16:00' && endTime === '20:00') return 'Abend';
-    return `${startTime}-${endTime}`;
+  const getAvailabilityForDayAndSlot = (dayId: number, timeSlotId: string): AvailabilityLevel => {
+    const timeSlot = timeSlots.find(s => s.id === timeSlotId);
+    if (!timeSlot) {
+      console.log('❌ ZEIT-SLOT NICHT GEFUNDEN FÜR ABFRAGE:', timeSlotId);
+      return 3;
+    }
+
+    const availability = availabilities.find(avail => 
+      avail.dayOfWeek === dayId && 
+      avail.startTime === timeSlot.startTime && 
+      avail.endTime === timeSlot.endTime
+    );
+
+    const result = availability?.availabilityLevel || 3;
+    console.log(`🔍 ABFRAGE VERFÜGBARKEIT: Tag ${dayId}, Slot ${timeSlotId} = Level ${result}`);
+    
+    return result;
   };
 
   const handleSave = async () => {
@@ -150,99 +343,19 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       setError('');
       
       await employeeService.updateAvailabilities(employee.id, availabilities);
+      console.log('✅ VERFÜGBARKEITEN ERFOLGREICH GESPEICHERT');
+      
       onSave();
     } catch (err: any) {
+      console.error('❌ FEHLER BEIM SPEICHERN:', err);
       setError(err.message || 'Fehler beim Speichern der Verfügbarkeiten');
     } finally {
       setSaving(false);
     }
   };
 
-  // Get availability level for a specific shift
-  const getAvailabilityForShift = (shift: ShiftPlanShift): AvailabilityLevel => {
-    const shiftDate = new Date(shift.date);
-    const dayOfWeek = shiftDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
-    
-    // Find matching availability for this day and time
-    const matchingAvailabilities = availabilities.filter(avail => 
-      avail.dayOfWeek === dayOfWeek &&
-      avail.availabilityLevel !== 3 && // Nur Level 1 und 2 berücksichtigen
-      isTimeOverlap(avail.startTime, avail.endTime, shift.startTime, shift.endTime)
-    );
-    
-    if (matchingAvailabilities.length === 0) {
-      return 3; // Nicht möglich, wenn keine Übereinstimmung
-    }
-    
-    // Nehme das beste (niedrigste) Verfügbarkeits-Level
-    const minLevel = Math.min(...matchingAvailabilities.map(avail => avail.availabilityLevel));
-    return minLevel as AvailabilityLevel;
-  };
-
-  // Helper function to check time overlap
-  const isTimeOverlap = (availStart: string, availEnd: string, shiftStart: string, shiftEnd: string): boolean => {
-    const availStartMinutes = timeToMinutes(availStart);
-    const availEndMinutes = timeToMinutes(availEnd);
-    const shiftStartMinutes = timeToMinutes(shiftStart);
-    const shiftEndMinutes = timeToMinutes(shiftEnd);
-    
-    return shiftStartMinutes < availEndMinutes && shiftEndMinutes > availStartMinutes;
-  };
-
-  const timeToMinutes = (time: string): number => {
-    const [hours, minutes] = time.split(':').map(Number);
-    return hours * 60 + minutes;
-  };
-
-  // Group shifts by weekday for timetable display
-  const getTimetableData = () => {
-    if (!selectedPlan) return { shiftsByDay: {}, weekdays: [] };
-
-    const shiftsByDay: Record<number, ShiftPlanShift[]> = {};
-    
-    // Initialize empty arrays for each day
-    daysOfWeek.forEach(day => {
-      shiftsByDay[day.id] = [];
-    });
-
-    // Group shifts by weekday
-    selectedPlan.shifts.forEach(shift => {
-      const shiftDate = new Date(shift.date);
-      const dayOfWeek = shiftDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
-      shiftsByDay[dayOfWeek].push(shift);
-    });
-
-    // Remove duplicate shifts (same name and time on same day)
-    Object.keys(shiftsByDay).forEach(day => {
-      const dayNum = parseInt(day);
-      const uniqueShifts: ShiftPlanShift[] = [];
-      const seen = new Set();
-      
-      shiftsByDay[dayNum].forEach(shift => {
-        const key = `${shift.name}|${shift.startTime}|${shift.endTime}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          uniqueShifts.push(shift);
-        }
-      });
-      
-      shiftsByDay[dayNum] = uniqueShifts;
-    });
-
-    return {
-      shiftsByDay,
-      weekdays: daysOfWeek
-    };
-  };
-
-  const timetableData = getTimetableData();
-
-  // Get availability for a specific day and time slot
-  const getAvailabilityForDayAndSlot = (dayId: number, timeSlot: string): AvailabilityLevel => {
-    const availability = availabilities.find(avail => 
-      avail.dayOfWeek === dayId && getTimeSlotName(avail.startTime, avail.endTime) === timeSlot
-    );
-    return availability?.availabilityLevel || 3;
+  const getTimeSlotsForTimetable = (): TimeSlot[] => {
+    return timeSlots;
   };
 
   if (loading) {
@@ -253,9 +366,11 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
     );
   }
 
+  const timetableTimeSlots = getTimeSlotsForTimetable();
+
   return (
     <div style={{
-      maxWidth: '1200px',
+      maxWidth: '1400px',
       margin: '0 auto',
       backgroundColor: 'white',
       padding: '30px',
@@ -272,12 +387,45 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         📅 Verfügbarkeit verwalten
       </h2>
 
+      {/* Debug-Info */}
+      <div style={{
+        backgroundColor: timeSlots.length === 0 ? '#f8d7da' : '#d1ecf1',
+        border: `1px solid ${timeSlots.length === 0 ? '#f5c6cb' : '#bee5eb'}`,
+        borderRadius: '6px',
+        padding: '15px',
+        marginBottom: '20px'
+      }}>
+        <h4 style={{ 
+          margin: '0 0 10px 0', 
+          color: timeSlots.length === 0 ? '#721c24' : '#0c5460' 
+        }}>
+          {timeSlots.length === 0 ? '❌ PROBLEM: Keine Zeit-Slots gefunden' : '✅ Zeit-Slots geladen'}
+        </h4>
+        <div style={{ fontSize: '12px', fontFamily: 'monospace' }}>
+          <div><strong>Zeit-Slots gefunden:</strong> {timeSlots.length}</div>
+          <div><strong>Quelle:</strong> {timeSlots[0]?.source || 'Unbekannt'}</div>
+          <div><strong>Schichtpläne:</strong> {shiftPlans.length}</div>
+        </div>
+        
+        {timeSlots.length > 0 && (
+          <div style={{ marginTop: '10px' }}>
+            <strong>Gefundene Zeit-Slots:</strong>
+            {timeSlots.map(slot => (
+              <div key={slot.id} style={{ fontSize: '11px', marginLeft: '10px' }}>
+                • {slot.displayName}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Rest der Komponente... */}
       <div style={{ marginBottom: '20px' }}>
         <h3 style={{ margin: '0 0 10px 0', color: '#34495e' }}>
           {employee.name}
         </h3>
         <p style={{ margin: 0, color: '#7f8c8d' }}>
-          Legen Sie die Verfügbarkeit für {employee.name} fest (1: bevorzugt, 2: möglich, 3: nicht möglich).
+          Legen Sie die Verfügbarkeit für {employee.name} fest.
         </p>
       </div>
 
@@ -361,22 +509,16 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
               <option value="">Bitte auswählen...</option>
               {shiftPlans.map(plan => (
                 <option key={plan.id} value={plan.id}>
-                  {plan.name} ({plan.status === 'published' ? 'Veröffentlicht' : 'Entwurf'})
+                  {plan.name} ({plan.shifts?.length || 0} Schichten)
                 </option>
               ))}
             </select>
           </div>
-          
-          {selectedPlan && (
-            <div style={{ fontSize: '14px', color: '#666' }}>
-              Zeitraum: {new Date(selectedPlan.startDate).toLocaleDateString('de-DE')} - {new Date(selectedPlan.endDate).toLocaleDateString('de-DE')}
-            </div>
-          )}
         </div>
       </div>
 
-      {/* Verfügbarkeits-Timetable mit Dropdown-Menüs */}
-      {selectedPlan && (
+      {/* Verfügbarkeits-Timetable */}
+      {timetableTimeSlots.length > 0 ? (
         <div style={{
           marginBottom: '30px',
           border: '1px solid #e0e0e0',
@@ -389,7 +531,10 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
             padding: '15px 20px',
             fontWeight: 'bold'
           }}>
-            Verfügbarkeit für: {selectedPlan.name}
+            Verfügbarkeit definieren
+            <div style={{ fontSize: '14px', fontWeight: 'normal', marginTop: '5px' }}>
+              {timetableTimeSlots.length} Schichttypen verfügbar
+            </div>
           </div>
 
           <div style={{ overflowX: 'auto' }}>
@@ -405,11 +550,11 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                     textAlign: 'left',
                     border: '1px solid #dee2e6',
                     fontWeight: 'bold',
-                    minWidth: '150px'
+                    minWidth: '200px'
                   }}>
-                    Zeit
+                    Schicht (Zeit)
                   </th>
-                  {timetableData.weekdays.map(weekday => (
+                  {daysOfWeek.map(weekday => (
                     <th key={weekday.id} style={{
                       padding: '12px 16px',
                       textAlign: 'center',
@@ -423,8 +568,8 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {['Vormittag', 'Nachmittag', 'Abend'].map((timeSlot, timeIndex) => (
-                  <tr key={timeSlot} style={{
+                {timetableTimeSlots.map((timeSlot, timeIndex) => (
+                  <tr key={`timeSlot-${timeSlot.id}-timeIndex-${timeIndex}`} style={{
                     backgroundColor: timeIndex % 2 === 0 ? 'white' : '#f8f9fa'
                   }}>
                     <td style={{
@@ -433,14 +578,10 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                       fontWeight: '500',
                       backgroundColor: '#f8f9fa'
                     }}>
-                      {timeSlot}
-                      <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-                        {timeSlot === 'Vormittag' ? '08:00-12:00' : 
-                         timeSlot === 'Nachmittag' ? '12:00-16:00' : '16:00-20:00'}
-                      </div>
+                      {timeSlot.displayName}
                     </td>
-                    {timetableData.weekdays.map(weekday => {
-                      const currentLevel = getAvailabilityForDayAndSlot(weekday.id, timeSlot);
+                    {daysOfWeek.map(weekday => {
+                      const currentLevel = getAvailabilityForDayAndSlot(weekday.id, timeSlot.id);
                       const levelConfig = availabilityLevels.find(l => l.level === currentLevel);
                       
                       return (
@@ -452,7 +593,10 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                         }}>
                           <select
                             value={currentLevel}
-                            onChange={(e) => handleAvailabilityLevelChange(weekday.id, timeSlot, parseInt(e.target.value) as AvailabilityLevel)}
+                            onChange={(e) => {
+                              const newLevel = parseInt(e.target.value) as AvailabilityLevel;
+                              handleAvailabilityLevelChange(weekday.id, timeSlot.id, newLevel);
+                            }}
                             style={{
                               padding: '8px 12px',
                               border: `2px solid ${levelConfig?.color || '#ddd'}`,
@@ -460,7 +604,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                               backgroundColor: levelConfig?.bgColor || 'white',
                               color: levelConfig?.color || '#333',
                               fontWeight: 'bold',
-                              minWidth: '120px',
+                              minWidth: '140px',
                               cursor: 'pointer',
                               textAlign: 'center'
                             }}
@@ -479,14 +623,6 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                               </option>
                             ))}
                           </select>
-                          <div style={{ 
-                            fontSize: '11px', 
-                            color: levelConfig?.color,
-                            marginTop: '4px',
-                            fontWeight: 'bold'
-                          }}>
-                            {levelConfig?.description}
-                          </div>
                         </td>
                       );
                     })}
@@ -495,50 +631,24 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
               </tbody>
             </table>
           </div>
-
-          {/* Legende */}
-          <div style={{
-            padding: '12px 16px',
-            backgroundColor: '#e8f4fd',
-            borderTop: '1px solid #b8d4f0',
-            fontSize: '14px',
-            color: '#2c3e50'
-          }}>
-            <strong>Legende:</strong> 
-            {availabilityLevels.map(level => (
-              <span key={level.level} style={{ marginLeft: '15px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                <div
-                  style={{
-                    width: '12px',
-                    height: '12px',
-                    backgroundColor: level.bgColor,
-                    border: `1px solid ${level.color}`,
-                    borderRadius: '2px'
-                  }}
-                />
-                <strong style={{ color: level.color }}>{level.level}</strong>: {level.label}
-              </span>
-            ))}
-          </div>
+        </div>
+      ) : (
+        <div style={{
+          padding: '40px',
+          textAlign: 'center',
+          backgroundColor: '#f8f9fa',
+          color: '#6c757d',
+          borderRadius: '8px',
+          border: '1px solid #e9ecef'
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '20px' }}>❌</div>
+          <h4>Keine Schichttypen konfiguriert</h4>
+          <p>Es wurden keine Zeit-Slots in den Schichtvorlagen oder -plänen gefunden.</p>
+          <p style={{ fontSize: '14px', marginTop: '10px' }}>
+            Bitte erstellen Sie zuerst Schichtvorlagen mit Zeit-Slots.
+          </p>
         </div>
       )}
-
-      {/* Info Text */}
-      <div style={{
-        backgroundColor: '#e8f4fd',
-        border: '1px solid #b6d7e8',
-        borderRadius: '6px',
-        padding: '15px',
-        marginBottom: '20px'
-      }}>
-        <h4 style={{ margin: '0 0 8px 0', color: '#2c3e50' }}>💡 Information</h4>
-        <p style={{ margin: 0, color: '#546e7a', fontSize: '14px' }}>
-          <strong>1: Bevorzugt</strong> - Ideale Zeit für diesen Mitarbeiter<br/>
-          <strong>2: Möglich</strong> - Akzeptable Zeit, falls benötigt<br/>
-          <strong>3: Nicht möglich</strong> - Mitarbeiter ist nicht verfügbar<br/>
-          Das System priorisiert Mitarbeiter mit Level 1 für Schichtzuweisungen.
-        </p>
-      </div>
 
       {/* Buttons */}
       <div style={{ 
@@ -564,14 +674,14 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         
         <button
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || timeSlots.length === 0}
           style={{
             padding: '12px 24px',
-            backgroundColor: saving ? '#bdc3c7' : '#3498db',
+            backgroundColor: saving ? '#bdc3c7' : (timeSlots.length === 0 ? '#95a5a6' : '#3498db'),
             color: 'white',
             border: 'none',
             borderRadius: '6px',
-            cursor: saving ? 'not-allowed' : 'pointer',
+            cursor: (saving || timeSlots.length === 0) ? 'not-allowed' : 'pointer',
             fontWeight: 'bold'
           }}
         >

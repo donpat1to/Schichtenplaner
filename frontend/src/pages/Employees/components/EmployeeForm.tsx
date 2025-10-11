@@ -1,4 +1,4 @@
-// frontend/src/pages/Employees/components/EmployeeForm.tsx - VEREINFACHT
+// frontend/src/pages/Employees/components/EmployeeForm.tsx - KORRIGIERT
 import React, { useState, useEffect } from 'react';
 import { Employee, CreateEmployeeRequest, UpdateEmployeeRequest } from '../../../types/employee';
 import { employeeService } from '../../../services/employeeService';
@@ -61,10 +61,11 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
 
   useEffect(() => {
     if (mode === 'edit' && employee) {
+      console.log('📝 Lade Mitarbeiter-Daten:', employee);
       setFormData({
         name: employee.name,
         email: employee.email,
-        password: '',
+        password: '', // Passwort wird beim Bearbeiten nicht angezeigt
         role: employee.role,
         employeeType: employee.employeeType,
         isSufficientlyIndependent: employee.isSufficientlyIndependent,
@@ -75,6 +76,8 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
+    console.log(`🔄 Feld geändert: ${name} = ${value}`);
+    
     setFormData(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
@@ -82,6 +85,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
   };
 
   const handleRoleChange = (roleValue: 'admin' | 'instandhalter' | 'user') => {
+    console.log(`🔄 Rolle geändert: ${roleValue}`);
     setFormData(prev => ({
       ...prev,
       role: roleValue
@@ -89,12 +93,16 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
   };
 
   const handleEmployeeTypeChange = (employeeType: 'chef' | 'neuling' | 'erfahren') => {
+    console.log(`🔄 Mitarbeiter-Typ geändert: ${employeeType}`);
+    
+    // Automatische Werte basierend auf Typ
+    const isSufficientlyIndependent = employeeType === 'chef' ? true : 
+                                    employeeType === 'erfahren' ? true : false;
+
     setFormData(prev => ({
       ...prev,
       employeeType,
-      // Automatische Werte basierend auf Typ
-      isSufficientlyIndependent: employeeType === 'chef' ? true : 
-                                employeeType === 'erfahren' ? true : false
+      isSufficientlyIndependent
     }));
   };
 
@@ -103,30 +111,36 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
     setLoading(true);
     setError('');
 
+    console.log('📤 Sende Formulardaten:', formData);
+
     try {
       if (mode === 'create') {
         const createData: CreateEmployeeRequest = {
-          name: formData.name,
-          email: formData.email,
+          name: formData.name.trim(),
+          email: formData.email.trim(),
           password: formData.password,
           role: formData.role,
           employeeType: formData.employeeType,
           isSufficientlyIndependent: formData.isSufficientlyIndependent,
         };
+        console.log('➕ Erstelle Mitarbeiter:', createData);
         await employeeService.createEmployee(createData);
       } else if (employee) {
         const updateData: UpdateEmployeeRequest = {
-          name: formData.name,
+          name: formData.name.trim(),
           role: formData.role,
           employeeType: formData.employeeType,
           isSufficientlyIndependent: formData.isSufficientlyIndependent,
           isActive: formData.isActive,
         };
+        console.log('✏️ Aktualisiere Mitarbeiter:', updateData);
         await employeeService.updateEmployee(employee.id, updateData);
       }
       
+      console.log('✅ Erfolg - rufe onSuccess auf');
       onSuccess();
     } catch (err: any) {
+      console.error('❌ Fehler beim Speichern:', err);
       setError(err.message || `Fehler beim ${mode === 'create' ? 'Erstellen' : 'Aktualisieren'} des Mitarbeiters`);
     } finally {
       setLoading(false);
@@ -337,6 +351,18 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* Debug-Anzeige */}
+            <div style={{ 
+              marginTop: '15px', 
+              padding: '10px',
+              backgroundColor: '#e8f4fd',
+              border: '1px solid #b6d7e8',
+              borderRadius: '4px',
+              fontSize: '12px'
+            }}>
+              <strong>Debug:</strong> Ausgewählter Typ: <code>{formData.employeeType}</code>
             </div>
           </div>
 

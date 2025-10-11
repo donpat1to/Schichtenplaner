@@ -1,9 +1,11 @@
 // backend/src/controllers/authController.ts
+import { v4 as uuidv4 } from 'uuid';
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import { db } from '../services/databaseService.js';
 import { AuthRequest } from '../middleware/auth.js';
+import { Employee, EmployeeWithPassword } from '../models/Employee.js';
 
 export interface User {
   id: number;
@@ -50,8 +52,8 @@ export const login = async (req: Request, res: Response) => {
     }
 
     // Get user from database
-    const user = await db.get<UserWithPassword>(
-      'SELECT id, email, password, name, role FROM users WHERE email = ? AND is_active = 1',
+    const user = await db.get<EmployeeWithPassword>(
+      'SELECT id, email, password, name, role, employee_type as employeeType, contract_type as contractType, can_work_alone as canWorkAlone, is_active as isActive FROM employees WHERE email = ? AND is_active = 1',
       [email]
     );
 
@@ -114,9 +116,9 @@ export const getCurrentUser = async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Nicht authentifiziert' });
     }
 
-    const user = await db.get<User>(
-      'SELECT id, email, name, role FROM users WHERE id = ? AND is_active = 1',
-      [jwtUser.userId] // ← HIER: userId verwenden
+    const user = await db.get<Employee>(
+      'SELECT id, email, name, role, employee_type as employeeType, contract_type as contractType, can_work_alone as canWorkAlone, is_active as isActive FROM employees WHERE id = ? AND is_active = 1',
+      [jwtUser.userId]
     );
 
     console.log('🔍 User found in database:', user ? 'Yes' : 'No');
@@ -171,8 +173,8 @@ export const register = async (req: Request, res: Response) => {
     }
 
     // Check if email already exists
-    const existingUser = await db.get<User>(
-      'SELECT id FROM users WHERE email = ?',
+    const existingUser = await db.get<Employee>(
+      'SELECT id FROM employees WHERE email = ?',
       [email]
     );
 
@@ -187,9 +189,9 @@ export const register = async (req: Request, res: Response) => {
 
     // Insert user
     const result = await db.run(
-      `INSERT INTO users (email, password, name, role) 
-       VALUES (?, ?, ?, ?)`,
-      [email, hashedPassword, name, role]
+      `INSERT INTO employees (id, email, password, name, role, employee_type, contract_type, can_work_alone, is_active) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [uuidv4(), email, hashedPassword, name, role, 'experienced', 'small', false, 1]
     );
 
     if (!result.lastID) {
@@ -197,8 +199,8 @@ export const register = async (req: Request, res: Response) => {
     }
 
     // Get created user
-    const newUser = await db.get<User>(
-      'SELECT id, email, name, role FROM users WHERE id = ?',
+    const newUser = await db.get<Employee>(
+      'SELECT id, email, name, role FROM employees WHERE id = ?',
       [result.lastID]
     );
 

@@ -1,37 +1,8 @@
 // frontend/src/services/shiftPlanService.ts
 import { authService } from './authService';
+import { ShiftPlan, CreateShiftPlanRequest, ShiftSlot } from '../types/shiftPlan.js';
 
 const API_BASE = 'http://localhost:3002/api/shift-plans';
-
-export interface CreateShiftPlanRequest {
-  name: string;
-  startDate: string;
-  endDate: string;
-  templateId?: string;
-}
-
-export interface ShiftPlan {
-  id: string;
-  name: string;
-  startDate: string;
-  endDate: string;
-  templateId?: string;
-  status: 'draft' | 'published';
-  createdBy: string;
-  createdAt: string;
-  shifts: ShiftPlanShift[];
-}
-
-export interface ShiftPlanShift {
-  id: string;
-  shiftPlanId: string;
-  date: string;
-  name: string;
-  startTime: string;
-  endTime: string;
-  requiredEmployees: number;
-  assignedEmployees: string[];
-}
 
 export const shiftPlanService = {
   async getShiftPlans(): Promise<ShiftPlan[]> {
@@ -85,17 +56,17 @@ export const shiftPlanService = {
     const data = await response.json();
     
     // Convert snake_case to camelCase
-    return {
-      id: data.id,
-      name: data.name,
-      startDate: data.start_date, // Convert here
-      endDate: data.end_date,     // Convert here
-      templateId: data.template_id,
-      status: data.status,
-      createdBy: data.created_by,
-      createdAt: data.created_at,
-      shifts: data.shifts || []
-    };
+    return data.map((plan: any) => ({
+      id: plan.id,
+      name: plan.name,
+      startDate: plan.start_date,
+      endDate: plan.end_date,
+      templateId: plan.template_id,
+      status: plan.status,
+      createdBy: plan.created_by,
+      createdAt: plan.created_at,
+      shifts: plan.shifts || []
+    }));
   },
 
   async createShiftPlan(plan: CreateShiftPlanRequest): Promise<ShiftPlan> {
@@ -158,7 +129,7 @@ export const shiftPlanService = {
     }
   },
 
-  async updateShiftPlanShift(planId: string, shift: ShiftPlanShift): Promise<void> {
+  async updateShiftPlanShift(planId: string, shift: ShiftSlot): Promise<void> {
     const response = await fetch(`${API_BASE}/${planId}/shifts/${shift.id}`, {
       method: 'PUT',
       headers: {
@@ -177,7 +148,7 @@ export const shiftPlanService = {
     }
   },
 
-  async addShiftPlanShift(planId: string, shift: Omit<ShiftPlanShift, 'id' | 'shiftPlanId' | 'assignedEmployees'>): Promise<void> {
+  async addShiftPlanShift(planId: string, shift: Omit<ShiftSlot, 'id' | 'shiftPlanId' | 'assignedEmployees'>): Promise<void> {
     const response = await fetch(`${API_BASE}/${planId}/shifts`, {
       method: 'POST',
       headers: {
