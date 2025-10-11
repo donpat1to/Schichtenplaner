@@ -2,148 +2,331 @@
 import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../services/databaseService.js';
+import { 
+  CreateShiftPlanRequest, 
+  UpdateShiftPlanRequest,
+  ShiftPlan
+} from '../models/ShiftPlan.js';
 import { AuthRequest } from '../middleware/auth.js';
-import { ShiftPlan, CreateShiftPlanRequest } from '../models/ShiftPlan.js';
+import { createPlanFromPreset, TEMPLATE_PRESETS } from '../models/defaults/shiftPlanDefaults.js';
 
-export const getShiftPlans = async (req: AuthRequest, res: Response): Promise<void> => {
+export const getShiftPlans = async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = req.user?.userId;
-    const userRole = req.user?.role;
+    console.log('🔍 Lade Schichtpläne...');
 
-    let query = `
-      SELECT sp.*, u.name as created_by_name 
+    const shiftPlans = await db.all<any>(`
+      SELECT sp.*, e.name as created_by_name 
       FROM shift_plans sp
-      LEFT JOIN users u ON sp.created_by = u.id
-    `;
+      LEFT JOIN employees e ON sp.created_by = e.id
+      ORDER BY sp.created_at DESC
+    `);
 
-    // Regular users can only see published plans
-    if (userRole === 'user') {
-      query += ` WHERE sp.status = 'published'`;
-    }
+    console.log(`✅ ${shiftPlans.length} Schichtpläne gefunden:`, shiftPlans.map(p => p.name));
 
-    query += ` ORDER BY sp.created_at DESC`;
+    // Für jeden Plan die Schichten und Zeit-Slots laden
+    const plansWithDetails = await Promise.all(
+      shiftPlans.map(async (plan) => {
+        // Lade Zeit-Slots
+        const timeSlots = await db.all<any>(`
+          SELECT * FROM time_slots 
+          WHERE plan_id = ? 
+          ORDER BY start_time
+        `, [plan.id]);
 
-    const shiftPlans = await db.all<ShiftPlan>(query);
+        // Lade Schichten
+        const shifts = await db.all<any>(`
+          SELECT s.*, ts.name as time_slot_name, ts.start_time, ts.end_time
+          FROM shifts s
+          LEFT JOIN time_slots ts ON s.time_slot_id = ts.id
+          WHERE s.plan_id = ? 
+          ORDER BY s.day_of_week, ts.start_time
+        `, [plan.id]);
 
-    res.json(shiftPlans);
+        // Lade geplante Schichten (nur für nicht-Template Pläne)
+        let scheduledShifts = [];
+        if (!plan.is_template) {
+          scheduledShifts = await db.all<any>(`
+            SELECT ss.*, ts.name as time_slot_name
+            FROM scheduled_shifts ss
+            LEFT JOIN time_slots ts ON ss.time_slot_id = ts.id
+            WHERE ss.plan_id = ? 
+            ORDER BY ss.date, ts.start_time
+          `, [plan.id]);
+        }
+
+        return {
+          ...plan,
+          isTemplate: plan.is_template === 1,
+          startDate: plan.start_date,
+          endDate: plan.end_date,
+          createdBy: plan.created_by,
+          createdAt: plan.created_at,
+          timeSlots: timeSlots.map(slot => ({
+            id: slot.id,
+            planId: slot.plan_id,
+            name: slot.name,
+            startTime: slot.start_time,
+            endTime: slot.end_time,
+            description: slot.description
+          })),
+          shifts: shifts.map(shift => ({
+            id: shift.id,
+            planId: shift.plan_id,
+            timeSlotId: shift.time_slot_id,
+            dayOfWeek: shift.day_of_week,
+            requiredEmployees: shift.required_employees,
+            color: shift.color,
+            timeSlot: {
+              id: shift.time_slot_id,
+              name: shift.time_slot_name,
+              startTime: shift.start_time,
+              endTime: shift.end_time
+            }
+          })),
+          scheduledShifts: scheduledShifts.map(shift => ({
+            id: shift.id,
+            planId: shift.plan_id,
+            date: shift.date,
+            timeSlotId: shift.time_slot_id,
+            requiredEmployees: shift.required_employees,
+            assignedEmployees: JSON.parse(shift.assigned_employees || '[]'),
+            timeSlotName: shift.time_slot_name
+          }))
+        };
+      })
+    );
+
+    res.json(plansWithDetails);
   } catch (error) {
     console.error('Error fetching shift plans:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
 
-export const getShiftPlan = async (req: AuthRequest, res: Response): Promise<void> => {
+export const getShiftPlan = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const userId = req.user?.userId;
-    const userRole = req.user?.role;
 
-    let query = `
-      SELECT sp.*, u.name as created_by_name 
+    const plan = await db.get<any>(`
+      SELECT sp.*, e.name as created_by_name 
       FROM shift_plans sp
-      LEFT JOIN users u ON sp.created_by = u.id
+      LEFT JOIN employees e ON sp.created_by = e.id
       WHERE sp.id = ?
-    `;
+    `, [id]);
 
-    // Regular users can only see published plans
-    if (userRole === 'user') {
-      query += ` AND sp.status = 'published'`;
-    }
-
-    const shiftPlan = await db.get<ShiftPlan>(query, [id]);
-
-    if (!shiftPlan) {
+    if (!plan) {
       res.status(404).json({ error: 'Shift plan not found' });
       return;
     }
 
-    // Load assigned shifts
-    const assignedShifts = await db.all<any>(`
-      SELECT * FROM assigned_shifts 
-      WHERE shift_plan_id = ? 
-      ORDER BY date, start_time
+    // Lade Zeit-Slots
+    const timeSlots = await db.all<any>(`
+      SELECT * FROM time_slots 
+      WHERE plan_id = ? 
+      ORDER BY start_time
     `, [id]);
 
-    const shiftPlanWithShifts = {
-      ...shiftPlan,
-      shifts: assignedShifts.map(shift => ({
+    // Lade Schichten
+    const shifts = await db.all<any>(`
+      SELECT s.*, ts.name as time_slot_name, ts.start_time, ts.end_time
+      FROM shifts s
+      LEFT JOIN time_slots ts ON s.time_slot_id = ts.id
+      WHERE s.plan_id = ? 
+      ORDER BY s.day_of_week, ts.start_time
+    `, [id]);
+
+    // Lade geplante Schichten (nur für nicht-Template Pläne)
+    let scheduledShifts = [];
+    if (!plan.is_template) {
+      scheduledShifts = await db.all<any>(`
+        SELECT ss.*, ts.name as time_slot_name
+        FROM scheduled_shifts ss
+        LEFT JOIN time_slots ts ON ss.time_slot_id = ts.id
+        WHERE ss.plan_id = ? 
+        ORDER BY ss.date, ts.start_time
+      `, [id]);
+    }
+
+    const planWithData = {
+      ...plan,
+      isTemplate: plan.is_template === 1,
+      startDate: plan.start_date,
+      endDate: plan.end_date,
+      createdBy: plan.created_by,
+      createdAt: plan.created_at,
+      timeSlots: timeSlots.map(slot => ({
+        id: slot.id,
+        planId: slot.plan_id,
+        name: slot.name,
+        startTime: slot.start_time,
+        endTime: slot.end_time,
+        description: slot.description
+      })),
+      shifts: shifts.map(shift => ({
         id: shift.id,
-        date: shift.date,
-        name: shift.name,
-        startTime: shift.start_time,
-        endTime: shift.end_time,
+        planId: shift.plan_id,
+        timeSlotId: shift.time_slot_id,
+        dayOfWeek: shift.day_of_week,
         requiredEmployees: shift.required_employees,
-        assignedEmployees: JSON.parse(shift.assigned_employees || '[]')
+        color: shift.color,
+        timeSlot: {
+          id: shift.time_slot_id,
+          name: shift.time_slot_name,
+          startTime: shift.start_time,
+          endTime: shift.end_time
+        }
+      })),
+      scheduledShifts: scheduledShifts.map(shift => ({
+        id: shift.id,
+        planId: shift.plan_id,
+        date: shift.date,
+        timeSlotId: shift.time_slot_id,
+        requiredEmployees: shift.required_employees,
+        assignedEmployees: JSON.parse(shift.assigned_employees || '[]'),
+        timeSlotName: shift.time_slot_name
       }))
     };
 
-    res.json(shiftPlanWithShifts);
+    res.json(planWithData);
   } catch (error) {
     console.error('Error fetching shift plan:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
 
-export const createShiftPlan = async (req: AuthRequest, res: Response): Promise<void> => {
+export const createDefaultTemplate = async (userId: string): Promise<string> => {
   try {
-    const { name, startDate, endDate, templateId }: CreateShiftPlanRequest = req.body;
-    const userId = req.user?.userId;
+    const planId = uuidv4();
+    
+    await db.run('BEGIN TRANSACTION');
+
+    try {
+      // Erstelle den Standard-Plan (als Template)
+      await db.run(
+        `INSERT INTO shift_plans (id, name, description, is_template, status, created_by) 
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [planId, 'Standardwoche', 'Standard Vorlage mit konfigurierten Zeit-Slots', true, 'template', userId]
+      );
+
+      // Füge Zeit-Slots hinzu
+      const timeSlots = [
+        { id: uuidv4(), name: 'Vormittag', startTime: '08:00', endTime: '12:00', description: 'Vormittagsschicht' },
+        { id: uuidv4(), name: 'Nachmittag', startTime: '11:30', endTime: '15:30', description: 'Nachmittagsschicht' }
+      ];
+
+      for (const slot of timeSlots) {
+        await db.run(
+          `INSERT INTO time_slots (id, plan_id, name, start_time, end_time, description) 
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [slot.id, planId, slot.name, slot.startTime, slot.endTime, slot.description]
+        );
+      }
+
+      // Erstelle Schichten für Mo-Do mit Zeit-Slot Referenzen
+      for (let day = 1; day <= 4; day++) {
+        // Vormittagsschicht
+        await db.run(
+          `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, required_employees, color) 
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [uuidv4(), planId, day, timeSlots[0].id, 2, '#3498db']
+        );
+
+        // Nachmittagsschicht
+        await db.run(
+          `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, required_employees, color) 
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [uuidv4(), planId, day, timeSlots[1].id, 2, '#e74c3c']
+        );
+      }
+
+      // Freitag nur Vormittagsschicht
+      await db.run(
+        `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, required_employees, color) 
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [uuidv4(), planId, 5, timeSlots[0].id, 2, '#3498db']
+      );
+
+      await db.run('COMMIT');
+      return planId;
+    } catch (error) {
+      await db.run('ROLLBACK');
+      throw error;
+    }
+  } catch (error) {
+    console.error('Error creating default template:', error);
+    throw error;
+  }
+};
+
+export const createShiftPlan = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { name, description, startDate, endDate, isTemplate, timeSlots, shifts }: CreateShiftPlanRequest = req.body;
+    const userId = (req as AuthRequest).user?.userId;
 
     if (!userId) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
 
-    if (!name || !startDate || !endDate) {
-      res.status(400).json({ error: 'Name, start date and end date are required' });
-      return;
-    }
+    const planId = uuidv4();
+    const status = isTemplate ? 'template' : 'draft';
 
-    const shiftPlanId = uuidv4();
-
+    // Start transaction
     await db.run('BEGIN TRANSACTION');
 
     try {
-      // Create shift plan
+      // Insert plan
       await db.run(
-        `INSERT INTO shift_plans (id, name, start_date, end_date, template_id, status, created_by) 
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [shiftPlanId, name, startDate, endDate, templateId, 'draft', userId]
+        `INSERT INTO shift_plans (id, name, description, start_date, end_date, is_template, status, created_by) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [planId, name, description, startDate, endDate, isTemplate ? 1 : 0, status, userId]
       );
 
-      // If template is provided, generate shifts from template
-      if (templateId) {
-        await generateShiftsFromTemplate(shiftPlanId, templateId, startDate, endDate);
+      // Create mapping for time slot IDs
+      const timeSlotIdMap = new Map<string, string>();
+
+      // Insert time slots - always generate new IDs
+      for (const timeSlot of timeSlots) {
+        const timeSlotId = uuidv4();
+        await db.run(
+          `INSERT INTO time_slots (id, plan_id, name, start_time, end_time, description) 
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [timeSlotId, planId, timeSlot.name, timeSlot.startTime, timeSlot.endTime, timeSlot.description || '']
+        );
+        
+        // Store the mapping if the timeSlot had a temporary ID
+        if ((timeSlot as any).id) {
+          timeSlotIdMap.set((timeSlot as any).id, timeSlotId);
+        }
+      }
+
+      // Insert shifts - update timeSlotId using the mapping if needed
+      for (const shift of shifts) {
+        const shiftId = uuidv4();
+        let finalTimeSlotId = shift.timeSlotId;
+        
+        // If timeSlotId exists in mapping, use the new ID
+        if (timeSlotIdMap.has(shift.timeSlotId)) {
+          finalTimeSlotId = timeSlotIdMap.get(shift.timeSlotId)!;
+        }
+        
+        await db.run(
+          `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, required_employees, color) 
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [shiftId, planId, shift.dayOfWeek, finalTimeSlotId, shift.requiredEmployees, shift.color || '#3498db']
+        );
+      }
+
+      // If this is not a template, generate scheduled shifts
+      if (!isTemplate && startDate && endDate) {
+        await generateScheduledShifts(planId, startDate, endDate);
       }
 
       await db.run('COMMIT');
 
-      // Return created shift plan
-      const createdPlan = await db.get<ShiftPlan>(`
-        SELECT sp.*, u.name as created_by_name 
-        FROM shift_plans sp
-        LEFT JOIN users u ON sp.created_by = u.id
-        WHERE sp.id = ?
-      `, [shiftPlanId]);
-
-      const assignedShifts = await db.all<any>(`
-        SELECT * FROM assigned_shifts 
-        WHERE shift_plan_id = ? 
-        ORDER BY date, start_time
-      `, [shiftPlanId]);
-
-      res.status(201).json({
-        ...createdPlan,
-        shifts: assignedShifts.map(shift => ({
-          id: shift.id,
-          date: shift.date,
-          name: shift.name,
-          startTime: shift.start_time,
-          endTime: shift.end_time,
-          requiredEmployees: shift.required_employees,
-          assignedEmployees: JSON.parse(shift.assigned_employees || '[]')
-        }))
-      });
+      // Return created plan
+      const createdPlan = await getShiftPlanById(planId);
+      res.status(201).json(createdPlan);
 
     } catch (error) {
       await db.run('ROLLBACK');
@@ -156,79 +339,167 @@ export const createShiftPlan = async (req: AuthRequest, res: Response): Promise<
   }
 };
 
-export const updateShiftPlan = async (req: AuthRequest, res: Response): Promise<void> => {
+export const createFromPreset = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = req.params;
-    const { name, status, shifts } = req.body;
-    const userId = req.user?.userId;
+    const { presetName, name, startDate, endDate, isTemplate } = req.body;
+    const userId = (req as AuthRequest).user?.userId;
 
-    // Check if shift plan exists
-    const existingPlan: any = await db.get('SELECT * FROM shift_plans WHERE id = ?', [id]);
-    if (!existingPlan) {
-      res.status(404).json({ error: 'Shift plan not found' });
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
       return;
     }
 
-    // Check permissions (only admin/instandhalter or creator can update)
-    if (existingPlan.created_by !== userId && !['admin', 'instandhalter'].includes(req.user?.role || '')) {
-      res.status(403).json({ error: 'Insufficient permissions' });
+    if (!TEMPLATE_PRESETS[presetName as keyof typeof TEMPLATE_PRESETS]) {
+      res.status(400).json({ error: 'Invalid preset name' });
+      return;
+    }
+
+    const planRequest = createPlanFromPreset(
+      presetName as keyof typeof TEMPLATE_PRESETS,
+      isTemplate,
+      startDate,
+      endDate
+    );
+
+    // Use the provided name or the preset name
+    planRequest.name = name || planRequest.name;
+
+    const planId = uuidv4();
+    const status = isTemplate ? 'template' : 'draft';
+
+    await db.run('BEGIN TRANSACTION');
+
+    try {
+      // Insert plan
+      await db.run(
+        `INSERT INTO shift_plans (id, name, description, start_date, end_date, is_template, status, created_by) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [planId, planRequest.name, planRequest.description, startDate, endDate, isTemplate ? 1 : 0, status, userId]
+      );
+
+      // Create mapping from timeSlotKey to database timeSlotId
+      const timeSlotKeyToId = new Map<string, string>();
+
+      // Insert time slots and create mapping
+      for (let i = 0; i < planRequest.timeSlots.length; i++) {
+        const timeSlot = planRequest.timeSlots[i];
+        const presetTimeSlot = TEMPLATE_PRESETS[presetName as keyof typeof TEMPLATE_PRESETS].timeSlots[i];
+        const timeSlotId = uuidv4();
+        
+        await db.run(
+          `INSERT INTO time_slots (id, plan_id, name, start_time, end_time, description) 
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [timeSlotId, planId, timeSlot.name, timeSlot.startTime, timeSlot.endTime, timeSlot.description || '']
+        );
+
+        // Store mapping using the key from preset
+        timeSlotKeyToId.set(presetTimeSlot.name, timeSlotId);
+      }
+
+      // Insert shifts using the mapping
+      for (const shift of planRequest.shifts) {
+        const shiftId = uuidv4();
+        const timeSlotId = timeSlotKeyToId.get((shift as any).timeSlotKey);
+        
+        if (!timeSlotId) {
+          throw new Error(`Time slot key ${(shift as any).timeSlotKey} not found in mapping`);
+        }
+
+        await db.run(
+          `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, required_employees, color) 
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [shiftId, planId, shift.dayOfWeek, timeSlotId, shift.requiredEmployees, shift.color || '#3498db']
+        );
+      }
+
+      // If this is not a template, generate scheduled shifts
+      if (!isTemplate && startDate && endDate) {
+        await generateScheduledShifts(planId, startDate, endDate);
+      }
+
+      await db.run('COMMIT');
+
+      // Return created plan
+      const createdPlan = await getShiftPlanById(planId);
+      res.status(201).json(createdPlan);
+
+    } catch (error) {
+      await db.run('ROLLBACK');
+      throw error;
+    }
+
+  } catch (error) {
+    console.error('Error creating plan from preset:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const updateShiftPlan = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { name, description, startDate, endDate, status, timeSlots, shifts }: UpdateShiftPlanRequest = req.body;
+
+    // Check if plan exists
+    const existingPlan = await db.get('SELECT * FROM shift_plans WHERE id = ?', [id]);
+    if (!existingPlan) {
+      res.status(404).json({ error: 'Shift plan not found' });
       return;
     }
 
     await db.run('BEGIN TRANSACTION');
 
     try {
-      // Update shift plan
-      if (name !== undefined || status !== undefined) {
+      // Update plan
+      if (name !== undefined || description !== undefined || startDate !== undefined || endDate !== undefined || status !== undefined) {
         await db.run(
           `UPDATE shift_plans 
            SET name = COALESCE(?, name), 
+               description = COALESCE(?, description),
+               start_date = COALESCE(?, start_date),
+               end_date = COALESCE(?, end_date),
                status = COALESCE(?, status)
            WHERE id = ?`,
-          [name, status, id]
+          [name, description, startDate, endDate, status, id]
         );
       }
 
-      // Update shifts if provided
-      if (shifts) {
-        for (const shift of shifts) {
+      // If updating time slots, replace all time slots
+      if (timeSlots) {
+        // Delete existing time slots
+        await db.run('DELETE FROM time_slots WHERE plan_id = ?', [id]);
+
+        // Insert new time slots - always generate new IDs
+        for (const timeSlot of timeSlots) {
+          const timeSlotId = uuidv4();
           await db.run(
-            `UPDATE assigned_shifts 
-             SET required_employees = ?, 
-                 assigned_employees = ?
-             WHERE id = ? AND shift_plan_id = ?`,
-            [shift.requiredEmployees, JSON.stringify(shift.assignedEmployees || []), shift.id, id]
+            `INSERT INTO time_slots (id, plan_id, name, start_time, end_time, description) 
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [timeSlotId, id, timeSlot.name, timeSlot.startTime, timeSlot.endTime, timeSlot.description || '']
+          );
+        }
+      }
+
+      // If updating shifts, replace all shifts
+      if (shifts) {
+        // Delete existing shifts
+        await db.run('DELETE FROM shifts WHERE plan_id = ?', [id]);
+
+        // Insert new shifts - use new timeSlotId (they should reference the newly created time slots)
+        for (const shift of shifts) {
+          const shiftId = uuidv4();
+          await db.run(
+            `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, required_employees, color) 
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [shiftId, id, shift.dayOfWeek, shift.timeSlotId, shift.requiredEmployees, shift.color || '#3498db']
           );
         }
       }
 
       await db.run('COMMIT');
 
-      // Return updated shift plan
-      const updatedPlan = await db.get<ShiftPlan>(`
-        SELECT sp.*, u.name as created_by_name 
-        FROM shift_plans sp
-        LEFT JOIN users u ON sp.created_by = u.id
-        WHERE sp.id = ?
-      `, [id]);
-
-      const assignedShifts = await db.all<any>(`
-        SELECT * FROM assigned_shifts 
-        WHERE shift_plan_id = ? 
-        ORDER BY date, start_time
-      `, [id]);
-
-      res.json({
-        ...updatedPlan,
-        shifts: assignedShifts.map(shift => ({
-          id: shift.id,
-          date: shift.date,
-          startTime: shift.start_time,
-          endTime: shift.end_time,
-          requiredEmployees: shift.required_employees,
-          assignedEmployees: JSON.parse(shift.assigned_employees || '[]')
-        }))
-      });
+      // Return updated plan
+      const updatedPlan = await getShiftPlanById(id);
+      res.json(updatedPlan);
 
     } catch (error) {
       await db.run('ROLLBACK');
@@ -241,26 +512,19 @@ export const updateShiftPlan = async (req: AuthRequest, res: Response): Promise<
   }
 };
 
-export const deleteShiftPlan = async (req: AuthRequest, res: Response): Promise<void> => {
+export const deleteShiftPlan = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const userId = req.user?.userId;
 
-    // Check if shift plan exists
-    const existingPlan: any = await db.get('SELECT * FROM shift_plans WHERE id = ?', [id]);
+    // Check if plan exists
+    const existingPlan = await db.get('SELECT * FROM shift_plans WHERE id = ?', [id]);
     if (!existingPlan) {
       res.status(404).json({ error: 'Shift plan not found' });
       return;
     }
 
-    // Check permissions (only admin/instandhalter or creator can delete)
-    if (existingPlan.created_by !== userId && !['admin', 'instandhalter'].includes(req.user?.role || '')) {
-      res.status(403).json({ error: 'Insufficient permissions' });
-      return;
-    }
-
     await db.run('DELETE FROM shift_plans WHERE id = ?', [id]);
-    // Assigned shifts will be automatically deleted due to CASCADE
+    // Time slots, shifts, and scheduled shifts will be automatically deleted due to CASCADE
 
     res.status(204).send();
   } catch (error) {
@@ -269,61 +533,131 @@ export const deleteShiftPlan = async (req: AuthRequest, res: Response): Promise<
   }
 };
 
-// Helper function to generate shifts from template
-async function generateShiftsFromTemplate(shiftPlanId: string, templateId: string, startDate: string, endDate: string): Promise<void> {
-  try {
-    console.log(`🔄 Generiere Schichten von Vorlage ${templateId} für Plan ${shiftPlanId}`);
-    
-    // Get template shifts with time slot information
-    const templateShifts = await db.all<any>(`
-      SELECT ts.*, tts.name as time_slot_name, tts.start_time, tts.end_time
-      FROM template_shifts ts
-      LEFT JOIN template_time_slots tts ON ts.time_slot_id = tts.id
-      WHERE ts.template_id = ? 
-      ORDER BY ts.day_of_week, tts.start_time
-    `, [templateId]);
+// Helper function to get plan by ID
+async function getShiftPlanById(planId: string): Promise<any> {
+  const plan = await db.get<any>(`
+    SELECT sp.*, e.name as created_by_name 
+    FROM shift_plans sp
+    LEFT JOIN employees e ON sp.created_by = e.id
+    WHERE sp.id = ?
+  `, [planId]);
 
-    console.log(`📋 Gefundene Template-Schichten: ${templateShifts.length}`);
+  if (!plan) {
+    return null;
+  }
+
+  // Lade Zeit-Slots
+  const timeSlots = await db.all<any>(`
+    SELECT * FROM time_slots 
+    WHERE plan_id = ? 
+    ORDER BY start_time
+  `, [planId]);
+
+  // Lade Schichten
+  const shifts = await db.all<any>(`
+    SELECT s.*, ts.name as time_slot_name, ts.start_time, ts.end_time
+    FROM shifts s
+    LEFT JOIN time_slots ts ON s.time_slot_id = ts.id
+    WHERE s.plan_id = ? 
+    ORDER BY s.day_of_week, ts.start_time
+  `, [planId]);
+
+  // Lade geplante Schichten (nur für nicht-Template Pläne)
+  let scheduledShifts = [];
+  if (!plan.is_template) {
+    scheduledShifts = await db.all<any>(`
+      SELECT ss.*, ts.name as time_slot_name
+      FROM scheduled_shifts ss
+      LEFT JOIN time_slots ts ON ss.time_slot_id = ts.id
+      WHERE ss.plan_id = ? 
+      ORDER BY ss.date, ts.start_time
+    `, [planId]);
+  }
+
+  return {
+    ...plan,
+    isTemplate: plan.is_template === 1,
+    startDate: plan.start_date,
+    endDate: plan.end_date,
+    createdBy: plan.created_by,
+    createdAt: plan.created_at,
+    timeSlots: timeSlots.map(slot => ({
+      id: slot.id,
+      planId: slot.plan_id,
+      name: slot.name,
+      startTime: slot.start_time,
+      endTime: slot.end_time,
+      description: slot.description
+    })),
+    shifts: shifts.map(shift => ({
+      id: shift.id,
+      planId: shift.plan_id,
+      timeSlotId: shift.time_slot_id,
+      dayOfWeek: shift.day_of_week,
+      requiredEmployees: shift.required_employees,
+      color: shift.color,
+      timeSlot: {
+        id: shift.time_slot_id,
+        name: shift.time_slot_name,
+        startTime: shift.start_time,
+        endTime: shift.end_time
+      }
+    })),
+    scheduledShifts: scheduledShifts.map(shift => ({
+      id: shift.id,
+      planId: shift.plan_id,
+      date: shift.date,
+      timeSlotId: shift.time_slot_id,
+      requiredEmployees: shift.required_employees,
+      assignedEmployees: JSON.parse(shift.assigned_employees || '[]'),
+      timeSlotName: shift.time_slot_name
+    }))
+  };
+}
+
+// Helper function to generate scheduled shifts from template
+async function generateScheduledShifts(planId: string, startDate: string, endDate: string): Promise<void> {
+  try {
+    console.log(`🔄 Generiere geplante Schichten für Plan ${planId} von ${startDate} bis ${endDate}`);
+    
+    // Get plan with shifts and time slots
+    const plan = await getShiftPlanById(planId);
+    if (!plan) {
+      throw new Error('Plan not found');
+    }
 
     const start = new Date(startDate);
     const end = new Date(endDate);
 
-    // Generate shifts ONLY for days that have template shifts defined
+    // Generate scheduled shifts for each day in the date range
     for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
-      // Convert JS day (0=Sunday) to our format (1=Monday, 7=Sunday)
-      const dayOfWeek = date.getDay() === 0 ? 7 : date.getDay();
+      const dayOfWeek = date.getDay() === 0 ? 7 : date.getDay(); // Convert to 1-7 (Mon-Sun)
 
-      // Find template shifts for this day of week
-      const shiftsForDay = templateShifts.filter(shift => shift.day_of_week === dayOfWeek);
+      // Find shifts for this day of week
+      const shiftsForDay = plan.shifts.filter((shift: any) => shift.dayOfWeek === dayOfWeek);
 
-      // Only create shifts if there are template shifts defined for this weekday
-      if (shiftsForDay.length > 0) {
-        for (const templateShift of shiftsForDay) {
-          const shiftId = uuidv4();
-          
-          await db.run(
-            `INSERT INTO assigned_shifts (id, shift_plan_id, date, name, start_time, end_time, required_employees, assigned_employees) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [
-              shiftId,
-              shiftPlanId,
-              date.toISOString().split('T')[0], // YYYY-MM-DD format
-              templateShift.time_slot_name || 'Schicht',
-              templateShift.start_time,
-              templateShift.end_time,
-              templateShift.required_employees,
-              JSON.stringify([])
-            ]
-          );
-        }
-        console.log(`✅ ${shiftsForDay.length} Schichten erstellt für ${date.toISOString().split('T')[0]}`);
+      for (const shift of shiftsForDay) {
+        const scheduledShiftId = uuidv4();
+        
+        await db.run(
+          `INSERT INTO scheduled_shifts (id, plan_id, date, time_slot_id, required_employees, assigned_employees) 
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [
+            scheduledShiftId,
+            planId,
+            date.toISOString().split('T')[0], // YYYY-MM-DD format
+            shift.timeSlotId,
+            shift.requiredEmployees,
+            JSON.stringify([])
+          ]
+        );
       }
     }
 
-    console.log(`🎉 Schicht-Generierung abgeschlossen für Plan ${shiftPlanId}`);
+    console.log(`✅ Geplante Schichten generiert für Plan ${planId}`);
     
   } catch (error) {
-    console.error('❌ Fehler beim Generieren der Schichten:', error);
+    console.error('❌ Fehler beim Generieren der geplanten Schichten:', error);
     throw error;
   }
 }

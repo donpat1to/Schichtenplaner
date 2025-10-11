@@ -1,7 +1,7 @@
 // backend/src/scripts/setupDefaultTemplate.ts
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../services/databaseService.js';
-import { DEFAULT_TIME_SLOTS, TemplateShift } from '../models/ShiftTemplate.js';
+import { DEFAULT_ZEBRA_TIME_SLOTS, TemplateShift } from '../models/ShiftPlan.js';
 
 interface AdminUser {
   id: string;

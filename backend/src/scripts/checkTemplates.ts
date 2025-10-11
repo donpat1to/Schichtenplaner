@@ -1,12 +1,12 @@
 import { db } from '../services/databaseService.js';
-import { TemplateShift } from '../models/ShiftTemplate.js';
+import { ShiftPlan } from '../models/ShiftPlan.js';
 
 async function checkTemplates() {
   try {
-    const templates = await db.all<TemplateShift>(
-      `SELECT st.*, u.name as created_by_name 
-       FROM shift_templates st
-       LEFT JOIN users u ON st.created_by = u.id`
+    const templates = await db.all<ShiftPlan>(
+      `SELECT sp.*, u.name as created_by_name 
+       FROM shift_plans sp
+       LEFT JOIN users u ON sp.created_by = u.id`
     );
 
     console.log('Templates:', templates);
