@@ -1,6 +1,7 @@
 // frontend/src/pages/Employees/components/EmployeeForm.tsx - KORRIGIERT
 import React, { useState, useEffect } from 'react';
-import { Employee, CreateEmployeeRequest, UpdateEmployeeRequest } from '../../../types/employee';
+import { Employee, CreateEmployeeRequest, UpdateEmployeeRequest } from '../../../models/Employee';
+import { ROLE_CONFIG, EMPLOYEE_TYPE_CONFIG } from '../../../models/defaults/employeeDefaults';
 import { employeeService } from '../../../services/employeeService';
 import { useAuth } from '../../../contexts/AuthContext';
 
@@ -11,34 +12,6 @@ interface EmployeeFormProps {
   onCancel: () => void;
 }
 
-// Rollen Definition
-const ROLE_OPTIONS = [
-  { value: 'user', label: 'Mitarbeiter', description: 'Kann eigene Schichten einsehen' },
-  { value: 'instandhalter', label: 'Instandhalter', description: 'Kann Schichtpläne erstellen und Mitarbeiter verwalten' },
-  { value: 'admin', label: 'Administrator', description: 'Voller Zugriff auf alle Funktionen' }
-] as const;
-
-// Mitarbeiter Typen Definition
-const EMPLOYEE_TYPE_OPTIONS = [
-  { 
-    value: 'chef', 
-    label: '👨‍💼 Chef/Administrator', 
-    description: 'Vollzugriff auf alle Funktionen und Mitarbeiterverwaltung',
-    color: '#e74c3c'
-  },
-  { 
-    value: 'erfahren', 
-    label: '👴 Erfahren', 
-    description: 'Langjährige Erfahrung, kann komplexe Aufgaben übernehmen',
-    color: '#3498db'
-  },
-  { 
-    value: 'neuling', 
-    label: '👶 Neuling', 
-    description: 'Benötigt Einarbeitung und Unterstützung',
-    color: '#27ae60'
-  }
-] as const;
 
 const EmployeeForm: React.FC<EmployeeFormProps> = ({
   mode,
@@ -50,9 +23,9 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
     name: '',
     email: '',
     password: '',
-    role: 'user' as 'admin' | 'instandhalter' | 'user',
-    employeeType: 'neuling' as 'chef' | 'neuling' | 'erfahren',
-    isSufficientlyIndependent: false,
+    role: 'user' as 'admin' | 'maintenance' | 'user',
+    employeeType: 'trainee' as 'manager' | 'trainee' | 'experienced',
+    canWorkAlone: false,
     isActive: true
   });
   const [loading, setLoading] = useState(false);
@@ -61,22 +34,20 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
 
   useEffect(() => {
     if (mode === 'edit' && employee) {
-      console.log('📝 Lade Mitarbeiter-Daten:', employee);
       setFormData({
         name: employee.name,
         email: employee.email,
         password: '', // Passwort wird beim Bearbeiten nicht angezeigt
         role: employee.role,
         employeeType: employee.employeeType,
-        isSufficientlyIndependent: employee.isSufficientlyIndependent,
+        canWorkAlone: employee.canWorkAlone,
         isActive: employee.isActive
       });
     }
   }, [mode, employee]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
-    console.log(`🔄 Feld geändert: ${name} = ${value}`);
     
     setFormData(prev => ({
       ...prev,
@@ -84,25 +55,14 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
     }));
   };
 
-  const handleRoleChange = (roleValue: 'admin' | 'instandhalter' | 'user') => {
-    console.log(`🔄 Rolle geändert: ${roleValue}`);
-    setFormData(prev => ({
-      ...prev,
-      role: roleValue
-    }));
-  };
-
-  const handleEmployeeTypeChange = (employeeType: 'chef' | 'neuling' | 'erfahren') => {
-    console.log(`🔄 Mitarbeiter-Typ geändert: ${employeeType}`);
+  const handleEmployeeTypeChange = (employeeType: 'manager' | 'trainee' | 'experienced') => {
+    // Manager and experienced can work alone, trainee cannot
+    const canWorkAlone = employeeType === 'manager' || employeeType === 'experienced';
     
-    // Automatische Werte basierend auf Typ
-    const isSufficientlyIndependent = employeeType === 'chef' ? true : 
-                                    employeeType === 'erfahren' ? true : false;
-
     setFormData(prev => ({
       ...prev,
       employeeType,
-      isSufficientlyIndependent
+      canWorkAlone
     }));
   };
 
@@ -110,8 +70,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
     e.preventDefault();
     setLoading(true);
     setError('');
-
-    console.log('📤 Sende Formulardaten:', formData);
 
     try {
       if (mode === 'create') {
@@ -121,52 +79,37 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
           password: formData.password,
           role: formData.role,
           employeeType: formData.employeeType,
-          isSufficientlyIndependent: formData.isSufficientlyIndependent,
+          contractType: 'small', // Default value
+          canWorkAlone: formData.canWorkAlone
         };
-        console.log('➕ Erstelle Mitarbeiter:', createData);
         await employeeService.createEmployee(createData);
       } else if (employee) {
         const updateData: UpdateEmployeeRequest = {
           name: formData.name.trim(),
           role: formData.role,
           employeeType: formData.employeeType,
-          isSufficientlyIndependent: formData.isSufficientlyIndependent,
+          contractType: employee.contractType, // Keep the existing contract type
+          canWorkAlone: formData.canWorkAlone,
           isActive: formData.isActive,
         };
-        console.log('✏️ Aktualisiere Mitarbeiter:', updateData);
         await employeeService.updateEmployee(employee.id, updateData);
       }
       
-      console.log('✅ Erfolg - rufe onSuccess auf');
       onSuccess();
     } catch (err: any) {
-      console.error('❌ Fehler beim Speichern:', err);
       setError(err.message || `Fehler beim ${mode === 'create' ? 'Erstellen' : 'Aktualisieren'} des Mitarbeiters`);
     } finally {
       setLoading(false);
     }
   };
 
-  const isFormValid = () => {
-    if (mode === 'create') {
-      return formData.name.trim() && 
-             formData.email.trim() && 
-             formData.password.length >= 6;
-    }
-    return formData.name.trim() && formData.email.trim();
-  };
+  const isFormValid = mode === 'create' 
+    ? formData.name.trim() && formData.email.trim() && formData.password.length >= 6
+    : formData.name.trim() && formData.email.trim();
 
-  const getAvailableRoles = () => {
-    if (hasRole(['admin'])) {
-      return ROLE_OPTIONS;
-    }
-    if (hasRole(['instandhalter'])) {
-      return ROLE_OPTIONS.filter(role => role.value !== 'admin');
-    }
-    return ROLE_OPTIONS.filter(role => role.value === 'user');
-  };
-
-  const availableRoles = getAvailableRoles();
+  const availableRoles = hasRole(['admin']) 
+    ? ROLE_CONFIG 
+    : ROLE_CONFIG.filter(role => role.value !== 'admin');
 
   return (
     <div style={{
@@ -294,7 +237,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
             <h3 style={{ margin: '0 0 15px 0', color: '#495057' }}>👥 Mitarbeiter Kategorie</h3>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {EMPLOYEE_TYPE_OPTIONS.map(type => (
+              {EMPLOYEE_TYPE_CONFIG.map(type => (
                 <div 
                   key={type.value}
                   style={{
@@ -352,18 +295,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                 </div>
               ))}
             </div>
-
-            {/* Debug-Anzeige */}
-            <div style={{ 
-              marginTop: '15px', 
-              padding: '10px',
-              backgroundColor: '#e8f4fd',
-              border: '1px solid #b6d7e8',
-              borderRadius: '4px',
-              fontSize: '12px'
-            }}>
-              <strong>Debug:</strong> Ausgewählter Typ: <code>{formData.employeeType}</code>
-            </div>
           </div>
 
           {/* Eigenständigkeit */}
@@ -386,29 +317,29 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
             }}>
               <input
                 type="checkbox"
-                name="isSufficientlyIndependent"
-                id="isSufficientlyIndependent"
-                checked={formData.isSufficientlyIndependent}
+                name="canWorkAlone"
+                id="canWorkAlone"
+                checked={formData.canWorkAlone}
                 onChange={handleChange}
-                disabled={formData.employeeType === 'chef'}
+                disabled={formData.employeeType === 'manager'}
                 style={{ 
                   width: '20px', 
                   height: '20px',
-                  opacity: formData.employeeType === 'chef' ? 0.5 : 1
+                  opacity: formData.employeeType === 'manager' ? 0.5 : 1
                 }}
               />
               <div style={{ flex: 1 }}>
-                <label htmlFor="isSufficientlyIndependent" style={{ 
+                <label htmlFor="canWorkAlone" style={{ 
                   fontWeight: 'bold', 
                   color: '#2c3e50', 
                   display: 'block',
-                  opacity: formData.employeeType === 'chef' ? 0.5 : 1
+                  opacity: formData.employeeType === 'manager' ? 0.5 : 1
                 }}>
                   Als ausreichend eigenständig markieren
-                  {formData.employeeType === 'chef' && ' (Automatisch für Chefs)'}
+                  {formData.employeeType === 'manager' && ' (Automatisch für Chefs)'}
                 </label>
                 <div style={{ fontSize: '14px', color: '#7f8c8d' }}>
-                  {formData.employeeType === 'chef' 
+                  {formData.employeeType === 'manager' 
                     ? 'Chefs sind automatisch als eigenständig markiert.'
                     : 'Dieser Mitarbeiter kann komplexe Aufgaben eigenständig lösen und benötigt keine ständige Betreuung.'
                   }
@@ -416,14 +347,14 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
               </div>
               <div style={{
                 padding: '6px 12px',
-                backgroundColor: formData.isSufficientlyIndependent ? '#27ae60' : '#e74c3c',
+                backgroundColor: formData.canWorkAlone ? '#27ae60' : '#e74c3c',
                 color: 'white',
                 borderRadius: '15px',
                 fontSize: '12px',
                 fontWeight: 'bold',
-                opacity: formData.employeeType === 'chef' ? 0.7 : 1
+                opacity: formData.employeeType === 'manager' ? 0.7 : 1
               }}>
-                {formData.isSufficientlyIndependent ? 'EIGENSTÄNDIG' : 'BETREUUNG'}
+                {formData.canWorkAlone ? 'EIGENSTÄNDIG' : 'BETREUUNG'}
               </div>
             </div>
           </div>
@@ -451,14 +382,14 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                       backgroundColor: formData.role === role.value ? '#fef9e7' : 'white',
                       cursor: 'pointer'
                     }}
-                    onClick={() => handleRoleChange(role.value)}
+                    onClick={() => setFormData(prev => ({ ...prev, role: role.value }))}
                   >
                     <input
                       type="radio"
                       name="role"
                       value={role.value}
                       checked={formData.role === role.value}
-                      onChange={() => handleRoleChange(role.value)}
+                      onChange={() => setFormData(prev => ({ ...prev, role: role.value }))}
                       style={{
                         marginRight: '10px',
                         marginTop: '2px'
@@ -537,14 +468,14 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
           
           <button
             type="submit"
-            disabled={loading || !isFormValid()}
+            disabled={loading || !isFormValid}
             style={{
               padding: '12px 24px',
-              backgroundColor: loading ? '#bdc3c7' : (isFormValid() ? '#27ae60' : '#95a5a6'),
+              backgroundColor: loading ? '#bdc3c7' : (isFormValid ? '#27ae60' : '#95a5a6'),
               color: 'white',
               border: 'none',
               borderRadius: '6px',
-              cursor: (loading || !isFormValid()) ? 'not-allowed' : 'pointer',
+              cursor: (loading || !isFormValid) ? 'not-allowed' : 'pointer',
               fontWeight: 'bold'
             }}
           >

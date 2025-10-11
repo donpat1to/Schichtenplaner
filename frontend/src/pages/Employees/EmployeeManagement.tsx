@@ -1,6 +1,6 @@
 // frontend/src/pages/Employees/EmployeeManagement.tsx
 import React, { useState, useEffect } from 'react';
-import { Employee } from '../../../../backend/src/models/employee';
+import { Employee } from '../../models/Employee';
 import { employeeService } from '../../services/employeeService';
 import EmployeeList from './components/EmployeeList';
 import EmployeeForm from './components/EmployeeForm';
@@ -220,7 +220,6 @@ const EmployeeManagement: React.FC = () => {
           onEdit={handleEditEmployee}
           onDelete={handleDeleteEmployee} // Jetzt mit Employee-Objekt
           onManageAvailability={handleManageAvailability}
-          currentUserRole={hasRole(['admin']) ? 'admin' : 'instandhalter'}
         />
       )}
 

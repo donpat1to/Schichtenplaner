@@ -1,6 +1,7 @@
 // frontend/src/pages/Employees/components/EmployeeList.tsx - KORRIGIERT
 import React, { useState } from 'react';
-import { Employee } from '../../../types/employee';
+import { ROLE_CONFIG, EMPLOYEE_TYPE_CONFIG } from '../../../../../backend/src/models/defaults/employeeDefaults';
+import { Employee } from '../../../../../backend/src/models/employee';
 import { useAuth } from '../../../contexts/AuthContext';
 
 interface EmployeeListProps {
@@ -8,26 +9,22 @@ interface EmployeeListProps {
   onEdit: (employee: Employee) => void;
   onDelete: (employee: Employee) => void;
   onManageAvailability: (employee: Employee) => void;
-  currentUserRole: 'admin' | 'instandhalter';
 }
 
 const EmployeeList: React.FC<EmployeeListProps> = ({
   employees,
   onEdit,
   onDelete,
-  onManageAvailability,
-  currentUserRole
+  onManageAvailability
 }) => {
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('active');
   const [searchTerm, setSearchTerm] = useState('');
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, hasRole } = useAuth();
 
   const filteredEmployees = employees.filter(employee => {
-    // Status-Filter
     if (filter === 'active' && !employee.isActive) return false;
     if (filter === 'inactive' && employee.isActive) return false;
     
-    // Suchfilter
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       return (
@@ -41,28 +38,25 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
     return true;
   });
 
-  const getRoleBadgeColor = (role: string) => {
-    switch (role) {
-      case 'admin': return '#e74c3c';
-      case 'instandhalter': return '#3498db';
-      case 'user': return '#27ae60';
-      default: return '#95a5a6';
-    }
+  // Simplified permission checks
+  const canDeleteEmployee = (employee: Employee): boolean => {
+    if (!hasRole(['admin'])) return false;
+    if (employee.id === currentUser?.id) return false;
+    if (employee.role === 'admin' && !hasRole(['admin'])) return false;
+    return true;
   };
 
-  const getEmployeeTypeBadge = (type: string) => {
-    switch (type) {
-      case 'chef': return { text: '👨‍💼 CHEF', color: '#e74c3c', bgColor: '#fadbd8' };
-      case 'erfahren': return { text: '👴 ERFAHREN', color: '#3498db', bgColor: '#d6eaf8' };
-      case 'neuling': return { text: '👶 NEULING', color: '#27ae60', bgColor: '#d5f4e6' };
-      default: return { text: 'UNBEKANNT', color: '#95a5a6', bgColor: '#ecf0f1' };
+  const canEditEmployee = (employee: Employee): boolean => {
+    if (hasRole(['admin'])) return true;
+    if (hasRole(['maintenance'])) {
+      return employee.role === 'user' || employee.id === currentUser?.id;
     }
+    return false;
   };
 
-  const getIndependenceBadge = (isIndependent: boolean) => {
-    return isIndependent 
-      ? { text: '✅ Eigenständig', color: '#27ae60', bgColor: '#d5f4e6' }
-      : { text: '❌ Betreuung', color: '#e74c3c', bgColor: '#fadbd8' };
+  // Using shared configuration for consistent styling
+  const getEmployeeTypeBadge = (type: keyof typeof EMPLOYEE_TYPE_CONFIG) => {
+    return EMPLOYEE_TYPE_CONFIG[type] || EMPLOYEE_TYPE_CONFIG.trainee;
   };
 
   const getStatusBadge = (isActive: boolean) => {
@@ -71,31 +65,10 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
       : { text: 'Inaktiv', color: '#e74c3c', bgColor: '#fadbd8' };
   };
 
-  // Kann Benutzer löschen?
-  const canDeleteEmployee = (employee: Employee): boolean => {
-    // Nur Admins können löschen
-    if (currentUserRole !== 'admin') return false;
-    
-    // Kann sich nicht selbst löschen
-    if (employee.id === currentUser?.id) return false;
-    
-    // Admins können nur von Admins gelöscht werden
-    if (employee.role === 'admin' && currentUserRole !== 'admin') return false;
-    
-    return true;
-  };
-
-  // Kann Benutzer bearbeiten?
-  const canEditEmployee = (employee: Employee): boolean => {
-    // Admins können alle bearbeiten
-    if (currentUserRole === 'admin') return true;
-    
-    // Instandhalter können nur User und sich selbst bearbeiten
-    if (currentUserRole === 'instandhalter') {
-      return employee.role === 'user' || employee.id === currentUser?.id;
-    }
-    
-    return false;
+  const getIndependenceBadge = (canWorkAlone: boolean) => {
+    return canWorkAlone 
+      ? { text: '✅ Eigenständig', color: '#27ae60', bgColor: '#d5f4e6' }
+      : { text: '❌ Betreuung', color: '#e74c3c', bgColor: '#fadbd8' };
   };
 
   if (employees.length === 0) {
@@ -197,8 +170,8 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
 
         {filteredEmployees.map(employee => {
           const employeeType = getEmployeeTypeBadge(employee.employeeType);
-          const independence = getIndependenceBadge(employee.isSufficientlyIndependent);
-          const roleColor = getRoleBadgeColor(employee.role);
+          const independence = getIndependenceBadge(employee.canWorkAlone);
+          const roleColor = '#d5f4e6'; // Default color
           const status = getStatusBadge(employee.isActive);
           const canEdit = canEditEmployee(employee);
           const canDelete = canDeleteEmployee(employee);
@@ -239,7 +212,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
               <div style={{ textAlign: 'center' }}>
                 <span
                   style={{
-                    backgroundColor: employeeType.bgColor,
+                    backgroundColor: employeeType.color,
                     color: employeeType.color,
                     padding: '6px 12px',
                     borderRadius: '15px',
@@ -248,7 +221,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
                     display: 'inline-block'
                   }}
                 >
-                  {employeeType.text}
+                  {employeeType.label}
                 </span>
               </div>
 
@@ -284,7 +257,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
                   }}
                 >
                   {employee.role === 'admin' ? 'ADMIN' : 
-                   employee.role === 'instandhalter' ? 'INSTANDHALTER' : 'MITARBEITER'}
+                   employee.role === 'maintenance' ? 'INSTANDHALTER' : 'MITARBEITER'}
                 </span>
               </div>
 
@@ -322,7 +295,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
                 flexWrap: 'wrap'
               }}>
                 {/* Verfügbarkeit Button */}
-                {(currentUserRole === 'admin' || currentUserRole === 'instandhalter') && (
+                {(employee.role === 'admin' || employee.role === 'maintenance') && (
                   <button
                     onClick={() => onManageAvailability(employee)}
                     style={{
@@ -385,7 +358,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
                 )}
 
                 {/* Platzhalter für Symmetrie */}
-                {!canEdit && !canDelete && (currentUserRole !== 'admin' && currentUserRole !== 'instandhalter') && (
+                {!canEdit && !canDelete && (employee.role !== 'admin' && employee.role !== 'maintenance') && (
                   <div style={{ width: '32px', height: '32px' }}></div>
                 )}
               </div>

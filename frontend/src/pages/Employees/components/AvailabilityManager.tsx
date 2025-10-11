@@ -1,9 +1,9 @@
 // frontend/src/pages/Employees/components/AvailabilityManager.tsx
 import React, { useState, useEffect } from 'react';
-import { Employee, EmployeeAvailability } from '../../../../../backend/src/models/employee';
 import { employeeService } from '../../../services/employeeService';
 import { shiftPlanService } from '../../../services/shiftPlanService';
-import { ShiftPlan, TimeSlot, Shift } from '../../../../../backend/src/models/shiftPlan';
+import { Employee, EmployeeAvailability } from '../../../models/Employee';
+import { ShiftPlan, TimeSlot, Shift } from '../../../models/ShiftPlan';
 
 interface AvailabilityManagerProps {
   employee: Employee;
@@ -180,11 +180,13 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       // 3. Extract time slots from plans
       let extractedTimeSlots = extractTimeSlotsFromPlans(plans);
 
-      // 4. Fallback to default slots if none found
+      /* 4. Fallback to default slots if none found
       if (extractedTimeSlots.length === 0) {
         console.log('⚠️ KEINE ZEIT-SLOTS GEFUNDEN, VERWENDE STANDARD-SLOTS');
         extractedTimeSlots = getDefaultTimeSlots();
-      }
+      }*/
+
+      console.log('✅ GEFUNDENE ZEIT-SLOTS:', extractedTimeSlots.length, extractedTimeSlots);
 
       setTimeSlots(extractedTimeSlots);
       setShiftPlans(plans);

@@ -2,8 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { shiftPlanService, ShiftPlan } from '../../services/shiftPlanService';
+import { shiftPlanService } from '../../services/shiftPlanService';
+import { ShiftPlan } from '../../../../backend/src/models/shiftPlan';
 import { useNotification } from '../../contexts/NotificationContext';
+import { formatDate } from '../../utils/foramatters';
 
 const ShiftPlanList: React.FC = () => {
   const { hasRole } = useAuth();
@@ -53,14 +55,6 @@ const ShiftPlanList: React.FC = () => {
         message: 'Der Schichtplan konnte nicht gelöscht werden.'
       });
     }
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('de-DE', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    });
   };
 
   if (loading) {

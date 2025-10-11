@@ -118,5 +118,4 @@ export class EmployeeService {
   }
 }
 
-// ✅ Exportiere eine Instanz der Klasse
 export const employeeService = new EmployeeService();

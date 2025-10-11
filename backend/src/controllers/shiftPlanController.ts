@@ -10,93 +10,79 @@ import {
 import { AuthRequest } from '../middleware/auth.js';
 import { createPlanFromPreset, TEMPLATE_PRESETS } from '../models/defaults/shiftPlanDefaults.js';
 
+async function getPlanWithDetails(planId: string) {
+  const plan = await db.get<any>(`
+    SELECT sp.*, e.name as created_by_name 
+    FROM shift_plans sp
+    LEFT JOIN employees e ON sp.created_by = e.id
+    WHERE sp.id = ?
+  `, [planId]);
+
+  if (!plan) return null;
+
+  const [timeSlots, shifts] = await Promise.all([
+    db.all<any>(`SELECT * FROM time_slots WHERE plan_id = ? ORDER BY start_time`, [planId]),
+    db.all<any>(`
+      SELECT s.*, ts.name as time_slot_name, ts.start_time, ts.end_time
+      FROM shifts s
+      LEFT JOIN time_slots ts ON s.time_slot_id = ts.id
+      WHERE s.plan_id = ? 
+      ORDER BY s.day_of_week, ts.start_time
+    `, [planId])
+  ]);
+
+  return {
+    plan: {
+      ...plan,
+      isTemplate: plan.is_template === 1,
+      startDate: plan.start_date,
+      endDate: plan.end_date,
+      createdBy: plan.created_by,
+      createdAt: plan.created_at,
+    },
+    timeSlots: timeSlots.map(slot => ({
+      id: slot.id,
+      planId: slot.plan_id,
+      name: slot.name,
+      startTime: slot.start_time,
+      endTime: slot.end_time,
+      description: slot.description
+    })),
+    shifts: shifts.map(shift => ({
+      id: shift.id,
+      planId: shift.plan_id,
+      timeSlotId: shift.time_slot_id,
+      dayOfWeek: shift.day_of_week,
+      requiredEmployees: shift.required_employees,
+      color: shift.color,
+      timeSlot: {
+        id: shift.time_slot_id,
+        name: shift.time_slot_name,
+        startTime: shift.start_time,
+        endTime: shift.end_time
+      }
+    }))
+  };
+}
+
+// Simplified getShiftPlans using shared helper
 export const getShiftPlans = async (req: Request, res: Response): Promise<void> => {
   try {
-    console.log('🔍 Lade Schichtpläne...');
-
-    const shiftPlans = await db.all<any>(`
+    const plans = await db.all<any>(`
       SELECT sp.*, e.name as created_by_name 
       FROM shift_plans sp
       LEFT JOIN employees e ON sp.created_by = e.id
       ORDER BY sp.created_at DESC
     `);
 
-    console.log(`✅ ${shiftPlans.length} Schichtpläne gefunden:`, shiftPlans.map(p => p.name));
-
-    // Für jeden Plan die Schichten und Zeit-Slots laden
     const plansWithDetails = await Promise.all(
-      shiftPlans.map(async (plan) => {
-        // Lade Zeit-Slots
-        const timeSlots = await db.all<any>(`
-          SELECT * FROM time_slots 
-          WHERE plan_id = ? 
-          ORDER BY start_time
-        `, [plan.id]);
-
-        // Lade Schichten
-        const shifts = await db.all<any>(`
-          SELECT s.*, ts.name as time_slot_name, ts.start_time, ts.end_time
-          FROM shifts s
-          LEFT JOIN time_slots ts ON s.time_slot_id = ts.id
-          WHERE s.plan_id = ? 
-          ORDER BY s.day_of_week, ts.start_time
-        `, [plan.id]);
-
-        // Lade geplante Schichten (nur für nicht-Template Pläne)
-        let scheduledShifts = [];
-        if (!plan.is_template) {
-          scheduledShifts = await db.all<any>(`
-            SELECT ss.*, ts.name as time_slot_name
-            FROM scheduled_shifts ss
-            LEFT JOIN time_slots ts ON ss.time_slot_id = ts.id
-            WHERE ss.plan_id = ? 
-            ORDER BY ss.date, ts.start_time
-          `, [plan.id]);
-        }
-
-        return {
-          ...plan,
-          isTemplate: plan.is_template === 1,
-          startDate: plan.start_date,
-          endDate: plan.end_date,
-          createdBy: plan.created_by,
-          createdAt: plan.created_at,
-          timeSlots: timeSlots.map(slot => ({
-            id: slot.id,
-            planId: slot.plan_id,
-            name: slot.name,
-            startTime: slot.start_time,
-            endTime: slot.end_time,
-            description: slot.description
-          })),
-          shifts: shifts.map(shift => ({
-            id: shift.id,
-            planId: shift.plan_id,
-            timeSlotId: shift.time_slot_id,
-            dayOfWeek: shift.day_of_week,
-            requiredEmployees: shift.required_employees,
-            color: shift.color,
-            timeSlot: {
-              id: shift.time_slot_id,
-              name: shift.time_slot_name,
-              startTime: shift.start_time,
-              endTime: shift.end_time
-            }
-          })),
-          scheduledShifts: scheduledShifts.map(shift => ({
-            id: shift.id,
-            planId: shift.plan_id,
-            date: shift.date,
-            timeSlotId: shift.time_slot_id,
-            requiredEmployees: shift.required_employees,
-            assignedEmployees: JSON.parse(shift.assigned_employees || '[]'),
-            timeSlotName: shift.time_slot_name
-          }))
-        };
+      plans.map(async (plan) => {
+        const details = await getPlanWithDetails(plan.id);
+        return details ? { ...details.plan, timeSlots: details.timeSlots, shifts: details.shifts } : null;
       })
     );
 
-    res.json(plansWithDetails);
+    res.json(plansWithDetails.filter(Boolean));
   } catch (error) {
     console.error('Error fetching shift plans:', error);
     res.status(500).json({ error: 'Internal server error' });

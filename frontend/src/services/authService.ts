@@ -1,4 +1,5 @@
 // frontend/src/services/authService.ts
+import { Employee } from '../../../backend/src/models/employee';
 const API_BASE = 'http://localhost:3002/api';
 
 export interface LoginRequest {
@@ -11,26 +12,12 @@ export interface RegisterRequest {
   password: string;
   name: string;
   role?: string;
-  phone?: string;
-  department?: string;
 }
 
 export interface AuthResponse {
-  user: User;
+  employee: Employee;
   token: string;
   expiresIn: string;
-}
-
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-  role: 'admin' | 'instandhalter' | 'user';
-  createdAt: string;
-  lastLogin?: string;
-  phone?: string;
-  department?: string;
-  isActive?: boolean;
 }
 
 class AuthService {
@@ -51,12 +38,11 @@ class AuthService {
     const data: AuthResponse = await response.json();
     this.token = data.token;
     localStorage.setItem('token', data.token);
-    localStorage.setItem('user', JSON.stringify(data.user));
+    localStorage.setItem('employee', JSON.stringify(data.employee));
     
     return data;
   }
 
-  // Register Methode hinzufügen
   async register(userData: RegisterRequest): Promise<AuthResponse> {
     const response = await fetch(`${API_BASE}/employees`, {
       method: 'POST',
@@ -69,21 +55,18 @@ class AuthService {
       throw new Error(errorData.error || 'Registrierung fehlgeschlagen');
     }
 
-    // Nach der Erstellung automatisch einloggen
     return this.login({
       email: userData.email,
       password: userData.password
     });
   }
 
-  // getCurrentUser als SYNCHRON machen
-  getCurrentUser(): User | null {
-    const userStr = localStorage.getItem('user');
-    return userStr ? JSON.parse(userStr) : null;
+  getCurrentEmployee(): Employee | null {
+    const employeeStr = localStorage.getItem('employee');
+    return employeeStr ? JSON.parse(employeeStr) : null;
   }
 
-  // Asynchrone Methode für Server-Abfrage
-  async fetchCurrentUser(): Promise<User | null> {
+  async fetchCurrentEmployee(): Promise<Employee | null> {
     const token = this.getToken();
     if (!token) {
       return null;
@@ -97,7 +80,8 @@ class AuthService {
       });
 
       if (response.ok) {
-        const user = await response.json();
+        const data = await response.json();
+        const user = data.user;
         localStorage.setItem('user', JSON.stringify(user));
         return user;
       }
@@ -125,7 +109,6 @@ class AuthService {
     return this.getToken() !== null;
   }
 
-  // Für API Calls mit Authentication
   getAuthHeaders(): HeadersInit {
     const token = this.getToken();
     return token ? { 'Authorization': `Bearer ${token}` } : {};

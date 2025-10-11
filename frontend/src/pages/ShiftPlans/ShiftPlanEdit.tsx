@@ -1,8 +1,10 @@
 // frontend/src/pages/ShiftPlans/ShiftPlanEdit.tsx
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { shiftPlanService, ShiftPlan, ShiftPlanShift } from '../../services/shiftPlanService';
+import { shiftPlanService } from '../../services/shiftPlanService';
+import { ShiftPlan, Shift } from '../../../../backend/src/models/shiftPlan';
 import { useNotification } from '../../contexts/NotificationContext';
+import { getTimeSlotById } from '../../models/helpers/shiftPlanHelpers';
 
 const ShiftPlanEdit: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -10,12 +12,10 @@ const ShiftPlanEdit: React.FC = () => {
   const { showNotification } = useNotification();
   const [shiftPlan, setShiftPlan] = useState<ShiftPlan | null>(null);
   const [loading, setLoading] = useState(true);
-  const [editingShift, setEditingShift] = useState<ShiftPlanShift | null>(null);
-  const [newShift, setNewShift] = useState<Partial<ShiftPlanShift>>({
+  const [editingShift, setEditingShift] = useState<Shift | null>(null);
+  const [newShift, setNewShift] = useState<Partial<ScheduledShift>>({
     date: '',
-    name: '',
-    startTime: '',
-    endTime: '',
+    timeSlotId: '',
     requiredEmployees: 1
   });
 
@@ -41,16 +41,10 @@ const ShiftPlanEdit: React.FC = () => {
     }
   };
 
-  const handleUpdateShift = async (shift: ShiftPlanShift) => {
+  const handleUpdateShift = async (shift: Shift) => {
     if (!shiftPlan || !id) return;
     
     try {
-      await shiftPlanService.updateShiftPlanShift(id, shift);
-      showNotification({
-        type: 'success',
-        title: 'Erfolg',
-        message: 'Schicht wurde aktualisiert.'
-      });
       loadShiftPlan();
       setEditingShift(null);
     } catch (error) {
@@ -66,23 +60,16 @@ const ShiftPlanEdit: React.FC = () => {
   const handleAddShift = async () => {
     if (!shiftPlan || !id) return;
     
-    if (!newShift.date || !newShift.name || !newShift.startTime || !newShift.endTime || !newShift.requiredEmployees) {
+    if (!getTimeSlotById(shiftPlan, newShift.timeSlotId?) || !newShift.name || !newShift.startTime || !newShift.endTime || !newShift.requiredEmployees) {
       showNotification({
         type: 'error',
         title: 'Fehler',
         message: 'Bitte füllen Sie alle Pflichtfelder aus.'
       });
       return;
-    }
+    } 
     
     try {
-      await shiftPlanService.addShiftPlanShift(id, {
-        date: newShift.date,
-        name: newShift.name,
-        startTime: newShift.startTime,
-        endTime: newShift.endTime,
-        requiredEmployees: Number(newShift.requiredEmployees)
-      });
       showNotification({
         type: 'success',
         title: 'Erfolg',
@@ -112,12 +99,6 @@ const ShiftPlanEdit: React.FC = () => {
     }
 
     try {
-      await shiftPlanService.deleteShiftPlanShift(id!, shiftId);
-      showNotification({
-        type: 'success',
-        title: 'Erfolg',
-        message: 'Schicht wurde gelöscht.'
-      });
       loadShiftPlan();
     } catch (error) {
       console.error('Error deleting shift:', error);

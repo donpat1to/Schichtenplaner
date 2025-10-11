@@ -21,20 +21,7 @@ export const shiftPlanService = {
       throw new Error('Fehler beim Laden der Schichtpläne');
     }
     
-    const data = await response.json();
-    
-    // Convert snake_case to camelCase
-    return data.map((plan: any) => ({
-      id: plan.id,
-      name: plan.name,
-      startDate: plan.start_date, // Convert here
-      endDate: plan.end_date,     // Convert here
-      templateId: plan.template_id,
-      status: plan.status,
-      createdBy: plan.created_by,
-      createdAt: plan.created_at,
-      shifts: plan.shifts || []
-    }));
+    return await response.json();
   },
 
   async getShiftPlan(id: string): Promise<ShiftPlan> {
@@ -53,20 +40,7 @@ export const shiftPlanService = {
       throw new Error('Schichtplan nicht gefunden');
     }
     
-    const data = await response.json();
-    
-    // Convert snake_case to camelCase
-    return data.map((plan: any) => ({
-      id: plan.id,
-      name: plan.name,
-      startDate: plan.start_date,
-      endDate: plan.end_date,
-      templateId: plan.template_id,
-      status: plan.status,
-      createdBy: plan.created_by,
-      createdAt: plan.created_at,
-      shifts: plan.shifts || []
-    }));
+    return await response.json();
   },
 
   async createShiftPlan(plan: CreateShiftPlanRequest): Promise<ShiftPlan> {
@@ -126,61 +100,6 @@ export const shiftPlanService = {
         throw new Error('Nicht authorisiert - bitte erneut anmelden');
       }
       throw new Error('Fehler beim Löschen des Schichtplans');
-    }
-  },
-
-  async updateShiftPlanShift(planId: string, shift: Shift): Promise<void> {
-    const response = await fetch(`${API_BASE}/${planId}/shifts/${shift.id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...authService.getAuthHeaders()
-      },
-      body: JSON.stringify(shift)
-    });
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        authService.logout();
-        throw new Error('Nicht authorisiert - bitte erneut anmelden');
-      }
-      throw new Error('Fehler beim Aktualisieren der Schicht');
-    }
-  },
-
-  async addShiftPlanShift(planId: string, shift: Omit<Shift, 'id' | 'shiftPlanId' | 'assignedEmployees'>): Promise<void> {
-    const response = await fetch(`${API_BASE}/${planId}/shifts`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...authService.getAuthHeaders()
-      },
-      body: JSON.stringify(shift)
-    });
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        authService.logout();
-        throw new Error('Nicht authorisiert - bitte erneut anmelden');
-      }
-      throw new Error('Fehler beim Hinzufügen der Schicht');
-    }
-  },
-
-  async deleteShiftPlanShift(planId: string, shiftId: string): Promise<void> {
-    const response = await fetch(`${API_BASE}/${planId}/shifts/${shiftId}`, {
-      method: 'DELETE',
-      headers: {
-        ...authService.getAuthHeaders()
-      }
-    });
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        authService.logout();
-        throw new Error('Nicht authorisiert - bitte erneut anmelden');
-      }
-      throw new Error('Fehler beim Löschen der Schicht');
     }
   }
 };

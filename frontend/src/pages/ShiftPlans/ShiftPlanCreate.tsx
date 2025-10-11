@@ -3,8 +3,13 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { shiftTemplateService } from '../../services/shiftTemplateService';
 import { shiftPlanService } from '../../services/shiftPlanService';
-import { TemplateShift } from '../../types/shiftTemplate';
 import styles from './ShiftPlanCreate.module.css';
+
+export interface TemplateShift {
+  id: string;
+  name: string;
+  isDefault?: boolean;
+}
 
 const ShiftPlanCreate: React.FC = () => {
   const navigate = useNavigate();

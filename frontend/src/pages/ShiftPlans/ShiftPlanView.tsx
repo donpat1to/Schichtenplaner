@@ -3,8 +3,10 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { shiftPlanService } from '../../services/shiftPlanService';
-import { ShiftPlan, Shift, TimeSlot } from '../../../../backend/src/models/shiftPlan.js';
+import { getTimeSlotById } from '../../models/helpers/shiftPlanHelpers';
+import { ShiftPlan, TimeSlot } from '../../models/ShiftPlan';
 import { useNotification } from '../../contexts/NotificationContext';
+import { formatDate, formatTime } from '../../utils/foramatters';
 
 const ShiftPlanView: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -36,94 +38,44 @@ const ShiftPlanView: React.FC = () => {
     }
   };
 
-  const formatDate = (dateString: string | undefined): string => {
-    if (!dateString) return 'Kein Datum';
-    
-    const date = new Date(dateString);
-    
-    if (isNaN(date.getTime())) {
-      return 'Ungültiges Datum';
-    }
-    
-    return date.toLocaleDateString('de-DE', {
-      weekday: 'long',
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    });
-  };
-
-  const formatTime = (timeString: string) => {
-    return timeString.substring(0, 5);
-  };
-
-  // Get unique shift types and their staffing per weekday
+  // Simplified timetable data generation
   const getTimetableData = () => {
     if (!shiftPlan) return { shifts: [], weekdays: [] };
 
-    // Get all unique shift types (name + time combination)
-    const shiftTypes = Array.from(new Set(
-      shiftPlan.shifts.map(shift => 
-        `${shift.timeSlot.name}|${shift.timeSlot.startTime}|${shift.timeSlot.endTime}`
-      )
-    )).map(shiftKey => {
-      const [name, startTime, endTime] = shiftKey.split('|');
-      return { name, startTime, endTime };
-    });
-
-    // Weekdays (1=Monday, 7=Sunday)
-    const weekdays = [1, 2, 3, 4, 5, 6, 7];
-
-    // For each shift type and weekday, calculate staffing
-    const timetableShifts = shiftTypes.map(shiftType => {
+    // Use timeSlots directly since shifts reference them
+    const timetableShifts = shiftPlan.timeSlots.map(timeSlot => {
       const weekdayData: Record<number, string> = {};
       
       weekdays.forEach(weekday => {
-        // Find all shifts of this type on this weekday
-        const shiftsOnDay = shiftPlan.shifts.filter(shift => {
-          const date = new Date(shift.date);
-          const dayOfWeek = date.getDay() === 0 ? 7 : date.getDay(); // Convert to 1-7 (Mon-Sun)
-          return dayOfWeek === weekday && 
-                 shift.timeSlot.name === shiftType.name &&
-                 shift.timeSlot.startTime === shiftType.startTime &&
-                 shift.timeSlot.endTime === shiftType.endTime;
-        });
+        const shiftsOnDay = shiftPlan.shifts.filter(shift => 
+          shift.dayOfWeek === weekday.id && 
+          shift.timeSlotId === timeSlot.id
+        );
 
         if (shiftsOnDay.length === 0) {
-          weekdayData[weekday] = '';
+          weekdayData[weekday.id] = '';
         } else {
-          const totalAssigned = shiftsOnDay.reduce((sum, shift) => sum + shift.timeSlot.assignedEmployees.length, 0);
-          const totalRequired = shiftsOnDay.reduce((sum, shift) => sum + shift.requiredEmployees, 0);
-          weekdayData[weekday] = `${totalAssigned}/${totalRequired}`;
+          const totalRequired = shiftsOnDay.reduce((sum, shift) => 
+            sum + shift.requiredEmployees, 0);
+          // For now, show required count since we don't have assigned employees in Shift
+          weekdayData[weekday.id] = `0/${totalRequired}`;
         }
       });
 
       return {
-        ...shiftType,
-        displayName: `${shiftType.name} (${formatTime(shiftType.startTime)}–${formatTime(shiftType.endTime)})`,
+        ...timeSlot,
+        displayName: `${timeSlot.name} (${formatTime(timeSlot.startTime)}–${formatTime(timeSlot.endTime)})`,
         weekdayData
       };
     });
 
-    return {
-      shifts: timetableShifts,
-      weekdays: weekdays.map(day => ({
-        id: day,
-        name: ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][day === 7 ? 0 : day]
-      }))
-    };
+    return { shifts: timetableShifts, weekdays };
   };
 
-  if (loading) {
-    return <div>Lade Schichtplan...</div>;
-  }
-
-  if (!shiftPlan) {
-    return <div>Schichtplan nicht gefunden</div>;
-  }
+  if (loading) return <div>Lade Schichtplan...</div>;
+  if (!shiftPlan) return <div>Schichtplan nicht gefunden</div>;
 
   const timetableData = getTimetableData();
-
   return (
     <div style={{ padding: '20px' }}>
       <div style={{ 
