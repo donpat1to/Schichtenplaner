@@ -1,5 +1,5 @@
 // frontend/src/services/employeeService.ts
-import { Employee, CreateEmployeeRequest, UpdateEmployeeRequest, Availability } from '../types/employee';
+import { Employee, CreateEmployeeRequest, UpdateEmployeeRequest, EmployeeAvailability } from '../../../backend/src/models/employee';
 
 const API_BASE_URL = 'http://localhost:3002/api';
 
@@ -90,7 +90,7 @@ export class EmployeeService {
     }
   }
 
-  async getAvailabilities(employeeId: string): Promise<Availability[]> {
+  async getAvailabilities(employeeId: string): Promise<EmployeeAvailability[]> {
     const response = await fetch(`${API_BASE_URL}/employees/${employeeId}/availabilities`, {
       headers: getAuthHeaders(),
     });
@@ -102,7 +102,7 @@ export class EmployeeService {
     return response.json();
   }
 
-  async updateAvailabilities(employeeId: string, availabilities: Availability[]): Promise<Availability[]> {
+  async updateAvailabilities(employeeId: string, availabilities: EmployeeAvailability[]): Promise<EmployeeAvailability[]> {
     const response = await fetch(`${API_BASE_URL}/employees/${employeeId}/availabilities`, {
       method: 'PUT',
       headers: getAuthHeaders(),

@@ -14,17 +14,16 @@ export const getEmployees = async (req: AuthRequest, res: Response): Promise<voi
       SELECT 
         id, email, name, role, is_active as isActive, 
         employee_type as employeeType, 
-        is_sufficiently_independent as isSufficientlyIndependent, 
+        contract_type as contractType,
+        can_work_alone as canWorkAlone,
         created_at as createdAt, 
         last_login as lastLogin
-      FROM users 
+      FROM employees
       WHERE is_active = 1
       ORDER BY name
     `);
 
     console.log('✅ Employees found:', employees.length);
-    console.log('📋 Employees data:', employees);
-
     res.json(employees);
   } catch (error) {
     console.error('❌ Error fetching employees:', error);
@@ -40,10 +39,11 @@ export const getEmployee = async (req: AuthRequest, res: Response): Promise<void
       SELECT 
         id, email, name, role, is_active as isActive, 
         employee_type as employeeType, 
-        is_sufficiently_independent as isSufficientlyIndependent,  
+        contract_type as contractType,
+        can_work_alone as canWorkAlone,
         created_at as createdAt, 
         last_login as lastLogin
-      FROM users 
+      FROM employees
       WHERE id = ?
     `, [id]);
 
@@ -72,14 +72,15 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
       name, 
       role, 
       employeeType, 
-      isSufficientlyIndependent,
+      contractType,
+      canWorkAlone // Statt isSufficientlyIndependent
     } = req.body as CreateEmployeeRequest;
 
     // Validierung
-    if (!email || !password || !name || !role || !employeeType) {
+    if (!email || !password || !name || !role || !employeeType || !contractType) {
       console.log('❌ Validation failed: Missing required fields');
       res.status(400).json({ 
-        error: 'Email, password, name, role und employeeType sind erforderlich' 
+        error: 'Email, password, name, role, employeeType und contractType sind erforderlich' 
       });
       return;
     }
@@ -91,7 +92,7 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
     }
 
     // Check if email already exists
-    const existingActiveUser = await db.get<any>('SELECT id FROM users WHERE email = ? AND is_active = 1', [email]);
+    const existingActiveUser = await db.get<any>('SELECT id FROM employees WHERE email = ? AND is_active = 1', [email]);
     
     if (existingActiveUser) {
       console.log('❌ Email exists for active user:', existingActiveUser);
@@ -104,10 +105,10 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
     const employeeId = uuidv4();
 
     await db.run(
-      `INSERT INTO users (
-        id, email, password, name, role, employee_type, is_sufficiently_independent, 
+      `INSERT INTO employees (
+        id, email, password, name, role, employee_type, contract_type, can_work_alone, 
         is_active
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         employeeId, 
         email, 
@@ -115,7 +116,8 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
         name, 
         role, 
         employeeType, 
-        isSufficientlyIndependent ? 1 : 0,
+        contractType,
+        canWorkAlone ? 1 : 0, // Statt isSufficientlyIndependent
         1
       ]
     );
@@ -125,10 +127,11 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
       SELECT 
         id, email, name, role, is_active as isActive,
         employee_type as employeeType, 
-        is_sufficiently_independent as isSufficientlyIndependent, 
+        contract_type as contractType,
+        can_work_alone as canWorkAlone,
         created_at as createdAt, 
         last_login as lastLogin
-      FROM users 
+      FROM employees
       WHERE id = ?
     `, [employeeId]);
 
@@ -142,12 +145,12 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
 export const updateEmployee = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, role, isActive, employeeType, isSufficientlyIndependent } = req.body;
+    const { name, role, isActive, employeeType, contractType, canWorkAlone } = req.body; // Statt isSufficientlyIndependent
 
-    console.log('📝 Update Employee Request:', { id, name, role, isActive, employeeType, isSufficientlyIndependent });
+    console.log('📝 Update Employee Request:', { id, name, role, isActive, employeeType, contractType, canWorkAlone });
 
     // Check if employee exists
-    const existingEmployee = await db.get('SELECT * FROM users WHERE id = ?', [id]);
+    const existingEmployee = await db.get('SELECT * FROM employees WHERE id = ?', [id]);
     if (!existingEmployee) {
       res.status(404).json({ error: 'Employee not found' });
       return;
@@ -155,14 +158,15 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
 
     // Update employee
     await db.run(
-      `UPDATE users 
+      `UPDATE employees 
        SET name = COALESCE(?, name),
            role = COALESCE(?, role),
            is_active = COALESCE(?, is_active),
            employee_type = COALESCE(?, employee_type),
-           is_sufficiently_independent = COALESCE(?, is_sufficiently_independent)
+           contract_type = COALESCE(?, contract_type),
+           can_work_alone = COALESCE(?, can_work_alone)
        WHERE id = ?`,
-      [name, role, isActive, employeeType, isSufficientlyIndependent, id]
+      [name, role, isActive, employeeType, contractType, canWorkAlone, id]
     );
 
     console.log('✅ Employee updated successfully');
@@ -172,10 +176,11 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
       SELECT 
         id, email, name, role, is_active as isActive, 
         employee_type as employeeType, 
-        is_sufficiently_independent as isSufficientlyIndependent,
+        contract_type as contractType,
+        can_work_alone as canWorkAlone,
         created_at as createdAt, 
         last_login as lastLogin
-      FROM users 
+      FROM employees
       WHERE id = ?
     `, [id]);
 
@@ -194,7 +199,7 @@ export const deleteEmployee = async (req: AuthRequest, res: Response): Promise<v
     // Check if employee exists
     const existingEmployee = await db.get<any>(`
       SELECT id, email, name, is_active, role 
-      FROM users 
+      FROM employees
       WHERE id = ?
     `, [id]);
 
@@ -211,7 +216,7 @@ export const deleteEmployee = async (req: AuthRequest, res: Response): Promise<v
 
     try {
       // 1. Remove availabilities
-      await db.run('DELETE FROM employee_availabilities WHERE employee_id = ?', [id]);
+      await db.run('DELETE FROM employee_availability WHERE employee_id = ?', [id]);
       
       // 2. Remove from assigned_shifts (JSON field cleanup)
       interface AssignedShift {
@@ -220,7 +225,7 @@ export const deleteEmployee = async (req: AuthRequest, res: Response): Promise<v
       }
       
       const assignedShifts = await db.all<AssignedShift>(
-        'SELECT id, assigned_employees FROM assigned_shifts WHERE json_extract(assigned_employees, "$") LIKE ?', 
+        'SELECT id, assigned_employees FROM scheduled_shifts WHERE json_extract(assigned_employees, "$") LIKE ?', 
         [`%${id}%`]
       );
       
@@ -229,14 +234,13 @@ export const deleteEmployee = async (req: AuthRequest, res: Response): Promise<v
           const employeesArray: string[] = JSON.parse(shift.assigned_employees || '[]');
           const filteredEmployees = employeesArray.filter((empId: string) => empId !== id);
           await db.run(
-            'UPDATE assigned_shifts SET assigned_employees = ? WHERE id = ?',
+            'UPDATE scheduled_shifts SET assigned_employees = ? WHERE id = ?',
             [JSON.stringify(filteredEmployees), shift.id]
           );
         } catch (parseError) {
           console.warn(`Could not parse assigned_employees for shift ${shift.id}:`, shift.assigned_employees);
-          // Falls JSON parsing fehlschlägt, setze leeres Array
           await db.run(
-            'UPDATE assigned_shifts SET assigned_employees = ? WHERE id = ?',
+            'UPDATE scheduled_shifts SET assigned_employees = ? WHERE id = ?',
             [JSON.stringify([]), shift.id]
           );
         }
@@ -244,10 +248,9 @@ export const deleteEmployee = async (req: AuthRequest, res: Response): Promise<v
 
       // 3. Nullify created_by references
       await db.run('UPDATE shift_plans SET created_by = NULL WHERE created_by = ?', [id]);
-      await db.run('UPDATE shift_templates SET created_by = NULL WHERE created_by = ?', [id]);
 
-      // 4. Finally delete the user
-      await db.run('DELETE FROM users WHERE id = ?', [id]);
+      // 4. Finally delete the employee
+      await db.run('DELETE FROM employees WHERE id = ?', [id]);
 
       await db.run('COMMIT');
       console.log('✅ Successfully deleted employee:', existingEmployee.email);
@@ -271,25 +274,26 @@ export const getAvailabilities = async (req: AuthRequest, res: Response): Promis
     const { employeeId } = req.params;
 
     // Check if employee exists
-    const existingEmployee = await db.get('SELECT id FROM users WHERE id = ?', [employeeId]);
+    const existingEmployee = await db.get('SELECT id FROM employees WHERE id = ?', [employeeId]);
     if (!existingEmployee) {
       res.status(404).json({ error: 'Employee not found' });
       return;
     }
 
     const availabilities = await db.all<any>(`
-      SELECT * FROM employee_availabilities 
+      SELECT * FROM employee_availability 
       WHERE employee_id = ? 
-      ORDER BY day_of_week, start_time
+      ORDER BY day_of_week, time_slot_id
     `, [employeeId]);
 
     res.json(availabilities.map(avail => ({
       id: avail.id,
       employeeId: avail.employee_id,
+      planId: avail.plan_id,
       dayOfWeek: avail.day_of_week,
-      startTime: avail.start_time,
-      endTime: avail.end_time,
-      isAvailable: avail.is_available === 1
+      timeSlotId: avail.time_slot_id,
+      preferenceLevel: avail.preference_level,
+      notes: avail.notes
     })));
   } catch (error) {
     console.error('Error fetching availabilities:', error);
@@ -300,17 +304,10 @@ export const getAvailabilities = async (req: AuthRequest, res: Response): Promis
 export const updateAvailabilities = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { employeeId } = req.params;
-    const availabilities = req.body as Array<{
-      id?: string;
-      employeeId: string;
-      dayOfWeek: number;
-      startTime: string;
-      endTime: string;
-      isAvailable: boolean;
-    }>;
+    const { planId, availabilities } = req.body;
 
     // Check if employee exists
-    const existingEmployee = await db.get('SELECT id FROM users WHERE id = ?', [employeeId]);
+    const existingEmployee = await db.get('SELECT id FROM employees WHERE id = ?', [employeeId]);
     if (!existingEmployee) {
       res.status(404).json({ error: 'Employee not found' });
       return;
@@ -319,22 +316,23 @@ export const updateAvailabilities = async (req: AuthRequest, res: Response): Pro
     await db.run('BEGIN TRANSACTION');
 
     try {
-      // Delete existing availabilities
-      await db.run('DELETE FROM employee_availabilities WHERE employee_id = ?', [employeeId]);
+      // Delete existing availabilities for this plan
+      await db.run('DELETE FROM employee_availability WHERE employee_id = ? AND plan_id = ?', [employeeId, planId]);
 
       // Insert new availabilities
       for (const availability of availabilities) {
         const availabilityId = uuidv4();
         await db.run(
-          `INSERT INTO employee_availabilities (id, employee_id, day_of_week, start_time, end_time, is_available) 
-           VALUES (?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO employee_availability (id, employee_id, plan_id, day_of_week, time_slot_id, preference_level, notes) 
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
           [
             availabilityId,
             employeeId,
+            planId,
             availability.dayOfWeek,
-            availability.startTime,
-            availability.endTime,
-            availability.isAvailable ? 1 : 0
+            availability.timeSlotId,
+            availability.preferenceLevel,
+            availability.notes || null
           ]
         );
       }
@@ -343,18 +341,19 @@ export const updateAvailabilities = async (req: AuthRequest, res: Response): Pro
 
       // Return updated availabilities
       const updatedAvailabilities = await db.all<any>(`
-        SELECT * FROM employee_availabilities 
-        WHERE employee_id = ? 
-        ORDER BY day_of_week, start_time
-      `, [employeeId]);
+        SELECT * FROM employee_availability 
+        WHERE employee_id = ? AND plan_id = ?
+        ORDER BY day_of_week, time_slot_id
+      `, [employeeId, planId]);
 
       res.json(updatedAvailabilities.map(avail => ({
         id: avail.id,
         employeeId: avail.employee_id,
+        planId: avail.plan_id,
         dayOfWeek: avail.day_of_week,
-        startTime: avail.start_time,
-        endTime: avail.end_time,
-        isAvailable: avail.is_available === 1
+        timeSlotId: avail.time_slot_id,
+        preferenceLevel: avail.preference_level,
+        notes: avail.notes
       })));
 
     } catch (error) {

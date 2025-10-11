@@ -24,7 +24,6 @@ export interface TimeSlot {
 }
 
 export interface Shift {
-  timeSlot: any;
   id: string;
   planId: string;
   timeSlotId: string;

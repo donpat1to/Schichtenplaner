@@ -1,7 +1,7 @@
 // backend/src/scripts/setupDefaultTemplate.ts
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../services/databaseService.js';
-import { DEFAULT_ZEBRA_TIME_SLOTS, TemplateShift } from '../models/ShiftPlan.js';
+import { DEFAULT_ZEBRA_TIME_SLOTS } from '../models/defaults/shiftPlanDefaults.js';
 
 interface AdminUser {
   id: string;
@@ -13,9 +13,10 @@ interface AdminUser {
  */
 export async function setupDefaultTemplate(): Promise<void> {
   try {
-    // Prüfen ob bereits eine Standard-Vorlage existiert
+    // Prüfen ob bereits eine Standard-Vorlage existiert - KORREKTUR: shift_plans verwenden
     const existingDefault = await db.get(
-      'SELECT * FROM shift_templates WHERE is_default = 1'
+      'SELECT * FROM shift_plans WHERE is_template = 1 AND name = ?',
+      ['Standardwoche']
     );
 
     if (existingDefault) {
@@ -23,9 +24,9 @@ export async function setupDefaultTemplate(): Promise<void> {
       return;
     }
 
-    // Admin-Benutzer für die Standard-Vorlage finden
+    // Admin-Benutzer für die Standard-Vorlage finden - KORREKTUR: employees verwenden
     const adminUser = await db.get<AdminUser>(
-      'SELECT id FROM users WHERE role = ?',
+      'SELECT id FROM employees WHERE role = ?',
       ['admin']
     );
 
@@ -40,70 +41,74 @@ export async function setupDefaultTemplate(): Promise<void> {
     // Transaktion starten
     await db.run('BEGIN TRANSACTION');
 
-    const timeSlots = DEFAULT_TIME_SLOTS;
-
-
     try {
-      // Standard-Vorlage erstellen
+      // Standard-Vorlage erstellen - KORREKTUR: shift_plans verwenden
       await db.run(
-        `INSERT INTO shift_templates (id, name, description, is_default, created_by) 
-         VALUES (?, ?, ?, ?, ?)`,
+        `INSERT INTO shift_plans (id, name, description, is_template, status, created_by) 
+         VALUES (?, ?, ?, ?, ?, ?)`,
         [
           templateId,
-          'Standard Wochenplan',
+          'Standardwoche',
           'Mo-Do: Vormittags- und Nachmittagsschicht, Fr: nur Vormittagsschicht',
-          1,
+          1, // is_template = true
+          'template', // status = 'template'
           adminUser.id
         ]
       );
 
       console.log('Standard-Vorlage erstellt:', templateId);
 
+      // Zeit-Slots erstellen - KORREKTUR: time_slots verwenden
+      const timeSlots = DEFAULT_ZEBRA_TIME_SLOTS.map(slot => ({
+        ...slot,
+        id: uuidv4()
+      }));
+
       for (const slot of timeSlots) {
         await db.run(
-          `INSERT INTO template_time_slots (id, template_id, name, start_time, end_time) 
-           VALUES (?, ?, ?, ?, ?)`,
-          [slot.id, templateId, slot.name, slot.startTime, slot.endTime]
+          `INSERT INTO time_slots (id, plan_id, name, start_time, end_time, description) 
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [slot.id, templateId, slot.name, slot.startTime, slot.endTime, slot.description]
         );
       }
 
       console.log('✅ Zeit-Slots erstellt');
 
-      // Schichten für Mo-Do
+      // Schichten für Mo-Do - KORREKTUR: shifts verwenden
       for (let day = 1; day <= 4; day++) {
         // Vormittagsschicht
         await db.run(
-          `INSERT INTO template_shifts (id, template_id, day_of_week, time_slot_id, required_employees, color) 
+          `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, required_employees, color) 
            VALUES (?, ?, ?, ?, ?, ?)`,
-          [uuidv4(), templateId, day, timeSlots[0].id, 1, '#3498db']
+          [uuidv4(), templateId, day, timeSlots[0].id, 2, '#3498db']
         );
 
         // Nachmittagsschicht
         await db.run(
-          `INSERT INTO template_shifts (id, template_id, day_of_week, time_slot_id, required_employees, color) 
+          `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, required_employees, color) 
            VALUES (?, ?, ?, ?, ?, ?)`,
-          [uuidv4(), templateId, day, timeSlots[1].id, 1, '#e74c3c']
+          [uuidv4(), templateId, day, timeSlots[1].id, 2, '#e74c3c']
         );
       }
 
       // Freitag nur Vormittagsschicht
       await db.run(
-        `INSERT INTO template_shifts (id, template_id, day_of_week, time_slot_id, required_employees, color) 
+        `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, required_employees, color) 
          VALUES (?, ?, ?, ?, ?, ?)`,
-        [uuidv4(), templateId, 5, timeSlots[0].id, 1, '#3498db']
+        [uuidv4(), templateId, 5, timeSlots[0].id, 2, '#3498db']
       );
 
       console.log('✅ Schichten erstellt');
 
-      // In der problematischen Stelle:
+      // In der problematischen Stelle: KORREKTUR: shift_plans verwenden
       const createdTemplate = await db.get(
-        'SELECT * FROM shift_templates WHERE id = ?',
+        'SELECT * FROM shift_plans WHERE id = ?',
         [templateId]
       ) as { name: string } | undefined;
       console.log('📋 Erstellte Vorlage:', createdTemplate?.name);
 
       const shiftCount = await db.get(
-        'SELECT COUNT(*) as count FROM template_shifts WHERE template_id = ?',
+        'SELECT COUNT(*) as count FROM shifts WHERE plan_id = ?',
         [templateId]
       ) as { count: number } | undefined;
       console.log(`📊 Anzahl Schichten: ${shiftCount?.count}`);

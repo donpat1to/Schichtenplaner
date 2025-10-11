@@ -32,7 +32,7 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
   try {
     // Check if admin already exists
     const adminExists = await db.get<{ 'COUNT(*)': number }>(
-      'SELECT COUNT(*) FROM users WHERE role = ? AND is_active = 1',
+      'SELECT COUNT(*) FROM employees WHERE role = ? AND is_active = 1',
       ['admin']
     );
 
@@ -70,8 +70,8 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
     try {
       // Create admin user
       await db.run(
-        `INSERT INTO users (id, email, password, name, role, is_active) 
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO employees (id, email, password, name, role, is_active)
+        VALUES (?, ?, ?, ?, ?, ?)`,
         [adminId, email, hashedPassword, name, 'admin', 1]
       );
 

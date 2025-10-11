@@ -1,6 +1,6 @@
 // frontend/src/pages/Employees/EmployeeManagement.tsx
 import React, { useState, useEffect } from 'react';
-import { Employee } from '../../types/employee';
+import { Employee } from '../../../../backend/src/models/employee';
 import { employeeService } from '../../services/employeeService';
 import EmployeeList from './components/EmployeeList';
 import EmployeeForm from './components/EmployeeForm';

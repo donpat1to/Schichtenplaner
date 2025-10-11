@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Employee } from '../types/employee';
+import { Employee } from '../../../backend/src/models/employee';
 
 interface LoginRequest {
   email: string;
