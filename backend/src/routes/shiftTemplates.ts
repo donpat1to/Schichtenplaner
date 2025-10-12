@@ -8,15 +8,16 @@ import {
   createFromTemplate,
   updateShiftPlan,
   deleteShiftPlan
-} from '../controllers/shiftTemplateController.js';
+} from '../controllers/shiftPlanController.js';
+
 
 const router = express.Router();
 
 router.use(authMiddleware);
 router.get('/', getTemplates);
 router.get('/:id', getShiftPlan);
-router.post('/', createFromTemplate);
-router.put('/:id', updateShiftPlan);
-router.delete('/:id', deleteShiftPlan);
+router.post('/', requireRole(['admin', 'instandhalter']), createFromTemplate);
+router.put('/:id', requireRole(['admin', 'instandhalter']), updateShiftPlan);
+router.delete('/:id', requireRole(['admin', 'instandhalter']), deleteShiftPlan);
 
 export default router;

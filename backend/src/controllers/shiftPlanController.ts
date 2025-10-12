@@ -647,3 +647,199 @@ async function generateScheduledShifts(planId: string, startDate: string, endDat
     throw error;
   }
 }
+
+export const getTemplates = async (req: Request, res: Response): Promise<void> => {
+  try {
+    console.log('🔍 Lade Vorlagen...');
+
+    const templates = await db.all<any>(`
+      SELECT sp.*, e.name as created_by_name 
+      FROM shift_plans sp
+      LEFT JOIN employees e ON sp.created_by = e.id
+      WHERE sp.is_template = 1
+      ORDER BY sp.created_at DESC
+    `);
+
+    console.log(`✅ ${templates.length} Vorlagen gefunden:`, templates.map(t => t.name));
+
+    const templatesWithDetails = await Promise.all(
+      templates.map(async (template) => {
+        const details = await getPlanWithDetails(template.id);
+        return details ? { ...details.plan, timeSlots: details.timeSlots, shifts: details.shifts } : null;
+      })
+    );
+
+    res.json(templatesWithDetails.filter(Boolean));
+  } catch (error) {
+    console.error('Error fetching templates:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Neue Funktion: Create from Template
+export const createFromTemplate = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { templatePlanId, name, startDate, endDate, description } = req.body;
+    const userId = (req as AuthRequest).user?.userId;
+
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    // Get the template plan
+    const templatePlan = await getShiftPlanById(templatePlanId);
+    if (!templatePlan) {
+      res.status(404).json({ error: 'Template plan not found' });
+      return;
+    }
+
+    if (!templatePlan.isTemplate) {
+      res.status(400).json({ error: 'Specified plan is not a template' });
+      return;
+    }
+
+    const planId = uuidv4();
+
+    await db.run('BEGIN TRANSACTION');
+
+    try {
+      // Create new plan from template
+      await db.run(
+        `INSERT INTO shift_plans (id, name, description, start_date, end_date, is_template, status, created_by) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [planId, name, description || templatePlan.description, startDate, endDate, 0, 'draft', userId]
+      );
+
+      // Copy time slots
+      for (const timeSlot of templatePlan.timeSlots) {
+        const newTimeSlotId = uuidv4();
+        await db.run(
+          `INSERT INTO time_slots (id, plan_id, name, start_time, end_time, description) 
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [newTimeSlotId, planId, timeSlot.name, timeSlot.startTime, timeSlot.endTime, timeSlot.description || '']
+        );
+      }
+
+      // Get the newly created time slots
+      const newTimeSlots = await db.all<any>(`
+        SELECT * FROM time_slots WHERE plan_id = ? ORDER BY start_time
+      `, [planId]);
+
+      // Copy shifts
+      for (const shift of templatePlan.shifts) {
+        const shiftId = uuidv4();
+        
+        // Find matching time slot in new plan
+        const originalTimeSlot = templatePlan.timeSlots.find((ts: any) => ts.id === shift.timeSlotId);
+        const newTimeSlot = newTimeSlots.find((ts: any) => 
+          ts.name === originalTimeSlot?.name && 
+          ts.start_time === originalTimeSlot?.startTime && 
+          ts.end_time === originalTimeSlot?.endTime
+        );
+
+        if (newTimeSlot) {
+          await db.run(
+            `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, required_employees, color) 
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [shiftId, planId, shift.dayOfWeek, newTimeSlot.id, shift.requiredEmployees, shift.color || '#3498db']
+          );
+        }
+      }
+
+      // Generate scheduled shifts for the date range
+      if (startDate && endDate) {
+        await generateScheduledShifts(planId, startDate, endDate);
+      }
+
+      await db.run('COMMIT');
+
+      // Return created plan
+      const createdPlan = await getShiftPlanById(planId);
+      res.status(201).json(createdPlan);
+
+    } catch (error) {
+      await db.run('ROLLBACK');
+      throw error;
+    }
+
+  } catch (error) {
+    console.error('Error creating plan from template:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Neue Funktion: Initialize Default Templates
+export const initializeDefaultTemplates = async (userId: string): Promise<void> => {
+  try {
+    console.log('🔄 Initialisiere Standard-Vorlagen...');
+
+    // Check if templates already exist
+    const existingTemplates = await db.all<any>(
+      'SELECT COUNT(*) as count FROM shift_plans WHERE is_template = 1'
+    );
+
+    if (existingTemplates[0].count > 0) {
+      console.log('✅ Vorlagen existieren bereits');
+      return;
+    }
+
+    await db.run('BEGIN TRANSACTION');
+
+    try {
+      // Create all template presets from shiftPlanDefaults
+      for (const [presetKey, preset] of Object.entries(TEMPLATE_PRESETS)) {
+        const planId = uuidv4();
+        
+        // Create the template plan
+        await db.run(
+          `INSERT INTO shift_plans (id, name, description, is_template, status, created_by) 
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [planId, preset.name, preset.description, true, 'template', userId]
+        );
+
+        // Create time slots with new UUIDs
+        const timeSlotMap = new Map<string, string>(); // Map original timeSlotId to new UUID
+        
+        for (const timeSlot of preset.timeSlots) {
+          const newTimeSlotId = uuidv4();
+          await db.run(
+            `INSERT INTO time_slots (id, plan_id, name, start_time, end_time, description) 
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [newTimeSlotId, planId, timeSlot.name, timeSlot.startTime, timeSlot.endTime, timeSlot.description || '']
+          );
+          
+          // Store mapping from original timeSlotId to new UUID
+          timeSlotMap.set((timeSlot as any).timeSlotId || timeSlot.name, newTimeSlotId);
+        }
+
+        // Create shifts using the time slot mapping
+        for (const shift of preset.shifts) {
+          const shiftId = uuidv4();
+          const timeSlotId = timeSlotMap.get(shift.timeSlotId);
+          
+          if (timeSlotId) {
+            await db.run(
+              `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, required_employees, color) 
+               VALUES (?, ?, ?, ?, ?, ?)`,
+              [shiftId, planId, shift.dayOfWeek, timeSlotId, shift.requiredEmployees, shift.color || '#3498db']
+            );
+          }
+        }
+
+        console.log(`✅ Vorlage erstellt: ${preset.name}`);
+      }
+
+      await db.run('COMMIT');
+      console.log('✅ Alle Standard-Vorlagen wurden initialisiert');
+
+    } catch (error) {
+      await db.run('ROLLBACK');
+      throw error;
+    }
+
+  } catch (error) {
+    console.error('❌ Fehler beim Initialisieren der Vorlagen:', error);
+    throw error;
+  }
+};

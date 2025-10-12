@@ -4,6 +4,7 @@ import bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { randomUUID } from 'crypto';
 import { db } from '../services/databaseService.js';
+import { initializeDefaultTemplates } from './shiftPlanController.js';
 
 export const checkSetupStatus = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -70,9 +71,9 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
     try {
       // Create admin user
       await db.run(
-        `INSERT INTO employees (id, email, password, name, role, is_active)
-        VALUES (?, ?, ?, ?, ?, ?)`,
-        [adminId, email, hashedPassword, name, 'admin', 1]
+        `INSERT INTO employees (id, email, password, name, role, is_active, employee_type, contract_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [adminId, email, hashedPassword, name, 'admin', 1, 'manager', 'large']
       );
 
       console.log('✅ Admin user created successfully');
@@ -88,6 +89,19 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
         error: 'Fehler beim Erstellen des Admin-Accounts'
       });
     }
+
+    // Nach erfolgreicher Admin-Erstellung:
+    console.log('🔄 Initialisiere Standard-Vorlagen...');
+    await initializeDefaultTemplates(adminId);
+
+    console.log('✅ Admin user created successfully with default templates');
+
+    res.status(201).json({
+      success: true,
+      message: 'Admin erfolgreich erstellt',
+      email: email
+    });
+    
   } catch (error) {
     console.error('❌ Error in setup:', error);
     res.status(500).json({ 

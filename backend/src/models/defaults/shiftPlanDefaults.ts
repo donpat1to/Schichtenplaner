@@ -2,14 +2,16 @@
 import { TimeSlot, Shift } from '../ShiftPlan.js';
 
 // Default time slots for ZEBRA (specific workplace)
-export const DEFAULT_ZEBRA_TIME_SLOTS: Omit<TimeSlot, 'id' | 'planId'>[] = [
+export const DEFAULT_ZEBRA_TIME_SLOTS: (Omit<TimeSlot, 'id' | 'planId'> & { timeSlotId: string })[] = [
   { 
+    timeSlotId: 'morning',
     name: 'Vormittag', 
     startTime: '08:00', 
     endTime: '12:00',
     description: 'Vormittagsschicht'
   },
   { 
+    timeSlotId: 'afternoon',
     name: 'Nachmittag', 
     startTime: '11:30', 
     endTime: '15:30',
@@ -17,21 +19,23 @@ export const DEFAULT_ZEBRA_TIME_SLOTS: Omit<TimeSlot, 'id' | 'planId'>[] = [
   },
 ];
 
-// Default time slots for general use
-export const DEFAULT_TIME_SLOTS: Omit<TimeSlot, 'id' | 'planId'>[] = [
+export const DEFAULT_TIME_SLOTS: (Omit<TimeSlot, 'id' | 'planId'> & { timeSlotId: string })[] = [
   { 
+    timeSlotId: 'morning',
     name: 'Vormittag', 
     startTime: '08:00', 
     endTime: '12:00',
     description: 'Vormittagsschicht'
   },
   { 
+    timeSlotId: 'afternoon', 
     name: 'Nachmittag', 
     startTime: '11:30', 
     endTime: '15:30',
     description: 'Nachmittagsschicht'
   },
   { 
+    timeSlotId: 'evening',
     name: 'Abend', 
     startTime: '14:00', 
     endTime: '18:00',
@@ -50,13 +54,12 @@ export const DEFAULT_ZEBRA_SHIFTS: Omit<Shift, 'id' | 'planId'>[] = [
   { timeSlotId: 'morning', dayOfWeek: 5, requiredEmployees: 2, color: '#3498db' }
 ];
 
-// Default shifts for general standard week template with variable required employees
 export const DEFAULT_SHIFTS: Omit<Shift, 'id' | 'planId'>[] = [
   // Monday-Friday: Morning + Afternoon + Evening
   ...Array.from({ length: 5 }, (_, i) => i + 1).flatMap(day => [
     { timeSlotId: 'morning', dayOfWeek: day, requiredEmployees: 2, color: '#3498db' },
     { timeSlotId: 'afternoon', dayOfWeek: day, requiredEmployees: 2, color: '#e74c3c' },
-    { timeSlotId: 'evening', dayOfWeek: day, requiredEmployees: 1, color: '#2ecc71' } // Only 1 for evening
+    { timeSlotId: 'evening', dayOfWeek: day, requiredEmployees: 1, color: '#2ecc71' }
   ])
 ];
 
