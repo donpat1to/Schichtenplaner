@@ -31,6 +31,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
 }) => {
   const [availabilities, setAvailabilities] = useState<Availability[]>([]);
   const [shiftPlans, setShiftPlans] = useState<ShiftPlan[]>([]);
+  const [usedDays, setUsedDays] = useState<{id: number, name: string}[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState<string>('');
   const [selectedPlan, setSelectedPlan] = useState<ShiftPlan | null>(null);
   const [timeSlots, setTimeSlots] = useState<ExtendedTimeSlot[]>([]);
@@ -61,10 +62,50 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
   useEffect(() => {
     if (selectedPlanId) {
       loadSelectedPlan();
+    } else {
+      setTimeSlots([]);
     }
   }, [selectedPlanId]);
 
-  // Load time slots from shift plans
+  const getUsedDaysFromPlan = (plan: ShiftPlan | null) => {
+    if (!plan || !plan.shifts) return [];
+    
+    const usedDays = new Set<number>();
+    plan.shifts.forEach(shift => {
+      usedDays.add(shift.dayOfWeek);
+    });
+    
+    const daysArray = Array.from(usedDays).sort();
+    console.log('📅 VERWENDETE TAGE IM PLAN:', daysArray);
+    
+    return daysArray.map(dayId => {
+      return daysOfWeek.find(day => day.id === dayId) || { id: dayId, name: `Tag ${dayId}` };
+    });
+  };
+
+  const getUsedTimeSlotsFromPlan = (plan: ShiftPlan | null): ExtendedTimeSlot[] => {
+  if (!plan || !plan.shifts || !plan.timeSlots) return [];
+  
+  const usedTimeSlotIds = new Set<string>();
+    plan.shifts.forEach(shift => {
+      usedTimeSlotIds.add(shift.timeSlotId);
+    });
+    
+    const usedTimeSlots = plan.timeSlots
+      .filter(timeSlot => usedTimeSlotIds.has(timeSlot.id))
+      .map(timeSlot => ({
+        ...timeSlot,
+        displayName: `${timeSlot.name} (${formatTime(timeSlot.startTime)}-${formatTime(timeSlot.endTime)})`,
+        source: `Plan: ${plan.name}`
+      }))
+      .sort((a, b) => a.startTime.localeCompare(b.startTime));
+    
+    console.log('⏰ VERWENDETE ZEIT-SLOTS IM PLAN:', usedTimeSlots);
+    return usedTimeSlots;
+  };
+
+
+  // Load time slots from shift plans - CORRECTED VERSION
   const extractTimeSlotsFromPlans = (plans: ShiftPlan[]): ExtendedTimeSlot[] => {
     console.log('🔄 EXTRAHIERE ZEIT-SLOTS AUS SCHICHTPLÄNEN:', plans);
     
@@ -78,10 +119,10 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       });
 
       // Use timeSlots from plan if available
-      if (plan.timeSlots && Array.isArray(plan.timeSlots)) {
+      if (plan.timeSlots && Array.isArray(plan.timeSlots) && plan.timeSlots.length > 0) {
         plan.timeSlots.forEach(timeSlot => {
           console.log(`   🔍 ZEIT-SLOT:`, timeSlot);
-          const key = `${timeSlot.startTime}-${timeSlot.endTime}`;
+          const key = timeSlot.id; // Use ID as key to avoid duplicates
           if (!allTimeSlots.has(key)) {
             allTimeSlots.set(key, {
               ...timeSlot,
@@ -90,23 +131,33 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
             });
           }
         });
+      } else {
+        console.warn(`⚠️ PLAN ${plan.name} HAT KEINE TIME_SLOTS:`, plan.timeSlots);
       }
 
-      // Also extract from shifts if timeSlots is empty
-      if ((!plan.timeSlots || plan.timeSlots.length === 0) && plan.shifts && Array.isArray(plan.shifts)) {
-        plan.shifts.forEach(shift => {
-          console.log(`   🔍 SCHICHT:`, shift);
-          // For shifts, we need to find the corresponding time slot
-          const timeSlot = plan.timeSlots?.find(ts => ts.id === shift.timeSlotId);
-          if (timeSlot) {
-            const key = `${timeSlot.startTime}-${timeSlot.endTime}`;
+      // Alternative: Extract from shifts if timeSlots array exists but is empty
+      if (plan.shifts && Array.isArray(plan.shifts) && plan.shifts.length > 0) {
+        console.log(`🔍 VERSUCHE TIME_SLOTS AUS SHIFTS ZU EXTRAHIEREN:`, plan.shifts.length);
+        
+        // Create a set of unique timeSlotIds from shifts
+        const uniqueTimeSlotIds = new Set(plan.shifts.map(shift => shift.timeSlotId));
+        
+        uniqueTimeSlotIds.forEach(timeSlotId => {
+          // Try to find time slot in plan's timeSlots first
+          const existingTimeSlot = plan.timeSlots?.find(ts => ts.id === timeSlotId);
+          
+          if (existingTimeSlot) {
+            const key = existingTimeSlot.id;
             if (!allTimeSlots.has(key)) {
               allTimeSlots.set(key, {
-                ...timeSlot,
-                displayName: `${timeSlot.name} (${formatTime(timeSlot.startTime)}-${formatTime(timeSlot.endTime)})`,
-                source: `Plan: ${plan.name}`
+                ...existingTimeSlot,
+                displayName: `${existingTimeSlot.name} (${formatTime(existingTimeSlot.startTime)}-${formatTime(existingTimeSlot.endTime)})`,
+                source: `Plan: ${plan.name} (from shift)`
               });
             }
+          } else {
+            // If time slot not found in plan.timeSlots, create a basic one from the ID
+            console.warn(`⚠️ TIME_SLOT MIT ID ${timeSlotId} NICHT IN PLAN.TIME_SLOTS GEFUNDEN`);
           }
         });
       }
@@ -116,42 +167,13 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       a.startTime.localeCompare(b.startTime)
     );
 
-    console.log('✅ ZEIT-SLOTS AUS PLÄNEN:', result);
+    console.log('✅ ZEIT-SLOTS AUS PLÄNEN GEFUNDEN:', result.length, result);
     return result;
   };
 
-  /*const getDefaultTimeSlots = (): ExtendedTimeSlot[] => {
-    console.log('⚠️ VERWENDE STANDARD-ZEIT-SLOTS');
-    return [
-      {
-        id: 'slot-0800-1200',
-        name: 'Vormittag',
-        startTime: '08:00',
-        endTime: '12:00',
-        displayName: 'Vormittag (08:00-12:00)',
-        source: 'Standard'
-      },
-      {
-        id: 'slot-1200-1600',
-        name: 'Nachmittag',
-        startTime: '12:00',
-        endTime: '16:00',
-        displayName: 'Nachmittag (12:00-16:00)',
-        source: 'Standard'
-      },
-      {
-        id: 'slot-1600-2000',
-        name: 'Abend',
-        startTime: '16:00',
-        endTime: '20:00',
-        displayName: 'Abend (16:00-20:00)',
-        source: 'Standard'
-      }
-    ];
-  };*/
-
   const formatTime = (time: string): string => {
-    return time.substring(0, 5);
+    if (!time) return '--:--';
+    return time.substring(0, 5); // Ensure HH:MM format
   };
 
   const loadData = async () => {
@@ -169,57 +191,40 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         }));
         console.log('✅ VERFÜGBARKEITEN GELADEN:', existingAvailabilities.length);
       } catch (err) {
-        console.log('⚠️ KEINE VERFÜGBARKEITEN GEFUNDEN');
+        console.log('⚠️ KEINE VERFÜGBARKEITEN GEFUNDEN ODER FEHLER:', err);
       }
 
       // 2. Load shift plans
       console.log('🔄 LADE SCHICHTPLÄNE...');
       const plans = await shiftPlanService.getShiftPlans();
-      console.log('✅ SCHICHTPLÄNE GELADEN:', plans.length, plans);
+      console.log('✅ SCHICHTPLÄNE GELADEN:', plans.length);
 
-      // 3. Extract time slots from plans
-      let extractedTimeSlots = extractTimeSlotsFromPlans(plans);
-
-      /* 4. Fallback to default slots if none found
-      if (extractedTimeSlots.length === 0) {
-        console.log('⚠️ KEINE ZEIT-SLOTS GEFUNDEN, VERWENDE STANDARD-SLOTS');
-        extractedTimeSlots = getDefaultTimeSlots();
-      }*/
-
-      console.log('✅ GEFUNDENE ZEIT-SLOTS:', extractedTimeSlots.length, extractedTimeSlots);
-
-      setTimeSlots(extractedTimeSlots);
       setShiftPlans(plans);
 
-      // 5. Create default availabilities if needed
-      if (existingAvailabilities.length === 0) {
-        const defaultAvailabilities: Availability[] = daysOfWeek.flatMap(day =>
-          extractedTimeSlots.map(slot => ({
-            id: `temp-${day.id}-${slot.id}`,
-            employeeId: employee.id,
-            planId: '', // Will be set when saving
-            dayOfWeek: day.id,
-            timeSlotId: slot.id,
-            preferenceLevel: 3 as AvailabilityLevel,
-            isAvailable: false
-          }))
-        );
-        setAvailabilities(defaultAvailabilities);
-        console.log('✅ STANDARD-VERFÜGBARKEITEN ERSTELLT:', defaultAvailabilities.length);
+      // 3. Select first plan with actual shifts if available
+      if (plans.length > 0) {
+        // Find a plan that actually has shifts and time slots
+        const planWithShifts = plans.find(plan => 
+          plan.shifts && plan.shifts.length > 0 && 
+          plan.timeSlots && plan.timeSlots.length > 0
+        ) || plans[0]; // Fallback to first plan
+        
+        setSelectedPlanId(planWithShifts.id);
+        console.log('✅ SCHICHTPLAN AUSGEWÄHLT:', planWithShifts.name);
+        
+        // Load the selected plan to get its actual used time slots and days
+        await loadSelectedPlan();
       } else {
-        setAvailabilities(existingAvailabilities);
+        setTimeSlots([]);
+        setUsedDays([]);
       }
 
-      // 6. Select first plan
-      if (plans.length > 0) {
-        const publishedPlan = plans.find(plan => plan.status === 'published');
-        const firstPlan = publishedPlan || plans[0];
-        setSelectedPlanId(firstPlan.id);
-        console.log('✅ SCHICHTPLAN AUSGEWÄHLT:', firstPlan.name);
-      }
+      // 4. Set existing availabilities
+      setAvailabilities(existingAvailabilities);
+
     } catch (err: any) {
       console.error('❌ FEHLER BEIM LADEN DER DATEN:', err);
-      setError('Daten konnten nicht geladen werden');
+      setError('Daten konnten nicht geladen werden: ' + (err.message || 'Unbekannter Fehler'));
     } finally {
       setLoading(false);
     }
@@ -233,11 +238,26 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       console.log('✅ SCHICHTPLAN GELADEN:', {
         name: plan.name,
         timeSlotsCount: plan.timeSlots?.length || 0,
-        shiftsCount: plan.shifts?.length || 0
+        shiftsCount: plan.shifts?.length || 0,
+        usedDays: Array.from(new Set(plan.shifts?.map(s => s.dayOfWeek) || [])).sort(),
+        usedTimeSlots: Array.from(new Set(plan.shifts?.map(s => s.timeSlotId) || [])).length
       });
+      
+      // Only show time slots and days that are actually used in the plan
+      const usedTimeSlots = getUsedTimeSlotsFromPlan(plan);
+      const usedDays = getUsedDaysFromPlan(plan);
+      
+      console.log('✅ VERWENDETE DATEN:', {
+        timeSlots: usedTimeSlots.length,
+        days: usedDays.length,
+        dayIds: usedDays.map(d => d.id)
+      });
+      
+      setTimeSlots(usedTimeSlots);
+      setUsedDays(usedDays); // We'll add this state variable
     } catch (err: any) {
       console.error('❌ FEHLER BEIM LADEN DES SCHICHTPLANS:', err);
-      setError('Schichtplan konnte nicht geladen werden');
+      setError('Schichtplan konnte nicht geladen werden: ' + (err.message || 'Unbekannter Fehler'));
     }
   };
 
@@ -267,7 +287,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         const newAvailability: Availability = {
           id: `temp-${dayId}-${timeSlotId}-${Date.now()}`,
           employeeId: employee.id,
-          planId: selectedPlanId || '', // Use selected plan if available
+          planId: selectedPlanId || '',
           dayOfWeek: dayId,
           timeSlotId: timeSlotId,
           preferenceLevel: level,
@@ -296,18 +316,34 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       setSaving(true);
       setError('');
       
-      // Convert to EmployeeAvailability format for API
-      const availabilitiesToSave: EmployeeAvailability[] = availabilities.map(avail => ({
-        id: avail.id,
-        employeeId: avail.employeeId,
-        planId: avail.planId || selectedPlanId, // Use selected plan if planId is empty
-        dayOfWeek: avail.dayOfWeek,
-        timeSlotId: avail.timeSlotId,
-        preferenceLevel: avail.preferenceLevel,
-        notes: avail.notes
-      }));
+      if (!selectedPlanId) {
+        setError('Bitte wählen Sie einen Schichtplan aus');
+        return;
+      }
+
+      // Filter availabilities to only include those with actual time slots
+      const validAvailabilities = availabilities.filter(avail => 
+        timeSlots.some(slot => slot.id === avail.timeSlotId)
+      );
+
+      if (validAvailabilities.length === 0) {
+        setError('Keine gültigen Verfügbarkeiten zum Speichern gefunden');
+        return;
+      }
+
+      // Convert to the format expected by the API
+      const requestData = {
+        planId: selectedPlanId,
+        availabilities: validAvailabilities.map(avail => ({
+          planId: selectedPlanId,
+          dayOfWeek: avail.dayOfWeek,
+          timeSlotId: avail.timeSlotId,
+          preferenceLevel: avail.preferenceLevel,
+          notes: avail.notes
+        }))
+      };
       
-      await employeeService.updateAvailabilities(employee.id, availabilitiesToSave);
+      await employeeService.updateAvailabilities(employee.id, requestData);
       console.log('✅ VERFÜGBARKEITEN ERFOLGREICH GESPEICHERT');
       
       onSave();
@@ -358,24 +394,37 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
           margin: '0 0 10px 0', 
           color: timeSlots.length === 0 ? '#721c24' : '#0c5460' 
         }}>
-          {timeSlots.length === 0 ? '❌ PROBLEM: Keine Zeit-Slots gefunden' : '✅ Zeit-Slots geladen'}
+          {timeSlots.length === 0 ? '❌ PROBLEM: Keine Zeit-Slots gefunden' : '✅ Plan-Daten geladen'}
         </h4>
         <div style={{ fontSize: '12px', fontFamily: 'monospace' }}>
-          <div><strong>Zeit-Slots gefunden:</strong> {timeSlots.length}</div>
-          <div><strong>Quelle:</strong> {timeSlots[0]?.source || 'Unbekannt'}</div>
-          <div><strong>Schichtpläne:</strong> {shiftPlans.length}</div>
+          <div><strong>Ausgewählter Plan:</strong> {selectedPlan?.name || 'Keiner'}</div>
+          <div><strong>Verwendete Zeit-Slots:</strong> {timeSlots.length}</div>
+          <div><strong>Verwendete Tage:</strong> {usedDays.length} ({usedDays.map(d => d.name).join(', ')})</div>
+          <div><strong>Gesamte Shifts im Plan:</strong> {selectedPlan?.shifts?.length || 0}</div>
         </div>
         
-        {timeSlots.length > 0 && (
+        {selectedPlan && selectedPlan.shifts && (
           <div style={{ marginTop: '10px' }}>
-            <strong>Gefundene Zeit-Slots:</strong>
-            {timeSlots.map(slot => (
-              <div key={slot.id} style={{ fontSize: '11px', marginLeft: '10px' }}>
-                • {slot.displayName}
+            <strong>Shifts im Plan:</strong>
+            {selectedPlan.shifts.map((shift, index) => (
+              <div key={index} style={{ fontSize: '11px', marginLeft: '10px' }}>
+                • Tag {shift.dayOfWeek}: {shift.timeSlotId} ({shift.requiredEmployees} Personen)
               </div>
             ))}
           </div>
         )}
+      </div>
+
+      <div style={{
+        backgroundColor: '#2c3e50',
+        color: 'white',
+        padding: '15px 20px',
+        fontWeight: 'bold'
+      }}>
+        Verfügbarkeit für: {selectedPlan?.name || 'Kein Plan ausgewählt'}
+        <div style={{ fontSize: '14px', fontWeight: 'normal', marginTop: '5px' }}>
+          {timeSlots.length} Schichttypen • {usedDays.length} Tage • Nur tatsächlich im Plan verwendete Schichten und Tage
+        </div>
       </div>
 
       {/* Employee Info */}
@@ -447,7 +496,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         border: '1px solid #e9ecef'
       }}>
         <h4 style={{ margin: '0 0 15px 0', color: '#495057' }}>
-          Verfügbarkeit für Schichtplan prüfen
+          Verfügbarkeit für Schichtplan
         </h4>
         
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -468,11 +517,19 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
               <option value="">Bitte auswählen...</option>
               {shiftPlans.map(plan => (
                 <option key={plan.id} value={plan.id}>
-                  {plan.name} ({plan.timeSlots?.length || 0} Zeit-Slots)
+                  {plan.name} {plan.timeSlots && `(${plan.timeSlots.length} Zeit-Slots)`}
                 </option>
               ))}
             </select>
           </div>
+          
+          {selectedPlan && (
+            <div style={{ fontSize: '14px', color: '#666' }}>
+              <div><strong>Plan:</strong> {selectedPlan.name}</div>
+              <div><strong>Zeit-Slots:</strong> {selectedPlan.timeSlots?.length || 0}</div>
+              <div><strong>Status:</strong> {selectedPlan.status}</div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -492,7 +549,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
           }}>
             Verfügbarkeit definieren
             <div style={{ fontSize: '14px', fontWeight: 'normal', marginTop: '5px' }}>
-              {timeSlots.length} Schichttypen verfügbar
+              {timeSlots.length} Schichttypen verfügbar • Wählen Sie für jeden Tag und jede Schicht die Verfügbarkeit
             </div>
           </div>
 
@@ -513,7 +570,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                   }}>
                     Schicht (Zeit)
                   </th>
-                  {daysOfWeek.map(weekday => (
+                  {usedDays.map(weekday => (
                     <th key={weekday.id} style={{
                       padding: '12px 16px',
                       textAlign: 'center',
@@ -538,8 +595,11 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                       backgroundColor: '#f8f9fa'
                     }}>
                       {timeSlot.displayName}
+                      <div style={{ fontSize: '11px', color: '#666', marginTop: '4px' }}>
+                        {timeSlot.source}
+                      </div>
                     </td>
-                    {daysOfWeek.map(weekday => {
+                    {usedDays.map(weekday => {
                       const currentLevel = getAvailabilityForDayAndSlot(weekday.id, timeSlot.id);
                       const levelConfig = availabilityLevels.find(l => l.level === currentLevel);
                       
@@ -604,8 +664,12 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
           <h4>Keine Schichttypen konfiguriert</h4>
           <p>Es wurden keine Zeit-Slots in den Schichtplänen gefunden.</p>
           <p style={{ fontSize: '14px', marginTop: '10px' }}>
-            Bitte erstellen Sie zuerst Schichtpläne mit Zeit-Slots.
+            Bitte erstellen Sie zuerst Schichtpläne mit Zeit-Slots oder wählen Sie einen anderen Schichtplan aus.
           </p>
+          <div style={{ marginTop: '20px', fontSize: '12px', color: '#999' }}>
+            Gefundene Schichtpläne: {shiftPlans.length}<br />
+            Schichtpläne mit TimeSlots: {shiftPlans.filter(p => p.timeSlots && p.timeSlots.length > 0).length}
+          </div>
         </div>
       )}
 
@@ -633,14 +697,14 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         
         <button
           onClick={handleSave}
-          disabled={saving || timeSlots.length === 0}
+          disabled={saving || timeSlots.length === 0 || !selectedPlanId}
           style={{
             padding: '12px 24px',
-            backgroundColor: saving ? '#bdc3c7' : (timeSlots.length === 0 ? '#95a5a6' : '#3498db'),
+            backgroundColor: saving ? '#bdc3c7' : (timeSlots.length === 0 || !selectedPlanId ? '#95a5a6' : '#3498db'),
             color: 'white',
             border: 'none',
             borderRadius: '6px',
-            cursor: (saving || timeSlots.length === 0) ? 'not-allowed' : 'pointer',
+            cursor: (saving || timeSlots.length === 0 || !selectedPlanId) ? 'not-allowed' : 'pointer',
             fontWeight: 'bold'
           }}
         >

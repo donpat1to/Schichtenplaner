@@ -102,11 +102,12 @@ export class EmployeeService {
     return response.json();
   }
 
-  async updateAvailabilities(employeeId: string, availabilities: EmployeeAvailability[]): Promise<EmployeeAvailability[]> {
+  async updateAvailabilities(employeeId: string, data: { planId: string, availabilities: Omit<EmployeeAvailability, 'id' | 'employeeId'>[] }): Promise<EmployeeAvailability[]> {
+    console.log('🔄 Updating availabilities for employee:', employeeId);
     const response = await fetch(`${API_BASE_URL}/employees/${employeeId}/availabilities`, {
       method: 'PUT',
       headers: getAuthHeaders(),
-      body: JSON.stringify(availabilities),
+      body: JSON.stringify(data),
     });
     
     if (!response.ok) {

@@ -55,10 +55,20 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
   };
 
   // Using shared configuration for consistent styling
-  const getEmployeeTypeBadge = (type: 'manager' | 'trainee' | 'experienced') => {
-  const config = EMPLOYEE_TYPE_CONFIG.find(t => t.value === type);
-  return config || EMPLOYEE_TYPE_CONFIG[0];
-};
+  type EmployeeType = typeof EMPLOYEE_TYPE_CONFIG[number]['value'];
+
+  const getEmployeeTypeBadge = (type: EmployeeType) => {
+    const config = EMPLOYEE_TYPE_CONFIG.find(t => t.value === type)!;
+
+    const bgColor =
+      type === 'manager'
+        ? '#fadbd8'
+        : type === 'trainee'
+        ? '#d5f4e6'
+        : '#d6eaf8'; // experienced
+
+    return { text: config.label, color: config.color, bgColor };
+  };
 
   const getStatusBadge = (isActive: boolean) => {
     return isActive 
@@ -70,6 +80,21 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
     return canWorkAlone 
       ? { text: '✅ Eigenständig', color: '#27ae60', bgColor: '#d5f4e6' }
       : { text: '❌ Betreuung', color: '#e74c3c', bgColor: '#fadbd8' };
+  };
+
+  type Role = typeof ROLE_CONFIG[number]['value'];
+
+  const getRoleBadge = (role: Role) => {
+    const { label, color } = ROLE_CONFIG.find(r => r.value === role)!;
+
+    const bgColor =
+      role === 'user'
+        ? '#d5f4e6'
+        : role === 'maintenance'
+        ? '#d6eaf8'
+        : '#fadbd8'; // admin
+
+    return { text: label, color, bgColor };
   };
 
   if (employees.length === 0) {
@@ -161,7 +186,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
           alignItems: 'center'
         }}>
           <div>Name & E-Mail</div>
-          <div>Typ</div>
+          <div style={{ textAlign: 'center' }}>Typ</div>
           <div style={{ textAlign: 'center' }}>Eigenständigkeit</div>
           <div style={{ textAlign: 'center' }}>Rolle</div>
           <div style={{ textAlign: 'center' }}>Status</div>
@@ -172,7 +197,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
         {filteredEmployees.map(employee => {
           const employeeType = getEmployeeTypeBadge(employee.employeeType);
           const independence = getIndependenceBadge(employee.canWorkAlone);
-          const roleColor = '#d5f4e6'; // Default color
+          const roleColor = getRoleBadge(employee.role);
           const status = getStatusBadge(employee.isActive);
           const canEdit = canEditEmployee(employee);
           const canDelete = canDeleteEmployee(employee);
@@ -213,7 +238,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
               <div style={{ textAlign: 'center' }}>
                 <span
                   style={{
-                    backgroundColor: employeeType.color,
+                    backgroundColor: employeeType.bgColor,
                     color: employeeType.color,
                     padding: '6px 12px',
                     borderRadius: '15px',
@@ -222,7 +247,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
                     display: 'inline-block'
                   }}
                 >
-                  {employeeType.label}
+                  {employeeType.text}
                 </span>
               </div>
 
@@ -247,8 +272,8 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
               <div style={{ textAlign: 'center' }}>
                 <span
                   style={{
-                    backgroundColor: roleColor,
-                    color: 'white',
+                    backgroundColor: roleColor.bgColor,
+                    color: roleColor.color,
                     padding: '6px 12px',
                     borderRadius: '15px',
                     fontSize: '12px',
