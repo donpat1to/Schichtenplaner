@@ -68,7 +68,7 @@ export const TEMPLATE_PRESETS = {
     timeSlots: DEFAULT_ZEBRA_TIME_SLOTS,
     shifts: DEFAULT_ZEBRA_SHIFTS
   },
-  ZEBRA_MINIMAL: {
+  /*ZEBRA_MINIMAL: {
     name: 'ZEBRA Minimal',
     description: 'ZEBRA mit minimaler Besetzung',
     timeSlots: DEFAULT_ZEBRA_TIME_SLOTS,
@@ -89,14 +89,14 @@ export const TEMPLATE_PRESETS = {
         { timeSlotId: 'afternoon', dayOfWeek: day, requiredEmployees: 3, color: '#e74c3c' }
       ])
     ]
-  },
+  },*/
   GENERAL_STANDARD: {
     name: 'Standard Wochenplan',
     description: 'Standard Vorlage: Mo-Fr Vormittag+Nachmittag+Abend',
     timeSlots: DEFAULT_TIME_SLOTS,
     shifts: DEFAULT_SHIFTS
   },
-  ZEBRA_PART_TIME: {
+  /*ZEBRA_PART_TIME: {
     name: 'ZEBRA Teilzeit',
     description: 'ZEBRA Vorlage mit reduzierten Schichten',
     timeSlots: DEFAULT_ZEBRA_TIME_SLOTS,
@@ -106,7 +106,7 @@ export const TEMPLATE_PRESETS = {
         timeSlotId: 'morning', dayOfWeek: day, requiredEmployees: 1, color: '#3498db'
       }))
     ]
-  }
+  } */
 } as const;
 
 // Helper function to create plan from preset

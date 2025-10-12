@@ -1,5 +1,5 @@
 // frontend/src/services/employeeService.ts
-import { Employee, CreateEmployeeRequest, UpdateEmployeeRequest, EmployeeAvailability } from '../../../backend/src/models/employee';
+import { Employee, CreateEmployeeRequest, UpdateEmployeeRequest, EmployeeAvailability } from '../models/Employee';
 
 const API_BASE_URL = 'http://localhost:3002/api';
 

@@ -1,8 +1,27 @@
 // frontend/src/services/shiftPlanService.ts
 import { authService } from './authService';
-import { ShiftPlan, CreateShiftPlanRequest, Shift } from '../models/ShiftPlan';
+import { ShiftPlan, CreateShiftPlanRequest, Shift, CreateShiftFromTemplateRequest } from '../models/ShiftPlan';
+import { TEMPLATE_PRESETS } from '../models/defaults/shiftPlanDefaults';  
 
 const API_BASE = 'http://localhost:3002/api/shift-plans';
+
+// Helper function to get auth headers
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token && { 'Authorization': `Bearer ${token}` })
+  };
+};
+
+// Helper function to handle responses
+const handleResponse = async (response: Response) => {
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+  }
+  return response.json();
+};
 
 export const shiftPlanService = {
   async getShiftPlans(): Promise<ShiftPlan[]> {
@@ -101,5 +120,70 @@ export const shiftPlanService = {
       }
       throw new Error('Fehler beim Löschen des Schichtplans');
     }
-  }
+  },
+
+  getTemplates: async (): Promise<ShiftPlan[]> => {
+    const response = await fetch(`${API_BASE}/templates`, {
+      headers: getAuthHeaders()
+    });
+    return handleResponse(response);
+  },
+
+  // Get specific template or plan
+  getTemplate: async (id: string): Promise<ShiftPlan> => {
+    const response = await fetch(`${API_BASE}/${id}`, {
+      headers: getAuthHeaders()
+    });
+    return handleResponse(response);
+  },
+
+  // Create plan from template
+  createFromTemplate: async (data: CreateShiftFromTemplateRequest): Promise<ShiftPlan> => {
+    const response = await fetch(`${API_BASE}/from-template`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  // Create new plan
+  createPlan: async (data: CreateShiftPlanRequest): Promise<ShiftPlan> => {
+    const response = await fetch(`${API_BASE}`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    return handleResponse(response);
+  },
+
+  createFromPreset: async (data: {
+    presetName: string;
+    name: string;
+    startDate: string;
+    endDate: string;
+    isTemplate?: boolean;
+  }): Promise<ShiftPlan> => {
+    const response = await fetch(`${API_BASE}/from-preset`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+    
+    return response.json();
+  },
+
+  getTemplatePresets: async (): Promise<{name: string, label: string, description: string}[]> => {
+    // name = label
+     return Object.entries(TEMPLATE_PRESETS).map(([key, preset]) => ({
+      name: key,
+      label: preset.name,
+      description: preset.description
+    }));
+  },
 };

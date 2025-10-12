@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { shiftPlanService } from '../../services/shiftPlanService';
-import { ShiftPlan } from '../../../../backend/src/models/shiftPlan';
+import { ShiftPlan } from '../../models/ShiftPlan';
 import { useNotification } from '../../contexts/NotificationContext';
 import { formatDate } from '../../utils/foramatters';
 

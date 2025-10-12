@@ -1,6 +1,4 @@
 // frontend/src/shared/utils.ts
-// import { ScheduledShift } from '../../../backend/src/models/shiftPlan.js';
-
 // Shared date and time formatting utilities
 export const formatDate = (dateString: string | undefined): string => {
   if (!dateString) return 'Kein Datum';

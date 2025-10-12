@@ -1,5 +1,5 @@
 // frontend/src/services/authService.ts
-import { Employee } from '../../../backend/src/models/employee';
+import { Employee } from '../models/Employee';
 const API_BASE = 'http://localhost:3002/api';
 
 export interface LoginRequest {
