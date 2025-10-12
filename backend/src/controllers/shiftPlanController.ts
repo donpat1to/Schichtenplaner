@@ -335,20 +335,20 @@ export const createFromPreset = async (req: Request, res: Response): Promise<voi
       return;
     }
 
+    console.log(`🔍 Received preset request:`, { presetName, name, startDate, endDate, isTemplate });
+
+    // Debug: Log available presets
+    console.log(`🔍 Available presets:`, Object.keys(TEMPLATE_PRESETS));
+
     if (!TEMPLATE_PRESETS[presetName as keyof typeof TEMPLATE_PRESETS]) {
+      console.log(`❌ Invalid preset name: ${presetName}`);
+      console.log(`✅ Valid presets: ${Object.keys(TEMPLATE_PRESETS).join(', ')}`);
       res.status(400).json({ error: 'Invalid preset name' });
       return;
     }
 
-    const planRequest = createPlanFromPreset(
-      presetName as keyof typeof TEMPLATE_PRESETS,
-      isTemplate,
-      startDate,
-      endDate
-    );
-
-    // Use the provided name or the preset name
-    planRequest.name = name || planRequest.name;
+    const preset = TEMPLATE_PRESETS[presetName as keyof typeof TEMPLATE_PRESETS];
+    console.log(`✅ Using preset:`, preset.name);
 
     const planId = uuidv4();
     const status = isTemplate ? 'template' : 'draft';
@@ -360,16 +360,14 @@ export const createFromPreset = async (req: Request, res: Response): Promise<voi
       await db.run(
         `INSERT INTO shift_plans (id, name, description, start_date, end_date, is_template, status, created_by) 
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [planId, planRequest.name, planRequest.description, startDate, endDate, isTemplate ? 1 : 0, status, userId]
+        [planId, name || preset.name, preset.description, startDate, endDate, isTemplate ? 1 : 0, status, userId]
       );
 
-      // Create mapping from timeSlotKey to database timeSlotId
-      const timeSlotKeyToId = new Map<string, string>();
+      // Create mapping from time slot names/IDs to database timeSlotId
+      const timeSlotMap = new Map<string, string>();
 
       // Insert time slots and create mapping
-      for (let i = 0; i < planRequest.timeSlots.length; i++) {
-        const timeSlot = planRequest.timeSlots[i];
-        const presetTimeSlot = TEMPLATE_PRESETS[presetName as keyof typeof TEMPLATE_PRESETS].timeSlots[i];
+      for (const timeSlot of preset.timeSlots) {
         const timeSlotId = uuidv4();
         
         await db.run(
@@ -378,17 +376,45 @@ export const createFromPreset = async (req: Request, res: Response): Promise<voi
           [timeSlotId, planId, timeSlot.name, timeSlot.startTime, timeSlot.endTime, timeSlot.description || '']
         );
 
-        // Store mapping using the key from preset
-        timeSlotKeyToId.set(presetTimeSlot.name, timeSlotId);
+        // Store mapping using the time slot name as key
+        // Both the original timeSlotId (if exists) and the name should work
+        if ((timeSlot as any).timeSlotId) {
+          timeSlotMap.set((timeSlot as any).timeSlotId, timeSlotId);
+        }
+        timeSlotMap.set(timeSlot.name, timeSlotId);
+        
+        console.log(`✅ Created time slot: ${timeSlot.name} -> ${timeSlotId}`);
       }
 
+      console.log(`🔍 Time slot mapping:`, Array.from(timeSlotMap.entries()));
+
       // Insert shifts using the mapping
-      for (const shift of planRequest.shifts) {
+      let shiftCount = 0;
+      for (const shift of preset.shifts) {
         const shiftId = uuidv4();
-        const timeSlotId = timeSlotKeyToId.get((shift as any).timeSlotKey);
+        
+        // Try to find the timeSlotId using different strategies
+        let timeSlotId = timeSlotMap.get(shift.timeSlotId);
         
         if (!timeSlotId) {
-          throw new Error(`Time slot key ${(shift as any).timeSlotKey} not found in mapping`);
+          // Fallback: try to find by name or other properties
+          console.warn(`⚠️ Time slot not found by ID: ${shift.timeSlotId}, trying fallback...`);
+          
+          // Look for time slot by name or other matching logic
+          for (const [key, value] of timeSlotMap.entries()) {
+            if (key.includes(shift.timeSlotId) || shift.timeSlotId.includes(key)) {
+              timeSlotId = value;
+              console.log(`✅ Found time slot via fallback: ${shift.timeSlotId} -> ${key} -> ${timeSlotId}`);
+              break;
+            }
+          }
+        }
+
+        if (!timeSlotId) {
+          console.error(`❌ Could not find time slot for shift:`, shift);
+          // Use first time slot as fallback
+          timeSlotId = Array.from(timeSlotMap.values())[0];
+          console.log(`🔄 Using first time slot as fallback: ${timeSlotId}`);
         }
 
         await db.run(
@@ -396,14 +422,20 @@ export const createFromPreset = async (req: Request, res: Response): Promise<voi
            VALUES (?, ?, ?, ?, ?, ?)`,
           [shiftId, planId, shift.dayOfWeek, timeSlotId, shift.requiredEmployees, shift.color || '#3498db']
         );
+        
+        shiftCount++;
+        console.log(`✅ Created shift ${shiftCount}: day ${shift.dayOfWeek}, timeSlot ${timeSlotId}`);
       }
 
       // If this is not a template, generate scheduled shifts
       if (!isTemplate && startDate && endDate) {
+        console.log(`🔄 Generating scheduled shifts...`);
         await generateScheduledShifts(planId, startDate, endDate);
       }
 
       await db.run('COMMIT');
+
+      console.log(`✅ Successfully created plan from preset: ${planId}`);
 
       // Return created plan
       const createdPlan = await getShiftPlanById(planId);
@@ -411,11 +443,12 @@ export const createFromPreset = async (req: Request, res: Response): Promise<voi
 
     } catch (error) {
       await db.run('ROLLBACK');
+      console.error('❌ Error in transaction:', error);
       throw error;
     }
 
   } catch (error) {
-    console.error('Error creating plan from preset:', error);
+    console.error('❌ Error creating plan from preset:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -766,80 +799,5 @@ export const createFromTemplate = async (req: Request, res: Response): Promise<v
   } catch (error) {
     console.error('Error creating plan from template:', error);
     res.status(500).json({ error: 'Internal server error' });
-  }
-};
-
-// Neue Funktion: Initialize Default Templates
-export const initializeDefaultTemplates = async (userId: string): Promise<void> => {
-  try {
-    console.log('🔄 Initialisiere Standard-Vorlagen...');
-
-    // Check if templates already exist
-    const existingTemplates = await db.all<any>(
-      'SELECT COUNT(*) as count FROM shift_plans WHERE is_template = 1'
-    );
-
-    if (existingTemplates[0].count > 0) {
-      console.log('✅ Vorlagen existieren bereits');
-      return;
-    }
-
-    await db.run('BEGIN TRANSACTION');
-
-    try {
-      // Create all template presets from shiftPlanDefaults
-      for (const [presetKey, preset] of Object.entries(TEMPLATE_PRESETS)) {
-        const planId = uuidv4();
-        
-        // Create the template plan
-        await db.run(
-          `INSERT INTO shift_plans (id, name, description, is_template, status, created_by) 
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [planId, preset.name, preset.description, true, 'template', userId]
-        );
-
-        // Create time slots with new UUIDs
-        const timeSlotMap = new Map<string, string>(); // Map original timeSlotId to new UUID
-        
-        for (const timeSlot of preset.timeSlots) {
-          const newTimeSlotId = uuidv4();
-          await db.run(
-            `INSERT INTO time_slots (id, plan_id, name, start_time, end_time, description) 
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [newTimeSlotId, planId, timeSlot.name, timeSlot.startTime, timeSlot.endTime, timeSlot.description || '']
-          );
-          
-          // Store mapping from original timeSlotId to new UUID
-          timeSlotMap.set((timeSlot as any).timeSlotId || timeSlot.name, newTimeSlotId);
-        }
-
-        // Create shifts using the time slot mapping
-        for (const shift of preset.shifts) {
-          const shiftId = uuidv4();
-          const timeSlotId = timeSlotMap.get(shift.timeSlotId);
-          
-          if (timeSlotId) {
-            await db.run(
-              `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, required_employees, color) 
-               VALUES (?, ?, ?, ?, ?, ?)`,
-              [shiftId, planId, shift.dayOfWeek, timeSlotId, shift.requiredEmployees, shift.color || '#3498db']
-            );
-          }
-        }
-
-        console.log(`✅ Vorlage erstellt: ${preset.name}`);
-      }
-
-      await db.run('COMMIT');
-      console.log('✅ Alle Standard-Vorlagen wurden initialisiert');
-
-    } catch (error) {
-      await db.run('ROLLBACK');
-      throw error;
-    }
-
-  } catch (error) {
-    console.error('❌ Fehler beim Initialisieren der Vorlagen:', error);
-    throw error;
   }
 };

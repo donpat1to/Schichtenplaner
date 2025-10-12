@@ -4,7 +4,7 @@ import bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { randomUUID } from 'crypto';
 import { db } from '../services/databaseService.js';
-import { initializeDefaultTemplates } from './shiftPlanController.js';
+//import { initializeDefaultTemplates } from './shiftPlanController.js';
 
 export const checkSetupStatus = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -15,7 +15,6 @@ export const checkSetupStatus = async (req: Request, res: Response): Promise<voi
 
     console.log('Admin exists check:', adminExists);
     
-    // Korrekte Rückgabe - needsSetup sollte true sein wenn KEIN Admin existiert
     const needsSetup = !adminExists || adminExists['COUNT(*)'] === 0;
     
     res.json({
@@ -46,7 +45,7 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
     }
 
     const { password, name } = req.body;
-    const email = 'admin@instandhaltung.de'; // Fixed admin email
+    const email = 'admin@instandhaltung.de';
 
     console.log('👤 Creating admin with data:', { name, email });
 
@@ -68,6 +67,9 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
 
     console.log('📝 Inserting admin user with ID:', adminId);
 
+    // Start transaction for the entire setup process
+    await db.run('BEGIN TRANSACTION');
+
     try {
       // Create admin user
       await db.run(
@@ -78,34 +80,35 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
 
       console.log('✅ Admin user created successfully');
 
+      // Initialize default templates WITHOUT starting a new transaction
+      //console.log('🔄 Initialisiere Standard-Vorlagen...');
+      //await initializeDefaultTemplates(adminId, false);
+
+      // Commit the entire setup transaction
+      await db.run('COMMIT');
+
+      console.log('✅ Setup completed successfully');
+
       res.status(201).json({
         success: true,
         message: 'Admin erfolgreich erstellt',
         email: email
       });
+
     } catch (dbError) {
+      await db.run('ROLLBACK');
       console.error('❌ Database error during admin creation:', dbError);
       res.status(500).json({ 
         error: 'Fehler beim Erstellen des Admin-Accounts'
       });
     }
-
-    // Nach erfolgreicher Admin-Erstellung:
-    console.log('🔄 Initialisiere Standard-Vorlagen...');
-    await initializeDefaultTemplates(adminId);
-
-    console.log('✅ Admin user created successfully with default templates');
-
-    res.status(201).json({
-      success: true,
-      message: 'Admin erfolgreich erstellt',
-      email: email
-    });
-    
   } catch (error) {
     console.error('❌ Error in setup:', error);
-    res.status(500).json({ 
-      error: 'Ein unerwarteter Fehler ist aufgetreten'
-    });
+    
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        error: 'Ein unerwarteter Fehler ist aufgetreten'
+      });
+    }
   }
 };
