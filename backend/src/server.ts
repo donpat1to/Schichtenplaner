@@ -8,7 +8,6 @@ import { initializeDatabase } from './scripts/initializeDatabase.js';
 import authRoutes from './routes/auth.js';
 import employeeRoutes from './routes/employees.js';
 import shiftPlanRoutes from './routes/shiftPlans.js';
-import shiftTemplateRoutes from './routes/shiftTemplates.js';
 import setupRoutes from './routes/setup.js';
 
 const app = express();
@@ -23,7 +22,6 @@ app.use('/api/setup', setupRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/shift-plans', shiftPlanRoutes);
-app.use('/api/shift-templates', shiftTemplateRoutes);
 
 // Health route
 app.get('/api/health', (req: any, res: any) => {
