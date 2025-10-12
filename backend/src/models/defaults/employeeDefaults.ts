@@ -44,9 +44,9 @@ export const EMPLOYEE_TYPE_CONFIG = {
 } as const;
 
 export const ROLE_CONFIG = [
-  { value: 'user', label: 'Mitarbeiter', description: 'Kann eigene Schichten einsehen', color: '#27ae60' },
-  { value: 'instandhalter', label: 'Instandhalter', description: 'Kann Schichtpläne erstellen und Mitarbeiter verwalten', color: '#3498db' },
-  { value: 'admin', label: 'Administrator', description: 'Voller Zugriff auf alle Funktionen', color: '#e74c3c' }
+  { value: 'user' as const, label: 'Mitarbeiter', description: 'Kann eigene Schichten einsehen', color: '#27ae60' },
+  { value: 'maintenance' as const, label: 'Instandhalter', description: 'Kann Schichtpläne erstellen und Mitarbeiter verwalten', color: '#3498db' },
+  { value: 'admin' as const, label: 'Administrator', description: 'Voller Zugriff auf alle Funktionen', color: '#e74c3c' }
 ] as const;
 
 // Contract type descriptions

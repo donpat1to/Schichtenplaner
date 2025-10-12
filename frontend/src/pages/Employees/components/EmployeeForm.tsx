@@ -382,14 +382,25 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                       backgroundColor: formData.role === role.value ? '#fef9e7' : 'white',
                       cursor: 'pointer'
                     }}
-                    onClick={() => setFormData(prev => ({ ...prev, role: role.value }))}
+                    onClick={() => {
+                      // Use a direct setter instead of the function form
+                      setFormData(prev => ({
+                        ...prev,
+                        role: role.value as 'admin' | 'maintenance' | 'user'
+                      }));
+                    }}
                   >
                     <input
                       type="radio"
                       name="role"
                       value={role.value}
                       checked={formData.role === role.value}
-                      onChange={() => setFormData(prev => ({ ...prev, role: role.value }))}
+                      onChange={(e) => {
+                        setFormData(prev => ({
+                          ...prev,
+                          role: e.target.value as 'admin' | 'maintenance' | 'user'
+                        }));
+                      }}
                       style={{
                         marginRight: '10px',
                         marginTop: '2px'

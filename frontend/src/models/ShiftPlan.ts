@@ -69,6 +69,7 @@ export interface CreateShiftPlanRequest {
   isTemplate: boolean;
   timeSlots: Omit<TimeSlot, 'id' | 'planId'>[];
   shifts: Omit<Shift, 'id' | 'planId'>[];
+  templateId?: string;
 }
 
 export interface UpdateShiftPlanRequest {

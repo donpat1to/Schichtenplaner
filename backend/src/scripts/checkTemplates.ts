@@ -3,7 +3,6 @@ import { db } from '../services/databaseService.js';
 
 async function checkTemplates() {
   try {
-    // KORREKTUR: employees statt users verwenden
     const templates = await db.all<any>(
       `SELECT sp.*, e.name as created_by_name 
        FROM shift_plans sp

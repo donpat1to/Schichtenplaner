@@ -20,6 +20,16 @@ const ShiftPlanView: React.FC = () => {
     loadShiftPlan();
   }, [id]);
 
+  const weekdays = [
+    { id: 1, name: 'Mo' },
+    { id: 2, name: 'Di' },
+    { id: 3, name: 'Mi' },
+    { id: 4, name: 'Do' },
+    { id: 5, name: 'Fr' },
+    { id: 6, name: 'Sa' },
+    { id: 7, name: 'So' }
+  ];
+
   const loadShiftPlan = async () => {
     if (!id) return;
     try {

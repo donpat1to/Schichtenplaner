@@ -1,6 +1,6 @@
 // frontend/src/services/shiftPlanService.ts
 import { authService } from './authService';
-import { ShiftPlan, CreateShiftPlanRequest, Shift } from '../../../backend/src/models/shiftPlan.js';
+import { ShiftPlan, CreateShiftPlanRequest, Shift } from '../models/ShiftPlan';
 
 const API_BASE = 'http://localhost:3002/api/shift-plans';
 

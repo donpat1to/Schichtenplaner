@@ -40,7 +40,7 @@ app.get('/api/initial-setup', async (req: any, res: any) => {
     const { db } = await import('./services/databaseService.js');
     
     const adminExists = await db.get<{ 'COUNT(*)': number }>(
-      'SELECT COUNT(*) FROM users WHERE role = ?',
+      'SELECT COUNT(*) FROM employees WHERE role = ?',
       ['admin']
     );
 

@@ -1,7 +1,7 @@
 // frontend/src/pages/Employees/components/EmployeeList.tsx - KORRIGIERT
 import React, { useState } from 'react';
-import { ROLE_CONFIG, EMPLOYEE_TYPE_CONFIG } from '../../../../../backend/src/models/defaults/employeeDefaults';
-import { Employee } from '../../../../../backend/src/models/employee';
+import { ROLE_CONFIG, EMPLOYEE_TYPE_CONFIG } from '../../../models/defaults/employeeDefaults';
+import { Employee } from '../../../models/Employee';
 import { useAuth } from '../../../contexts/AuthContext';
 
 interface EmployeeListProps {
@@ -55,9 +55,10 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
   };
 
   // Using shared configuration for consistent styling
-  const getEmployeeTypeBadge = (type: keyof typeof EMPLOYEE_TYPE_CONFIG) => {
-    return EMPLOYEE_TYPE_CONFIG[type] || EMPLOYEE_TYPE_CONFIG.trainee;
-  };
+  const getEmployeeTypeBadge = (type: 'manager' | 'trainee' | 'experienced') => {
+  const config = EMPLOYEE_TYPE_CONFIG.find(t => t.value === type);
+  return config || EMPLOYEE_TYPE_CONFIG[0];
+};
 
   const getStatusBadge = (isActive: boolean) => {
     return isActive 

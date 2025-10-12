@@ -18,7 +18,7 @@ export async function initializeDatabase(): Promise<void> {
     // Check if users table exists and has data
     try {
       const existingAdmin = await db.get<{ count: number }>(
-        "SELECT COUNT(*) as count FROM users WHERE role = 'admin'"
+        "SELECT COUNT(*) as count FROM employees WHERE role = 'admin'"
       );
       
       if (existingAdmin && existingAdmin.count > 0) {
@@ -43,12 +43,14 @@ export async function initializeDatabase(): Promise<void> {
       
       // Drop existing tables in reverse order of dependencies if they exist
       const tablesToDrop = [
-        'employee_availabilities',
-        'assigned_shifts',
-        'shift_plans',
-        'template_shifts',
-        'shift_templates',
-        'users'
+        'employees', 
+        'time_slots', 
+        'shifts', 
+        'scheduled_shifts', 
+        'shift_assignments', 
+        'employee_availability', 
+        'applied_migrations', 
+        'shift_plans'
       ];
       
       for (const table of tablesToDrop) {

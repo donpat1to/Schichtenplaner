@@ -8,7 +8,7 @@ import { db } from '../services/databaseService.js';
 export const checkSetupStatus = async (req: Request, res: Response): Promise<void> => {
   try {
     const adminExists = await db.get<{ 'COUNT(*)': number }>(
-      'SELECT COUNT(*) FROM users WHERE role = ? AND is_active = 1',
+      'SELECT COUNT(*) FROM employees WHERE role = ? AND is_active = 1',
       ['admin']
     );
 

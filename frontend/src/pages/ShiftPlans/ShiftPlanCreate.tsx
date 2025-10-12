@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { shiftTemplateService } from '../../services/shiftTemplateService';
 import { shiftPlanService } from '../../services/shiftPlanService';
 import styles from './ShiftPlanCreate.module.css';
+import { TimeSlot, Shift } from '../../models/ShiftPlan';
 
 export interface TemplateShift {
   id: string;
@@ -42,9 +43,8 @@ const ShiftPlanCreate: React.FC = () => {
       
       // Wenn keine Template-ID in der URL ist, setze die Standard-Vorlage
       if (!searchParams.get('template')) {
-        const defaultTemplate = data.find(t => t.isDefault);
-        if (defaultTemplate) {
-          setSelectedTemplate(defaultTemplate.id);
+        if (!searchParams.get('template') && data.length > 0) {
+          setSelectedTemplate(data[0].id);
         }
       }
     } catch (error) {
@@ -74,11 +74,40 @@ const ShiftPlanCreate: React.FC = () => {
         return;
       }
 
+      let timeSlots: Omit<TimeSlot, 'id' | 'planId'>[] = [];
+      let shifts: Omit<Shift, 'id' | 'planId'>[] = [];
+
+      // If a template is selected, load its data
+      if (selectedTemplate) {
+        try {
+          const template = await shiftTemplateService.getTemplate(selectedTemplate);
+          timeSlots = template.timeSlots.map(slot => ({
+            name: slot.name,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            description: slot.description
+          }));
+          shifts = template.shifts.map(shift => ({
+            timeSlotId: shift.timeSlotId,
+            dayOfWeek: shift.dayOfWeek,
+            requiredEmployees: shift.requiredEmployees,
+            color: shift.color
+          }));
+        } catch (error) {
+          console.error('Fehler beim Laden der Vorlage:', error);
+          setError('Die ausgewählte Vorlage konnte nicht geladen werden');
+          return;
+        }
+      }
+
       await shiftPlanService.createShiftPlan({
         name: planName,
         startDate,
         endDate,
-        templateId: selectedTemplate || undefined
+        isTemplate: false,
+        templateId: selectedTemplate || undefined,
+        timeSlots,
+        shifts
       });
 
       // Nach erfolgreicher Erstellung zur Liste der Schichtpläne navigieren

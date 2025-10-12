@@ -19,29 +19,29 @@ export const MANAGER_DEFAULTS = {
   isActive: true
 };
 
-export const EMPLOYEE_TYPE_CONFIG = {
-  manager: { 
+export const EMPLOYEE_TYPE_CONFIG = [
+  {
     value: 'manager' as const,
     label: 'Chef/Administrator', 
     color: '#e74c3c',
     independent: true,
     description: 'Vollzugriff auf alle Funktionen und Mitarbeiterverwaltung'
   },
-  experienced: { 
+  {
     value: 'experienced' as const,
     label: 'Erfahren', 
     color: '#3498db',
     independent: true,
     description: 'Langjährige Erfahrung, kann komplexe Aufgaben übernehmen'
   },
-  trainee: { 
+  { 
     value: 'trainee' as const,
     label: 'Neuling', 
     color: '#27ae60', 
     independent: false,
     description: 'Benötigt Einarbeitung und Unterstützung'
   }
-} as const;
+ ] as const;
 
 export const ROLE_CONFIG = [
   { value: 'user', label: 'Mitarbeiter', description: 'Kann eigene Schichten einsehen', color: '#27ae60' },
