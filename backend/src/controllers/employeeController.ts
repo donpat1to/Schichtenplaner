@@ -366,3 +366,35 @@ export const updateAvailabilities = async (req: AuthRequest, res: Response): Pro
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+export const changePassword = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { currentPassword, newPassword } = req.body;
+
+    // Check if employee exists and get password
+    const employee = await db.get<{ password: string }>('SELECT password FROM employees WHERE id = ?', [id]);
+    if (!employee) {
+      res.status(404).json({ error: 'Employee not found' });
+      return;
+    }
+
+    // Verify current password
+    const isValidPassword = await bcrypt.compare(currentPassword, employee.password);
+    if (!isValidPassword) {
+      res.status(400).json({ error: 'Current password is incorrect' });
+      return;
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password
+    await db.run('UPDATE employees SET password = ? WHERE id = ?', [hashedPassword, id]);
+
+    res.json({ message: 'Password updated successfully' });
+  } catch (error) {
+    console.error('Error changing password:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};

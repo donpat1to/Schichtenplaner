@@ -117,6 +117,19 @@ export class EmployeeService {
     
     return response.json();
   }
+
+  async changePassword(id: string, data: { currentPassword: string, newPassword: string }): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/employees/${id}/password`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to change password');
+    }
+  }
 }
 
 export const employeeService = new EmployeeService();

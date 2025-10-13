@@ -1,3 +1,4 @@
+// frontend/src/contexts/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Employee } from '../models/Employee';
 
@@ -15,6 +16,7 @@ interface AuthContextType {
   refreshUser: () => void;
   needsSetup: boolean;
   checkSetupStatus: () => Promise<void>;
+  updateUser: (userData: Employee) => void; // Add this line
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -26,7 +28,7 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<Employee | null>(null);
   const [loading, setLoading] = useState(true);
-  const [needsSetup, setNeedsSetup] = useState<boolean | null>(null); // ← Start mit null
+  const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
 
   // Token aus localStorage laden
   const getStoredToken = (): string | null => {
@@ -55,7 +57,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setNeedsSetup(data.needsSetup === true);
     } catch (error) {
       console.error('❌ Error checking setup status:', error);
-      setNeedsSetup(true); // Bei Fehler Setup annehmen
+      setNeedsSetup(true);
     }
   };
 
@@ -92,6 +94,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  // Add the updateUser function
+  const updateUser = (userData: Employee) => {
+    console.log('🔄 Updating user in auth context:', userData);
+    setUser(userData);
+  };
+
   const login = async (credentials: LoginRequest): Promise<void> => {
     try {
       console.log('🔐 Attempting login for:', credentials.email);
@@ -112,7 +120,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const data = await response.json();
       console.log('✅ Login successful, storing token');
       
-      // Token persistent speichern
       setStoredToken(data.token);
       setUser(data.user);
     } catch (error) {
@@ -156,8 +163,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     hasRole,
     loading,
     refreshUser,
-    needsSetup: needsSetup === null ? true : needsSetup, // Falls null, true annehmen
+    needsSetup: needsSetup === null ? true : needsSetup,
     checkSetupStatus,
+    updateUser, // Add this to the context value
   };
 
   return (

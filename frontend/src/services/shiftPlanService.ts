@@ -138,14 +138,14 @@ export const shiftPlanService = {
   },
 
   // Create plan from template
-  createFromTemplate: async (data: CreateShiftFromTemplateRequest): Promise<ShiftPlan> => {
+  /*createFromTemplate: async (data: CreateShiftFromTemplateRequest): Promise<ShiftPlan> => {
     const response = await fetch(`${API_BASE}/from-template`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(data),
     });
     return handleResponse(response);
-  },
+  },*/
 
   // Create new plan
   createPlan: async (data: CreateShiftPlanRequest): Promise<ShiftPlan> => {

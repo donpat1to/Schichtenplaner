@@ -8,7 +8,7 @@ import {
   updateShiftPlan, 
   deleteShiftPlan,
   getTemplates,
-  createFromTemplate,
+  //createFromTemplate,
   createFromPreset
 } from '../controllers/shiftPlanController.js';
 
@@ -31,7 +31,7 @@ router.get('/:id', getShiftPlan);
 router.post('/', requireRole(['admin', 'instandhalter']), createShiftPlan);
 
 // POST create new plan from template
-router.post('/from-template', requireRole(['admin', 'instandhalter']), createFromTemplate);
+//router.post('/from-template', requireRole(['admin', 'instandhalter']), createFromTemplate);
 
 // POST create new plan from preset
 router.post('/from-preset', requireRole(['admin', 'instandhalter']), createFromPreset);

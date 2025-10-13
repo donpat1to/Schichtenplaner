@@ -8,7 +8,8 @@ import {
   updateEmployee,
   deleteEmployee,
   getAvailabilities,
-  updateAvailabilities
+  updateAvailabilities,
+  changePassword
 } from '../controllers/employeeController.js';
 
 const router = express.Router();
@@ -22,6 +23,7 @@ router.get('/:id', requireRole(['admin', 'instandhalter']), getEmployee);
 router.post('/', requireRole(['admin']), createEmployee);
 router.put('/:id', requireRole(['admin']), updateEmployee);
 router.delete('/:id', requireRole(['admin']), deleteEmployee);
+router.put('/:id/password', requireRole(['admin']), changePassword);
 
 // Availability Routes
 router.get('/:employeeId/availabilities', requireRole(['admin', 'instandhalter']), getAvailabilities);

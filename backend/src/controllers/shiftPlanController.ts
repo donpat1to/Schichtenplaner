@@ -710,7 +710,7 @@ export const getTemplates = async (req: Request, res: Response): Promise<void> =
 };
 
 // Neue Funktion: Create from Template
-export const createFromTemplate = async (req: Request, res: Response): Promise<void> => {
+/*export const createFromTemplate = async (req: Request, res: Response): Promise<void> => {
   try {
     const { templatePlanId, name, startDate, endDate, description } = req.body;
     const userId = (req as AuthRequest).user?.userId;
@@ -800,4 +800,4 @@ export const createFromTemplate = async (req: Request, res: Response): Promise<v
     console.error('Error creating plan from template:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
-};
+};*/
