@@ -60,9 +60,9 @@ const NotificationContainer: React.FC = () => {
   return (
     <div style={{
       position: 'fixed',
-      top: '20px',
+      top: '90px', // Changed from 20px to 90px to account for header height
       right: '20px',
-      zIndex: 1000
+      zIndex: 9999 // Increased from 1000 to 9999
     }}>
       {notifications.map(notification => (
         <div
