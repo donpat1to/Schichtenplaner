@@ -122,12 +122,25 @@ export const shiftPlanService = {
     }
   },
 
-  /*getTemplates: async (): Promise<ShiftPlan[]> => {
-    const response = await fetch(`${API_BASE}/templates`, {
-      headers: getAuthHeaders()
+  async revertToDraft(id: string): Promise<ShiftPlan> {
+    const response = await fetch(`${API_BASE}/${id}/revert-to-draft`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authService.getAuthHeaders()
+      }
     });
-    return handleResponse(response);
-  },*/
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        authService.logout();
+        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+      }
+      throw new Error('Fehler beim Zurücksetzen des Schichtplans');
+    }
+
+    return response.json();
+  },
 
   // Get specific template or plan
   getTemplate: async (id: string): Promise<ShiftPlan> => {

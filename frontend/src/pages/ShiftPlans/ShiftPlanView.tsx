@@ -32,6 +32,7 @@ const ShiftPlanView: React.FC = () => {
   const [assignmentResult, setAssignmentResult] = useState<AssignmentResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [publishing, setPublishing] = useState(false);
+  const [reverting, setReverting] = useState(false);
   const [showAssignmentPreview, setShowAssignmentPreview] = useState(false);
 
   useEffect(() => {
@@ -166,8 +167,13 @@ const ShiftPlanView: React.FC = () => {
         message: 'Schichtplan wurde erfolgreich veröffentlicht!'
       });
 
-      // Reload the plan to reflect changes
-      loadShiftPlanData();
+      // Lade den Plan neu, um die aktuellen Daten zu erhalten
+      const updatedPlan = await shiftPlanService.getShiftPlan(shiftPlan.id);
+      setShiftPlan(updatedPlan);
+
+      // Behalte die assignmentResult für die Anzeige bei
+      // Die Tabelle wird nun automatisch die tatsächlichen Mitarbeiternamen anzeigen
+      
       setShowAssignmentPreview(false);
 
     } catch (error) {
@@ -202,6 +208,62 @@ const ShiftPlanView: React.FC = () => {
     return employeesWithoutAvailabilities.length === 0;
   };
 
+  const handleRevertToDraft = async () => {
+    if (!shiftPlan || !id) return;
+
+    if (!window.confirm('Möchten Sie diesen Schichtplan wirklich zurück in den Entwurfsstatus setzen? Alle Zuweisungen werden entfernt.')) {
+      return;
+    }
+
+    try {
+      setReverting(true);
+      
+      const updatedPlan = await shiftPlanService.revertToDraft(id);
+      setShiftPlan(updatedPlan);
+      setAssignmentResult(null);
+
+      showNotification({
+        type: 'success',
+        title: 'Erfolg',
+        message: 'Schichtplan wurde erfolgreich zurück in den Entwurfsstatus gesetzt.'
+      });
+
+      // Verfügbarkeiten neu laden
+      loadAvailabilities();
+
+    } catch (error) {
+      console.error('Error reverting plan to draft:', error);
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: 'Schichtplan konnte nicht zurückgesetzt werden.'
+      });
+    } finally {
+      setReverting(false);
+    }
+  };
+
+  const loadAvailabilities = async () => {
+    if (!employees.length) return;
+    
+    try {
+      const availabilityPromises = employees
+        .filter(emp => emp.isActive)
+        .map(emp => employeeService.getAvailabilities(emp.id));
+      
+      const allAvailabilities = await Promise.all(availabilityPromises);
+      const flattenedAvailabilities = allAvailabilities.flat();
+      
+      const planAvailabilities = flattenedAvailabilities.filter(
+        availability => availability.planId === id
+      );
+      
+      setAvailabilities(planAvailabilities);
+    } catch (error) {
+      console.error('Error loading availabilities:', error);
+    }
+  };
+
   const getAvailabilityStatus = () => {
     const totalEmployees = employees.length;
     const employeesWithAvailabilities = new Set(
@@ -219,9 +281,10 @@ const ShiftPlanView: React.FC = () => {
   const getTimetableData = () => {
     if (!shiftPlan) return { shifts: [], weekdays: [] };
 
-    // Use timeSlots directly since shifts reference them
+    const hasAssignments = shiftPlan.status === 'published' || (assignmentResult && Object.keys(assignmentResult.assignments).length > 0);
+
     const timetableShifts = shiftPlan.timeSlots.map(timeSlot => {
-      const weekdayData: Record<number, string> = {};
+      const weekdayData: Record<number, { employees: string[], display: string }> = {};
       
       weekdays.forEach(weekday => {
         const shiftsOnDay = shiftPlan.shifts.filter(shift => 
@@ -230,12 +293,47 @@ const ShiftPlanView: React.FC = () => {
         );
 
         if (shiftsOnDay.length === 0) {
-          weekdayData[weekday.id] = '';
+          weekdayData[weekday.id] = { employees: [], display: '' };
         } else {
           const totalRequired = shiftsOnDay.reduce((sum, shift) => 
             sum + shift.requiredEmployees, 0);
-          // For now, show required count since we don't have assigned employees in Shift
-          weekdayData[weekday.id] = `0/${totalRequired}`;
+          
+          let assignedEmployees: string[] = [];
+          
+          if (hasAssignments && shiftPlan.scheduledShifts) {
+            const scheduledShift = shiftPlan.scheduledShifts.find(scheduled => {
+              const scheduledDayOfWeek = getDayOfWeek(scheduled.date);
+              return scheduledDayOfWeek === weekday.id && 
+                     scheduled.timeSlotId === timeSlot.id;
+            });
+            
+            if (scheduledShift) {
+              if (shiftPlan.status === 'published') {
+                // Verwende tatsächliche Zuweisungen aus der Datenbank
+                assignedEmployees = scheduledShift.assignedEmployees
+                  .map(empId => {
+                    const employee = employees.find(emp => emp.id === empId);
+                    return employee ? employee.name : 'Unbekannt';
+                  });
+              } else if (assignmentResult && assignmentResult.assignments[scheduledShift.id]) {
+                // Verwende Preview-Zuweisungen
+                assignedEmployees = assignmentResult.assignments[scheduledShift.id]
+                  .map(empId => {
+                    const employee = employees.find(emp => emp.id === empId);
+                    return employee ? employee.name : 'Unbekannt';
+                  });
+              }
+            }
+          }
+          
+          const displayText = hasAssignments 
+            ? assignedEmployees.join(', ') || `0/${totalRequired}`
+            : `0/${totalRequired}`;
+          
+          weekdayData[weekday.id] = {
+            employees: assignedEmployees,
+            display: displayText
+          };
         }
       });
 
@@ -249,17 +347,83 @@ const ShiftPlanView: React.FC = () => {
     return { shifts: timetableShifts, weekdays };
   };
 
+  const getDayOfWeek = (dateString: string): number => {
+    const date = new Date(dateString);
+    return date.getDay() === 0 ? 7 : date.getDay();
+  };
+
   if (loading) return <div>Lade Schichtplan...</div>;
   if (!shiftPlan) return <div>Schichtplan nicht gefunden</div>;
 
   const timetableData = getTimetableData();
+  const availabilityStatus = getAvailabilityStatus();
 
   return (
     <div style={{ padding: '20px' }}>
-      {/* Existing header code... */}
+      {/* Header mit Plan-Informationen und Aktionen */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'flex-start',
+        marginBottom: '20px'
+      }}>
+        <div>
+          <h1>{shiftPlan.name}</h1>
+          <p style={{ color: '#666', margin: 0 }}>
+            {shiftPlan.startDate && shiftPlan.endDate && 
+              `Zeitraum: ${formatDate(shiftPlan.startDate)} - ${formatDate(shiftPlan.endDate)}`
+            }
+          </p>
+          <div style={{ 
+            display: 'inline-block',
+            padding: '4px 12px',
+            backgroundColor: shiftPlan.status === 'published' ? '#2ecc71' : '#f1c40f',
+            color: 'white',
+            borderRadius: '20px',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            marginTop: '5px'
+          }}>
+            {shiftPlan.status === 'published' ? 'Veröffentlicht' : 'Entwurf'}
+          </div>
+        </div>
+        
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          {shiftPlan.status === 'published' && hasRole(['admin', 'instandhalter']) && (
+            <button
+              onClick={handleRevertToDraft}
+              disabled={reverting}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#e74c3c',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontWeight: 'bold'
+              }}
+            >
+              {reverting ? 'Zurücksetzen...' : 'Zu Entwurf zurücksetzen'}
+            </button>
+          )}
+          <button
+            onClick={() => navigate('/shift-plans')}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#95a5a6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            Zurück zur Übersicht
+          </button>
+        </div>
+      </div>
 
-      {/* Availability Status */}
-      {shiftPlan?.status === 'draft' && (
+      {/* Availability Status - nur für Entwürfe anzeigen */}
+      {shiftPlan.status === 'draft' && (
         <div style={{
           backgroundColor: 'white',
           borderRadius: '8px',
@@ -274,7 +438,7 @@ const ShiftPlanView: React.FC = () => {
                 Verfügbarkeitseinträge:
               </div>
               <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
-                {getAvailabilityStatus().completed} / {getAvailabilityStatus().total} Mitarbeiter
+                {availabilityStatus.completed} / {availabilityStatus.total} Mitarbeiter
               </div>
               <div style={{ 
                 width: '200px', 
@@ -286,9 +450,9 @@ const ShiftPlanView: React.FC = () => {
               }}>
                 <div 
                   style={{
-                    width: `${getAvailabilityStatus().percentage}%`,
+                    width: `${availabilityStatus.percentage}%`,
                     height: '100%',
-                    backgroundColor: getAvailabilityStatus().percentage === 100 ? '#2ecc71' : '#f1c40f',
+                    backgroundColor: availabilityStatus.percentage === 100 ? '#2ecc71' : '#f1c40f',
                     transition: 'all 0.3s ease'
                   }}
                 />
@@ -315,9 +479,9 @@ const ShiftPlanView: React.FC = () => {
                 
                 {!canPublish() && (
                   <div style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
-                    {getAvailabilityStatus().percentage === 100 
+                    {availabilityStatus.percentage === 100 
                       ? 'Bereit zur Veröffentlichung' 
-                      : `${getAvailabilityStatus().total - getAvailabilityStatus().completed} Mitarbeiter müssen noch Verfügbarkeit eintragen`}
+                      : `${availabilityStatus.total - availabilityStatus.completed} Mitarbeiter müssen noch Verfügbarkeit eintragen`}
                   </div>
                 )}
               </div>
@@ -441,9 +605,12 @@ const ShiftPlanView: React.FC = () => {
         padding: '20px',
         boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
       }}>
-        {/* Timetable */}
         <div style={{ marginTop: '30px' }}>
-          <h3>Schichtplan</h3>
+          <h3>
+            Schichtplan 
+            {shiftPlan.status === 'published' && ' (Aktuelle Zuweisungen)'}
+            {assignmentResult && shiftPlan.status === 'draft' && ' (Exemplarische Woche)'}
+          </h3>
           
           {timetableData.shifts.length === 0 ? (
             <div style={{
@@ -481,7 +648,7 @@ const ShiftPlanView: React.FC = () => {
                         textAlign: 'center',
                         border: '1px solid #dee2e6',
                         fontWeight: 'bold',
-                        minWidth: '80px'
+                        minWidth: '120px'
                       }}>
                         {weekday.name}
                       </th>
@@ -505,9 +672,10 @@ const ShiftPlanView: React.FC = () => {
                           padding: '12px 16px',
                           border: '1px solid #dee2e6',
                           textAlign: 'center',
-                          color: shift.weekdayData[weekday.id] ? '#2c3e50' : '#bdc3c7'
+                          color: shift.weekdayData[weekday.id].display ? '#2c3e50' : '#bdc3c7',
+                          fontSize: shift.weekdayData[weekday.id].employees.length > 0 ? '14px' : 'inherit'
                         }}>
-                          {shift.weekdayData[weekday.id] || '–'}
+                          {shift.weekdayData[weekday.id].display || '–'}
                         </td>
                       ))}
                     </tr>
@@ -523,12 +691,18 @@ const ShiftPlanView: React.FC = () => {
           <div style={{
             marginTop: '20px',
             padding: '12px 16px',
-            backgroundColor: '#e8f4fd',
+            backgroundColor: shiftPlan.status === 'published' ? '#d4edda' : '#e8f4fd',
             borderRadius: '4px',
-            border: '1px solid #b8d4f0',
+            border: shiftPlan.status === 'published' ? '1px solid #c3e6cb' : '1px solid #b8d4f0',
             fontSize: '14px'
           }}>
-            <strong>Legende:</strong> Angezeigt wird "zugewiesene/benötigte Mitarbeiter" pro Schicht und Wochentag
+            <strong>Legende:</strong> {
+              shiftPlan.status === 'published' 
+                ? 'Angezeigt werden die aktuell zugewiesenen Mitarbeiter'
+                : assignmentResult
+                ? 'Angezeigt werden die vorgeschlagenen Mitarbeiter für eine exemplarische Woche'
+                : 'Angezeigt wird "zugewiesene/benötigte Mitarbeiter" pro Schicht und Wochentag'
+            }
           </div>
         )}
       </div>

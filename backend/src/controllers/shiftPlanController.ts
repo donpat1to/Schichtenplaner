@@ -681,33 +681,53 @@ async function generateScheduledShifts(planId: string, startDate: string, endDat
   }
 }
 
-/*export const getTemplates = async (req: Request, res: Response): Promise<void> => {
+export const revertToDraft = async (req: Request, res: Response): Promise<void> => {
   try {
-    console.log('🔍 Lade Vorlagen...');
+    const { id } = req.params;
+    const userId = (req as AuthRequest).user?.userId;
 
-    const templates = await db.all<any>(`
-      SELECT sp.*, e.name as created_by_name 
-      FROM shift_plans sp
-      LEFT JOIN employees e ON sp.created_by = e.id
-      WHERE sp.is_template = 1
-      ORDER BY sp.created_at DESC
-    `);
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
 
-    console.log(`✅ ${templates.length} Vorlagen gefunden:`, templates.map(t => t.name));
+    // Check if plan exists
+    const existingPlan = await getShiftPlanById(id);
+    //const existingPlan: ShiftPlan = await db.get('SELECT * FROM shift_plans WHERE id = ?', [id]);
+    if (!existingPlan) {
+      res.status(404).json({ error: 'Shift plan not found' });
+      return;
+    }
 
-    const templatesWithDetails = await Promise.all(
-      templates.map(async (template) => {
-        const details = await getPlanWithDetails(template.id);
-        return details ? { ...details.plan, timeSlots: details.timeSlots, shifts: details.shifts } : null;
-      })
+    // Only allow reverting from published to draft
+    if (existingPlan.status !== 'published') {
+      res.status(400).json({ error: 'Can only revert published plans to draft' });
+      return;
+    }
+
+    // Update plan status to draft
+    await db.run(
+      'UPDATE shift_plans SET status = ? WHERE id = ?',
+      ['draft', id]
     );
 
-    res.json(templatesWithDetails.filter(Boolean));
+    // Clear all assigned employees from scheduled shifts
+    await db.run(
+      'UPDATE scheduled_shifts SET assigned_employees = ? WHERE plan_id = ?',
+      [JSON.stringify([]), id]
+    );
+
+    console.log(`✅ Plan ${id} reverted to draft status`);
+
+    // Return updated plan
+    const updatedPlan = await getShiftPlanById(id);
+    res.json(updatedPlan);
+
   } catch (error) {
-    console.error('Error fetching templates:', error);
+    console.error('Error reverting plan to draft:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
-};*/
+};
 
 // Neue Funktion: Create from Template
 /*export const createFromTemplate = async (req: Request, res: Response): Promise<void> => {

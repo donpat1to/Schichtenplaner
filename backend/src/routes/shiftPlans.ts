@@ -9,7 +9,8 @@ import {
   deleteShiftPlan,
   //getTemplates,
   //createFromTemplate,
-  createFromPreset
+  createFromPreset,
+  revertToDraft
 } from '../controllers/shiftPlanController.js';
 
 const router = express.Router();
@@ -41,5 +42,8 @@ router.put('/:id', requireRole(['admin', 'instandhalter']), updateShiftPlan);
 
 // DELETE shift plan or template
 router.delete('/:id', requireRole(['admin', 'instandhalter']), deleteShiftPlan);
+
+// PUT revert published plan to draft
+router.put('/:id/revert-to-draft', requireRole(['admin', 'instandhalter']), revertToDraft);
 
 export default router;
