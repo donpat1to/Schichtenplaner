@@ -111,7 +111,7 @@ const AppContent: React.FC = () => {
         </ProtectedRoute>
       } />
       <Route path="/settings" element={
-        <ProtectedRoute roles={['admin']}>
+        <ProtectedRoute>
           <Settings />
         </ProtectedRoute>
       } />

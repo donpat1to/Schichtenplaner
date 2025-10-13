@@ -23,10 +23,10 @@ router.get('/:id', requireRole(['admin', 'instandhalter']), getEmployee);
 router.post('/', requireRole(['admin']), createEmployee);
 router.put('/:id', requireRole(['admin']), updateEmployee);
 router.delete('/:id', requireRole(['admin']), deleteEmployee);
-router.put('/:id/password', requireRole(['admin']), changePassword);
+router.put('/:id/password', authMiddleware, changePassword);
 
 // Availability Routes
-router.get('/:employeeId/availabilities', requireRole(['admin', 'instandhalter']), getAvailabilities);
-router.put('/:employeeId/availabilities', requireRole(['admin', 'instandhalter']), updateAvailabilities);
+router.get('/:employeeId/availabilities', authMiddleware, getAvailabilities);
+router.put('/:employeeId/availabilities', authMiddleware, updateAvailabilities);
 
 export default router;

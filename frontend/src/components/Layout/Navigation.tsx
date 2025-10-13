@@ -20,7 +20,7 @@ const Navigation: React.FC = () => {
     { path: '/shift-plans', label: '📅 Schichtpläne', roles: ['admin', 'instandhalter', 'user'] },
     { path: '/employees', label: '👥 Mitarbeiter', roles: ['admin', 'instandhalter'] },
     { path: '/help', label: '❓ Hilfe & Support', roles: ['admin', 'instandhalter', 'user'] },
-    { path: '/settings', label: '⚙️ Einstellungen', roles: ['admin'] },
+    { path: '/settings', label: '⚙️ Einstellungen', roles: ['admin', 'instandhalter', 'user'] },
   ];
 
   const filteredNavigation = navigationItems.filter(item => 

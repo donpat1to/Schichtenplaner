@@ -681,7 +681,7 @@ async function generateScheduledShifts(planId: string, startDate: string, endDat
   }
 }
 
-export const getTemplates = async (req: Request, res: Response): Promise<void> => {
+/*export const getTemplates = async (req: Request, res: Response): Promise<void> => {
   try {
     console.log('🔍 Lade Vorlagen...');
 
@@ -707,7 +707,7 @@ export const getTemplates = async (req: Request, res: Response): Promise<void> =
     console.error('Error fetching templates:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
-};
+};*/
 
 // Neue Funktion: Create from Template
 /*export const createFromTemplate = async (req: Request, res: Response): Promise<void> => {

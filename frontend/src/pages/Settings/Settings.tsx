@@ -246,7 +246,7 @@ const Settings: React.FC = () => {
                       value={currentUser.email}
                       disabled
                       style={{
-                        width: '100%',
+                        width: '95%',
                         padding: '10px',
                         border: '1px solid #ddd',
                         borderRadius: '4px',
@@ -264,7 +264,7 @@ const Settings: React.FC = () => {
                       value={currentUser.role}
                       disabled
                       style={{
-                        width: '100%',
+                        width: '95%',
                         padding: '10px',
                         border: '1px solid #ddd',
                         borderRadius: '4px',
@@ -284,7 +284,7 @@ const Settings: React.FC = () => {
                       value={currentUser.employeeType}
                       disabled
                       style={{
-                        width: '100%',
+                        width: '95%',
                         padding: '10px',
                         border: '1px solid #ddd',
                         borderRadius: '4px',
@@ -302,7 +302,7 @@ const Settings: React.FC = () => {
                       value={currentUser.contractType}
                       disabled
                       style={{
-                        width: '100%',
+                        width: '95%',
                         padding: '10px',
                         border: '1px solid #ddd',
                         borderRadius: '4px',
@@ -326,7 +326,7 @@ const Settings: React.FC = () => {
                   onChange={handleProfileChange}
                   required
                   style={{
-                    width: '100%',
+                    width: '97%',
                     padding: '10px',
                     border: '1px solid #ddd',
                     borderRadius: '4px',

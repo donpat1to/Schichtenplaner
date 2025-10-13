@@ -1,7 +1,6 @@
 // backend/src/server.ts
 import express from 'express';
 import cors from 'cors';
-import { setupDefaultTemplate } from './scripts/setupDefaultTemplate.js';
 import { initializeDatabase } from './scripts/initializeDatabase.js';
 
 // Route imports
@@ -62,10 +61,6 @@ const initializeApp = async () => {
     const { applyMigration } = await import('./scripts/applyMigration.js');
     await applyMigration();
     //console.log('✅ Database migrations applied');
-    
-    // Setup default template
-    await setupDefaultTemplate();
-    //console.log('✅ Default template checked/created');
 
     // Start server only after successful initialization
     app.listen(PORT, () => {

@@ -1,4 +1,4 @@
-// frontend/src/pages/Employees/components/EmployeeForm.tsx - KORRIGIERT
+// frontend/src/pages/Employees/components/EmployeeForm.tsx
 import React, { useState, useEffect } from 'react';
 import { Employee, CreateEmployeeRequest, UpdateEmployeeRequest } from '../../../models/Employee';
 import { ROLE_CONFIG, EMPLOYEE_TYPE_CONFIG } from '../../../models/defaults/employeeDefaults';
@@ -12,7 +12,6 @@ interface EmployeeFormProps {
   onCancel: () => void;
 }
 
-
 const EmployeeForm: React.FC<EmployeeFormProps> = ({
   mode,
   employee,
@@ -25,9 +24,15 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
     password: '',
     role: 'user' as 'admin' | 'maintenance' | 'user',
     employeeType: 'trainee' as 'manager' | 'trainee' | 'experienced',
+    contractType: 'small' as 'small' | 'large',
     canWorkAlone: false,
     isActive: true
   });
+  const [passwordForm, setPasswordForm] = useState({
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [showPasswordSection, setShowPasswordSection] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { hasRole } = useAuth();
@@ -40,6 +45,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
         password: '', // Passwort wird beim Bearbeiten nicht angezeigt
         role: employee.role,
         employeeType: employee.employeeType,
+        contractType: employee.contractType,
         canWorkAlone: employee.canWorkAlone,
         isActive: employee.isActive
       });
@@ -55,6 +61,14 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
     }));
   };
 
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setPasswordForm(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
   const handleEmployeeTypeChange = (employeeType: 'manager' | 'trainee' | 'experienced') => {
     // Manager and experienced can work alone, trainee cannot
     const canWorkAlone = employeeType === 'manager' || employeeType === 'experienced';
@@ -63,6 +77,13 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
       ...prev,
       employeeType,
       canWorkAlone
+    }));
+  };
+
+  const handleContractTypeChange = (contractType: 'small' | 'large') => {
+    setFormData(prev => ({
+      ...prev,
+      contractType
     }));
   };
 
@@ -79,7 +100,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
           password: formData.password,
           role: formData.role,
           employeeType: formData.employeeType,
-          contractType: 'small', // Default value
+          contractType: formData.contractType,
           canWorkAlone: formData.canWorkAlone
         };
         await employeeService.createEmployee(createData);
@@ -88,11 +109,27 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
           name: formData.name.trim(),
           role: formData.role,
           employeeType: formData.employeeType,
-          contractType: employee.contractType, // Keep the existing contract type
+          contractType: formData.contractType,
           canWorkAlone: formData.canWorkAlone,
           isActive: formData.isActive,
         };
         await employeeService.updateEmployee(employee.id, updateData);
+
+        // If password change is requested and user is admin
+        if (showPasswordSection && passwordForm.newPassword && hasRole(['admin'])) {
+          if (passwordForm.newPassword.length < 6) {
+            throw new Error('Das neue Passwort muss mindestens 6 Zeichen lang sein');
+          }
+          if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+            throw new Error('Die Passwörter stimmen nicht überein');
+          }
+
+          // Use the password change endpoint
+          await employeeService.changePassword(employee.id, {
+            currentPassword: '', // Empty for admin reset - backend should handle this
+            newPassword: passwordForm.newPassword
+          });
+        }
       }
       
       onSuccess();
@@ -110,6 +147,11 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
   const availableRoles = hasRole(['admin']) 
     ? ROLE_CONFIG 
     : ROLE_CONFIG.filter(role => role.value !== 'admin');
+
+  const contractTypeOptions = [
+    { value: 'small' as const, label: 'Kleiner Vertrag', description: '1 Schicht pro Woche' },
+    { value: 'large' as const, label: 'Großer Vertrag', description: '2 Schichten pro Woche' }
+  ];
 
   return (
     <div style={{
@@ -187,12 +229,14 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                   value={formData.email}
                   onChange={handleChange}
                   required
+                  disabled={mode === 'edit'} // Email cannot be changed in edit mode
                   style={{
                     width: '100%',
                     padding: '10px',
                     border: '1px solid #ddd',
                     borderRadius: '4px',
-                    fontSize: '16px'
+                    fontSize: '16px',
+                    backgroundColor: mode === 'edit' ? '#f8f9fa' : 'white'
                   }}
                   placeholder="max.mustermann@example.com"
                 />
@@ -226,6 +270,78 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
               </div>
             )}
           </div>
+
+          {/* Vertragstyp (nur für Admins) */}
+          {hasRole(['admin']) && (
+            <div style={{
+              padding: '20px',
+              backgroundColor: '#e8f4fd',
+              borderRadius: '8px',
+              border: '1px solid #b6d7e8'
+            }}>
+              <h3 style={{ margin: '0 0 15px 0', color: '#0c5460' }}>📝 Vertragstyp</h3>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {contractTypeOptions.map(contract => (
+                  <div 
+                    key={contract.value}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      padding: '15px',
+                      border: `2px solid ${formData.contractType === contract.value ? '#3498db' : '#e0e0e0'}`,
+                      borderRadius: '8px',
+                      backgroundColor: formData.contractType === contract.value ? '#f0f8ff' : 'white',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                    onClick={() => handleContractTypeChange(contract.value)}
+                  >
+                    <input
+                      type="radio"
+                      name="contractType"
+                      value={contract.value}
+                      checked={formData.contractType === contract.value}
+                      onChange={() => handleContractTypeChange(contract.value)}
+                      style={{
+                        marginRight: '12px',
+                        marginTop: '2px',
+                        width: '18px',
+                        height: '18px'
+                      }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ 
+                        fontWeight: 'bold', 
+                        color: '#2c3e50',
+                        marginBottom: '4px',
+                        fontSize: '16px'
+                      }}>
+                        {contract.label}
+                      </div>
+                      <div style={{ 
+                        fontSize: '14px', 
+                        color: '#7f8c8d',
+                        lineHeight: '1.4'
+                      }}>
+                        {contract.description}
+                      </div>
+                    </div>
+                    <div style={{
+                      padding: '6px 12px',
+                      backgroundColor: formData.contractType === contract.value ? '#3498db' : '#95a5a6',
+                      color: 'white',
+                      borderRadius: '15px',
+                      fontSize: '12px',
+                      fontWeight: 'bold'
+                    }}>
+                      {contract.value.toUpperCase()}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Mitarbeiter Kategorie */}
           <div style={{
@@ -359,6 +475,104 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
             </div>
           </div>
 
+          {/* Passwort ändern (nur für Admins im Edit-Modus) */}
+          {mode === 'edit' && hasRole(['admin']) && (
+            <div style={{
+              padding: '20px',
+              backgroundColor: '#fff3cd',
+              borderRadius: '8px',
+              border: '1px solid #ffeaa7'
+            }}>
+              <h3 style={{ margin: '0 0 15px 0', color: '#856404' }}>🔒 Passwort zurücksetzen</h3>
+              
+              {!showPasswordSection ? (
+                <button
+                  type="button"
+                  onClick={() => setShowPasswordSection(true)}
+                  style={{
+                    padding: '10px 16px',
+                    backgroundColor: '#f39c12',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  🔑 Passwort zurücksetzen
+                </button>
+              ) : (
+                <div style={{ display: 'grid', gap: '15px' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#2c3e50' }}>
+                      Neues Passwort *
+                    </label>
+                    <input
+                      type="password"
+                      name="newPassword"
+                      value={passwordForm.newPassword}
+                      onChange={handlePasswordChange}
+                      required
+                      minLength={6}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        border: '1px solid #ddd',
+                        borderRadius: '4px',
+                        fontSize: '16px'
+                      }}
+                      placeholder="Mindestens 6 Zeichen"
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#2c3e50' }}>
+                      Passwort bestätigen *
+                    </label>
+                    <input
+                      type="password"
+                      name="confirmPassword"
+                      value={passwordForm.confirmPassword}
+                      onChange={handlePasswordChange}
+                      required
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        border: '1px solid #ddd',
+                        borderRadius: '4px',
+                        fontSize: '16px'
+                      }}
+                      placeholder="Passwort wiederholen"
+                    />
+                  </div>
+
+                  <div style={{ fontSize: '12px', color: '#7f8c8d' }}>
+                    <strong>Hinweis:</strong> Als Administrator können Sie das Passwort des Benutzers ohne Kenntnis des aktuellen Passworts zurücksetzen.
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowPasswordSection(false);
+                      setPasswordForm({ newPassword: '', confirmPassword: '' });
+                    }}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: '#95a5a6',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      alignSelf: 'flex-start'
+                    }}
+                  >
+                    Abbrechen
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Systemrolle (nur für Admins) */}
           {hasRole(['admin']) && (
             <div style={{
@@ -383,7 +597,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                       cursor: 'pointer'
                     }}
                     onClick={() => {
-                      // Use a direct setter instead of the function form
                       setFormData(prev => ({
                         ...prev,
                         role: role.value as 'admin' | 'maintenance' | 'user'
@@ -479,7 +692,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
           
           <button
             type="submit"
-            disabled={loading || !isFormValid}
+            disabled={loading || !isFormValid || (showPasswordSection && (!passwordForm.newPassword || !passwordForm.confirmPassword))}
             style={{
               padding: '12px 24px',
               backgroundColor: loading ? '#bdc3c7' : (isFormValid ? '#27ae60' : '#95a5a6'),

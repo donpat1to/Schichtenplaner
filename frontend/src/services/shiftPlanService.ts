@@ -122,12 +122,12 @@ export const shiftPlanService = {
     }
   },
 
-  getTemplates: async (): Promise<ShiftPlan[]> => {
+  /*getTemplates: async (): Promise<ShiftPlan[]> => {
     const response = await fetch(`${API_BASE}/templates`, {
       headers: getAuthHeaders()
     });
     return handleResponse(response);
-  },
+  },*/
 
   // Get specific template or plan
   getTemplate: async (id: string): Promise<ShiftPlan> => {

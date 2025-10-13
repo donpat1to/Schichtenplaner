@@ -372,6 +372,15 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
     const { id } = req.params;
     const { currentPassword, newPassword } = req.body;
 
+    // Get the current user from the auth middleware
+    const currentUser = (req as AuthRequest).user;
+    
+    // Check if user is changing their own password or is an admin
+    if (currentUser?.userId !== id && currentUser?.role !== 'admin') {
+      res.status(403).json({ error: 'You can only change your own password' });
+      return;
+    } 
+
     // Check if employee exists and get password
     const employee = await db.get<{ password: string }>('SELECT password FROM employees WHERE id = ?', [id]);
     if (!employee) {
@@ -379,10 +388,18 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    // Verify current password
-    const isValidPassword = await bcrypt.compare(currentPassword, employee.password);
-    if (!isValidPassword) {
-      res.status(400).json({ error: 'Current password is incorrect' });
+    // For non-admin users, verify current password
+    if (currentUser?.role !== 'admin') {
+      const isValidPassword = await bcrypt.compare(currentPassword, employee.password);
+      if (!isValidPassword) {
+        res.status(400).json({ error: 'Current password is incorrect' });
+        return;
+      }
+    }
+
+    // Validate new password
+    if (!newPassword || newPassword.length < 6) {
+      res.status(400).json({ error: 'New password must be at least 6 characters long' });
       return;
     }
 

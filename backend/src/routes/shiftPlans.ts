@@ -7,7 +7,7 @@ import {
   createShiftPlan, 
   updateShiftPlan, 
   deleteShiftPlan,
-  getTemplates,
+  //getTemplates,
   //createFromTemplate,
   createFromPreset
 } from '../controllers/shiftPlanController.js';
@@ -22,7 +22,7 @@ router.use(authMiddleware);
 router.get('/', getShiftPlans);
 
 // GET templates only
-router.get('/templates', getTemplates);
+//router.get('/templates', getTemplates);
 
 // GET specific shift plan or template
 router.get('/:id', getShiftPlan);
