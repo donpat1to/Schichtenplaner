@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { shiftPlanService } from '../../services/shiftPlanService';
 import { employeeService } from '../../services/employeeService';
-import { ShiftAssignmentService, AssignmentResult } from '../../services/shiftAssignmentService';
+import { shiftAssignmentService, ShiftAssignmentService, AssignmentResult } from '../../services/shiftAssignmentService';
 import { ShiftPlan, TimeSlot } from '../../models/ShiftPlan';
 import { Employee, EmployeeAvailability } from '../../models/Employee';
 import { useNotification } from '../../contexts/NotificationContext';
@@ -138,10 +138,10 @@ const ShiftPlanView: React.FC = () => {
         
         try {
           // First, verify the shift exists
-          await shiftPlanService.getScheduledShift(scheduledShift.id);
+          await shiftAssignmentService.getScheduledShift(scheduledShift.id);
           
           // Then update it
-          await shiftPlanService.updateScheduledShift(scheduledShift.id, {
+          await shiftAssignmentService.updateScheduledShift(scheduledShift.id, {
             assignedEmployees
           });
           
@@ -253,36 +253,6 @@ const ShiftPlanView: React.FC = () => {
   if (!shiftPlan) return <div>Schichtplan nicht gefunden</div>;
 
   const timetableData = getTimetableData();
-
-  const debugApiEndpoints = async () => {
-    if (!shiftPlan) return;
-    
-    console.log('🔍 Testing API endpoints for plan:', shiftPlan.id);
-    
-    try {
-      // Test the scheduled shifts endpoint
-      const shifts = await shiftPlanService.getScheduledShiftsForPlan(shiftPlan.id);
-      console.log('✅ GET /api/scheduled-shifts/plan/:planId works:', shifts.length, 'shifts found');
-      
-      if (shifts.length > 0) {
-        const firstShift = shifts[0];
-        console.log('🔍 First shift:', firstShift);
-        
-        // Test updating the first shift
-        try {
-          await shiftPlanService.updateScheduledShift(firstShift.id, {
-            assignedEmployees: ['test-employee']
-          });
-          console.log('✅ PUT /api/scheduled-shifts/:id works');
-        } catch (updateError) {
-          console.error('❌ PUT /api/scheduled-shifts/:id failed:', updateError);
-        }
-      }
-    } catch (error) {
-      console.error('❌ GET /api/scheduled-shifts/plan/:planId failed:', error);
-    }
-  };
-
 
   return (
     <div style={{ padding: '20px' }}>
@@ -459,21 +429,6 @@ const ShiftPlanView: React.FC = () => {
                 }}
               >
                 {publishing ? 'Veröffentliche...' : 'Veröffentlichen'}
-              </button>
-
-              <button
-                onClick={debugApiEndpoints}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: '#f39c12',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  marginRight: '10px'
-                }}
-              >
-                Test API Endpoints
               </button>
             </div>
           </div>
