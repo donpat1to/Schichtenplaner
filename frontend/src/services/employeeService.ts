@@ -12,13 +12,13 @@ const getAuthHeaders = () => {
 };
 
 export class EmployeeService {
-  async getEmployees(): Promise<Employee[]> {
+  async getEmployees(includeInactive: boolean = false): Promise<Employee[]> {
     console.log('🔄 Fetching employees from API...');
     
     const token = localStorage.getItem('token');
     console.log('🔑 Token exists:', !!token);
     
-    const response = await fetch(`${API_BASE_URL}/employees`, {
+    const response = await fetch(`${API_BASE_URL}/employees?includeInactive=${includeInactive}`, {
       headers: getAuthHeaders(),
     });
     

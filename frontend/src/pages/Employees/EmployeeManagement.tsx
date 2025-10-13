@@ -28,7 +28,7 @@ const EmployeeManagement: React.FC = () => {
       console.log('🔄 Loading employees...');
       
       // Add cache-busting parameter to prevent browser caching
-      const data = await employeeService.getEmployees();
+      const data = await employeeService.getEmployees(true);
       console.log('✅ Employees loaded:', data);
       
       setEmployees(data);

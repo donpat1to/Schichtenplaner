@@ -8,6 +8,7 @@ import authRoutes from './routes/auth.js';
 import employeeRoutes from './routes/employees.js';
 import shiftPlanRoutes from './routes/shiftPlans.js';
 import setupRoutes from './routes/setup.js';
+import scheduledShiftsRouter from './routes/scheduledShifts.js';
 
 const app = express();
 const PORT = 3002;
@@ -21,6 +22,18 @@ app.use('/api/setup', setupRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/shift-plans', shiftPlanRoutes);
+app.use('/api/scheduled-shifts', scheduledShiftsRouter);
+
+// Error handling middleware should come after routes
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
+// 404 handler for API routes
+app.use('/api/*', (req, res) => {
+  res.status(404).json({ error: 'API endpoint not found' });
+});
 
 // Health route
 app.get('/api/health', (req: any, res: any) => {

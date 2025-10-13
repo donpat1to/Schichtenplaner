@@ -10,7 +10,10 @@ export const getEmployees = async (req: AuthRequest, res: Response): Promise<voi
   try {
     console.log('🔍 Fetching employees - User:', req.user);
     
-    const employees = await db.all<any>(`
+    const { includeInactive } = req.query;
+    const includeInactiveFlag = includeInactive === 'true';
+    
+    let query = `
       SELECT 
         id, email, name, role, is_active as isActive, 
         employee_type as employeeType, 
@@ -19,9 +22,15 @@ export const getEmployees = async (req: AuthRequest, res: Response): Promise<voi
         created_at as createdAt, 
         last_login as lastLogin
       FROM employees
-      WHERE is_active = 1
-      ORDER BY name
-    `);
+    `;
+    
+    if (!includeInactiveFlag) {
+      query += ' WHERE is_active = 1';
+    }
+    
+    query += ' ORDER BY name';
+    
+    const employees = await db.all<any>(query);
 
     console.log('✅ Employees found:', employees.length);
     res.json(employees);

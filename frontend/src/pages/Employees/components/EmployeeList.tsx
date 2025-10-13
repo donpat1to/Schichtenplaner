@@ -321,7 +321,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
                 flexWrap: 'wrap'
               }}>
                 {/* Verfügbarkeit Button */}
-                {(employee.role === 'admin' || employee.role === 'maintenance') && (
+                {(employee.role === 'admin' || employee.role === 'maintenance' || employee.role === 'user') && (
                   <button
                     onClick={() => onManageAvailability(employee)}
                     style={{
