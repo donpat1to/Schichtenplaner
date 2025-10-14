@@ -10,7 +10,12 @@ import {
   //getTemplates,
   //createFromTemplate,
   createFromPreset,
-  revertToDraft
+  revertToDraft,
+  regenerateScheduledShifts,
+  generateScheduledShiftsForPlan,
+  getScheduledShift,
+  getScheduledShiftsFromPlan,
+  updateScheduledShift
 } from '../controllers/shiftPlanController.js';
 
 const router = express.Router();
@@ -45,5 +50,22 @@ router.delete('/:id', requireRole(['admin', 'instandhalter']), deleteShiftPlan);
 
 // PUT revert published plan to draft
 router.put('/:id/revert-to-draft', requireRole(['admin', 'instandhalter']), revertToDraft);
+
+
+
+// SCHEDULED SHIFTS
+
+router.post('/:id/generate-shifts', requireRole(['admin', 'instandhalter']), generateScheduledShiftsForPlan);
+
+router.post('/:id/regenerate-shifts', requireRole(['admin', 'instandhalter']), regenerateScheduledShifts);
+
+// GET all scheduled shifts for a plan (for debugging)
+router.get('/plan/:planId', requireRole(['admin']), getScheduledShiftsFromPlan);
+
+// GET specific scheduled shift
+router.get('/:id', requireRole(['admin']), getScheduledShift);
+
+// UPDATE scheduled shift
+router.put('/:id', requireRole(['admin']), updateScheduledShift);
 
 export default router;

@@ -635,15 +635,18 @@ async function getShiftPlanById(planId: string): Promise<any> {
 }
 
 // Helper function to generate scheduled shifts from template
-async function generateScheduledShifts(planId: string, startDate: string, endDate: string): Promise<void> {
+export const generateScheduledShifts = async(planId: string, startDate: string, endDate: string): Promise<void> => {
   try {
-    console.log(`🔄 Generiere geplante Schichten für Plan ${planId} von ${startDate} bis ${endDate}`);
+    console.log(`🔄 Generating scheduled shifts for Plan ${planId} from ${startDate} to ${endDate}`);
     
     // Get plan with shifts and time slots
     const plan = await getShiftPlanById(planId);
     if (!plan) {
       throw new Error('Plan not found');
     }
+
+    console.log('📋 Plan shifts:', plan.shifts?.length);
+    console.log('⏰ Plan time slots:', plan.timeSlots?.length);
 
     const start = new Date(startDate);
     const end = new Date(endDate);
@@ -654,6 +657,8 @@ async function generateScheduledShifts(planId: string, startDate: string, endDat
 
       // Find shifts for this day of week
       const shiftsForDay = plan.shifts.filter((shift: any) => shift.dayOfWeek === dayOfWeek);
+
+      console.log(`📅 Date: ${date.toISOString().split('T')[0]}, Day: ${dayOfWeek}, Shifts: ${shiftsForDay.length}`);
 
       for (const shift of shiftsForDay) {
         const scheduledShiftId = uuidv4();
@@ -667,19 +672,73 @@ async function generateScheduledShifts(planId: string, startDate: string, endDat
             date.toISOString().split('T')[0], // YYYY-MM-DD format
             shift.timeSlotId,
             shift.requiredEmployees,
-            JSON.stringify([])
+            JSON.stringify([]) // Start with empty assignments
           ]
         );
+        
+        console.log(`✅ Created scheduled shift: ${scheduledShiftId}`);
       }
     }
 
-    console.log(`✅ Geplante Schichten generiert für Plan ${planId}`);
+    console.log(`✅ Scheduled shifts generated for Plan ${planId}`);
     
   } catch (error) {
-    console.error('❌ Fehler beim Generieren der geplanten Schichten:', error);
+    console.error('❌ Error generating scheduled shifts:', error);
     throw error;
   }
 }
+
+export const generateScheduledShiftsForPlan = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    // Check if plan exists
+    const existingPlan = await getShiftPlanById(id);
+    if (!existingPlan) {
+      res.status(404).json({ error: 'Shift plan not found' });
+      return;
+    }
+
+    console.log('🔄 Manually generating scheduled shifts for plan:', {
+      id,
+      name: existingPlan.name,
+      isTemplate: existingPlan.isTemplate,
+      startDate: existingPlan.startDate,
+      endDate: existingPlan.endDate,
+      hasShifts: existingPlan.shifts?.length || 0
+    });
+
+    if (existingPlan.isTemplate) {
+      res.status(400).json({ error: 'Cannot generate scheduled shifts for templates' });
+      return;
+    }
+
+    if (!existingPlan.startDate || !existingPlan.endDate) {
+      res.status(400).json({ error: 'Plan must have start and end dates' });
+      return;
+    }
+
+    // Delete existing scheduled shifts
+    await db.run('DELETE FROM scheduled_shifts WHERE plan_id = ?', [id]);
+    console.log('🗑️ Deleted existing scheduled shifts');
+
+    // Generate new scheduled shifts
+    await generateScheduledShifts(id, existingPlan.startDate, existingPlan.endDate);
+
+    // Return updated plan
+    const updatedPlan = await getShiftPlanById(id);
+    
+    console.log('✅ Successfully generated scheduled shifts:', {
+      scheduledShifts: updatedPlan.scheduledShifts?.length || 0
+    });
+
+    res.json(updatedPlan);
+
+  } catch (error) {
+    console.error('❌ Error generating scheduled shifts:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
 
 export const revertToDraft = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -729,95 +788,137 @@ export const revertToDraft = async (req: Request, res: Response): Promise<void> 
   }
 };
 
-// Neue Funktion: Create from Template
-/*export const createFromTemplate = async (req: Request, res: Response): Promise<void> => {
+export const regenerateScheduledShifts = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { templatePlanId, name, startDate, endDate, description } = req.body;
-    const userId = (req as AuthRequest).user?.userId;
+    const { id } = req.params;
 
-    if (!userId) {
-      res.status(401).json({ error: 'Unauthorized' });
+    // Check if plan exists
+    const existingPlan = await getShiftPlanById(id);
+    if (!existingPlan) {
+      res.status(404).json({ error: 'Shift plan not found' });
       return;
     }
 
-    // Get the template plan
-    const templatePlan = await getShiftPlanById(templatePlanId);
-    if (!templatePlan) {
-      res.status(404).json({ error: 'Template plan not found' });
-      return;
+    // Delete existing scheduled shifts
+    await db.run('DELETE FROM scheduled_shifts WHERE plan_id = ?', [id]);
+
+    // Generate new scheduled shifts
+    if (existingPlan.startDate && existingPlan.endDate) {
+      await generateScheduledShifts(id, existingPlan.startDate, existingPlan.endDate);
     }
 
-    if (!templatePlan.isTemplate) {
-      res.status(400).json({ error: 'Specified plan is not a template' });
-      return;
-    }
-
-    const planId = uuidv4();
-
-    await db.run('BEGIN TRANSACTION');
-
-    try {
-      // Create new plan from template
-      await db.run(
-        `INSERT INTO shift_plans (id, name, description, start_date, end_date, is_template, status, created_by) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [planId, name, description || templatePlan.description, startDate, endDate, 0, 'draft', userId]
-      );
-
-      // Copy time slots
-      for (const timeSlot of templatePlan.timeSlots) {
-        const newTimeSlotId = uuidv4();
-        await db.run(
-          `INSERT INTO time_slots (id, plan_id, name, start_time, end_time, description) 
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [newTimeSlotId, planId, timeSlot.name, timeSlot.startTime, timeSlot.endTime, timeSlot.description || '']
-        );
-      }
-
-      // Get the newly created time slots
-      const newTimeSlots = await db.all<any>(`
-        SELECT * FROM time_slots WHERE plan_id = ? ORDER BY start_time
-      `, [planId]);
-
-      // Copy shifts
-      for (const shift of templatePlan.shifts) {
-        const shiftId = uuidv4();
-        
-        // Find matching time slot in new plan
-        const originalTimeSlot = templatePlan.timeSlots.find((ts: any) => ts.id === shift.timeSlotId);
-        const newTimeSlot = newTimeSlots.find((ts: any) => 
-          ts.name === originalTimeSlot?.name && 
-          ts.start_time === originalTimeSlot?.startTime && 
-          ts.end_time === originalTimeSlot?.endTime
-        );
-
-        if (newTimeSlot) {
-          await db.run(
-            `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, required_employees, color) 
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [shiftId, planId, shift.dayOfWeek, newTimeSlot.id, shift.requiredEmployees, shift.color || '#3498db']
-          );
-        }
-      }
-
-      // Generate scheduled shifts for the date range
-      if (startDate && endDate) {
-        await generateScheduledShifts(planId, startDate, endDate);
-      }
-
-      await db.run('COMMIT');
-
-      // Return created plan
-      const createdPlan = await getShiftPlanById(planId);
-      res.status(201).json(createdPlan);
-
-    } catch (error) {
-      await db.run('ROLLBACK');
-      throw error;
-    }
+    console.log(`✅ Regenerated scheduled shifts for plan ${id}`);
+    
+    // Return updated plan
+    const updatedPlan = await getShiftPlanById(id);
+    res.json(updatedPlan);
 
   } catch (error) {
-    console.error('Error creating plan from template:', error);
+    console.error('Error regenerating scheduled shifts:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
-};*/
+};
+
+export const getScheduledShiftsFromPlan = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { planId } = req.params;
+    
+    const shifts = await db.all(
+      `SELECT * FROM scheduled_shifts WHERE plan_id = ? ORDER BY date, time_slot_id`,
+      [planId]
+    );
+
+    // Parse JSON arrays safely
+    const parsedShifts = shifts.map((shift: any) => {
+      try {
+        return {
+          ...shift,
+          assigned_employees: JSON.parse(shift.assigned_employees || '[]')
+        };
+      } catch (parseError) {
+        console.error('Error parsing assigned_employees:', parseError);
+        return {
+          ...shift,
+          assigned_employees: []
+        };
+      }
+    });
+
+    res.json(parsedShifts);
+  } catch (error) {
+    console.error('Error fetching scheduled shifts:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const getScheduledShift = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    
+    const shift = await db.get(
+      'SELECT * FROM scheduled_shifts WHERE id = ?',
+      [id]
+    ) as any;
+
+    if (!shift) {
+      res.status(404).json({ error: 'Scheduled shift not found' });
+    }
+
+    // Parse JSON array
+    const parsedShift = {
+      ...shift,
+      assigned_employees: JSON.parse(shift.assigned_employees || '[]')
+    };
+
+    res.json(parsedShift);
+  } catch (error: any) {
+    console.error('Error fetching scheduled shift:', error);
+    res.status(500).json({ error: 'Internal server error: ' + error.message });
+  }
+};
+
+export const updateScheduledShift = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { assignedEmployees } = req.body;
+
+    console.log('🔄 Updating scheduled shift:', { 
+      id, 
+      assignedEmployees,
+      body: req.body 
+    });
+
+    if (!Array.isArray(assignedEmployees)) {
+      res.status(400).json({ error: 'assignedEmployees must be an array' });
+    }
+
+    // Check if shift exists
+    const existingShift = await db.get(
+      'SELECT id FROM scheduled_shifts WHERE id = ?',
+      [id]
+    ) as any;
+
+    if (!existingShift) {
+      console.error('❌ Scheduled shift not found:', id);
+      res.status(404).json({ error: `Scheduled shift ${id} not found` });
+    }
+
+    // Update the shift
+    const result = await db.run(
+      'UPDATE scheduled_shifts SET assigned_employees = ? WHERE id = ?',
+      [JSON.stringify(assignedEmployees), id]
+    );
+
+    console.log('✅ Scheduled shift updated successfully');
+    
+    res.json({ 
+      message: 'Scheduled shift updated successfully',
+      id: id,
+      assignedEmployees: assignedEmployees
+    });
+
+  } catch (error: any) {
+    console.error('❌ Error updating scheduled shift:', error);
+    res.status(500).json({ error: 'Internal server error: ' + error.message });
+  }
+};

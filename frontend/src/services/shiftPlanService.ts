@@ -40,7 +40,13 @@ export const shiftPlanService = {
       throw new Error('Fehler beim Laden der Schichtpläne');
     }
     
-    return await response.json();
+    const plans = await response.json();
+    
+    // Ensure scheduledShifts is always an array
+    return plans.map((plan: any) => ({
+      ...plan,
+      scheduledShifts: plan.scheduledShifts || []
+    }));
   },
 
   async getShiftPlan(id: string): Promise<ShiftPlan> {
@@ -150,15 +156,29 @@ export const shiftPlanService = {
     return handleResponse(response);
   },
 
-  // Create plan from template
-  /*createFromTemplate: async (data: CreateShiftFromTemplateRequest): Promise<ShiftPlan> => {
-    const response = await fetch(`${API_BASE}/from-template`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(data),
-    });
-    return handleResponse(response);
-  },*/
+
+  async regenerateScheduledShifts(planId: string):Promise<void> {
+    try {
+        console.log('🔄 Attempting to regenerate scheduled shifts...');
+        
+        // You'll need to add this API endpoint to your backend
+        const response = await fetch(`${API_BASE}/${planId}/regenerate-shifts`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+        });
+
+        if (response.ok) {
+        console.log('✅ Scheduled shifts regenerated');
+        } else {
+        console.error('❌ Failed to regenerate shifts');
+        }
+    } catch (error) {
+        console.error('❌ Error regenerating shifts:', error);
+    }
+  },
 
   // Create new plan
   createPlan: async (data: CreateShiftPlanRequest): Promise<ShiftPlan> => {
