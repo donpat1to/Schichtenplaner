@@ -22,16 +22,18 @@ export interface Assignment {
   [shiftId: string]: string[]; // employee IDs
 }
 
-export interface SchedulingResult {
-  assignments: Assignment;
-  violations: string[];
-  success: boolean;
-}
-
 export interface SchedulingConstraints {
   enforceNoTraineeAlone: boolean;
   enforceExperiencedWithChef: boolean;
   maxRepairAttempts: number;
+}
+
+export interface SchedulingResult {
+  assignments: Assignment;
+  violations: string[];
+  success: boolean;
+  resolutionReport?: string[];
+  allProblemsResolved?: boolean;
 }
 
 export interface AssignmentResult {
@@ -39,10 +41,35 @@ export interface AssignmentResult {
   violations: string[];
   success: boolean;
   pattern: WeeklyPattern;
+  resolutionReport?: string[];
+  allProblemsResolved?: boolean;
 }
 
 export interface WeeklyPattern {
   weekShifts: ScheduledShift[];
   assignments: { [shiftId: string]: string[] };
   weekNumber: number;
+}
+
+export interface SchedulingConstraints {
+  enforceNoTraineeAlone: boolean;
+  enforceExperiencedWithChef: boolean;
+  maxRepairAttempts: number;
+  targetEmployeesPerShift?: number; // New: flexible target
+}
+
+export interface Violation {
+  type: 'EmptyShift' | 'NeuAlone' | 'ContractExceeded' | 'ManagerWithoutExperienced' | 
+        'TwoExperiencedInShift' | 'ManagerAlone' | 'ManagerWithOnlyNew' | 'ExperiencedAloneNotAllowed';
+  shiftId?: string;
+  employeeId?: string;
+  severity: 'error' | 'warning';
+  message: string;
+}
+
+export interface RepairContext {
+  lockedShifts: Set<string>;
+  unassignedPool: string[];
+  warnings: string[];
+  violations: Violation[];
 }

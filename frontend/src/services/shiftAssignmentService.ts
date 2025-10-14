@@ -127,7 +127,7 @@ export class ShiftAssignmentService {
     constraints: any = {}
   ): Promise<AssignmentResult> {
 
-    console.log('🔄 Starting new scheduling algorithm...');
+    console.log('🔄 Starting enhanced scheduling algorithm...');
 
     // Get defined shifts for the first week
     const definedShifts = this.getDefinedShifts(shiftPlan);
@@ -152,7 +152,7 @@ export class ShiftAssignmentService {
       managerShifts: managerShifts.length
     });
 
-    // Run the scheduling algorithm
+    // Run the enhanced scheduling algorithm with better constraints
     const schedulingResult = scheduleWithManager(
       schedulingShifts,
       schedulingEmployees,
@@ -160,11 +160,12 @@ export class ShiftAssignmentService {
       {
         enforceNoTraineeAlone: constraints.enforceNoTraineeAlone ?? true,
         enforceExperiencedWithChef: constraints.enforceExperiencedWithChef ?? true,
-        maxRepairAttempts: constraints.maxRepairAttempts ?? 50
+        maxRepairAttempts: constraints.maxRepairAttempts ?? 50,
+        targetEmployeesPerShift: constraints.targetEmployeesPerShift ?? 2 // Flexible target
       }
     );
 
-    console.log('📊 Scheduling completed:', {
+    console.log('📊 Enhanced scheduling completed:', {
       assignments: Object.keys(schedulingResult.assignments).length,
       violations: schedulingResult.violations.length,
       success: schedulingResult.success
@@ -183,9 +184,11 @@ export class ShiftAssignmentService {
       assignments: allAssignments,
       violations: schedulingResult.violations,
       success: schedulingResult.violations.length === 0,
-      pattern: weeklyPattern
+      pattern: weeklyPattern,
+      resolutionReport: schedulingResult.resolutionReport // Füge diese Zeile hinzu
     };
   }
+
 
   private static async createWeeklyPattern(
     definedShifts: ScheduledShift[],
