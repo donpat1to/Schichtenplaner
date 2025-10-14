@@ -2,21 +2,11 @@
 import { ShiftPlan, ScheduledShift } from '../models/ShiftPlan';
 import { Employee, EmployeeAvailability } from '../models/Employee';
 import { authService } from './authService';
+import { scheduleWithManager } from './scheduling/shiftScheduler';
+import { transformToSchedulingData } from './scheduling/dataAdapter';
+import { AssignmentResult, WeeklyPattern } from './scheduling/types';
 
 const API_BASE_URL = 'http://localhost:3002/api/scheduled-shifts';
-
-export interface AssignmentResult {
-  assignments: { [shiftId: string]: string[] };
-  violations: string[];
-  success: boolean;
-  pattern: WeeklyPattern;
-}
-
-export interface WeeklyPattern {
-  weekShifts: ScheduledShift[];
-  assignments: { [shiftId: string]: string[] };
-  weekNumber: number;
-}
 
 // Helper function to get auth headers
 const getAuthHeaders = () => {
@@ -137,41 +127,62 @@ export class ShiftAssignmentService {
     constraints: any = {}
   ): Promise<AssignmentResult> {
 
-    console.log('🔄 Starting weekly pattern assignment...');
+    console.log('🔄 Starting new scheduling algorithm...');
 
-    // Get defined shifts
+    // Get defined shifts for the first week
     const definedShifts = this.getDefinedShifts(shiftPlan);
-    const activeEmployees = employees.filter(emp => emp.isActive);
+    const firstWeekShifts = this.getFirstWeekShifts(definedShifts);
     
-    console.log('📊 Plan analysis:');
-    console.log('- Total shifts in plan:', definedShifts.length);
-    console.log('- Active employees:', activeEmployees.length);
+    console.log('📊 First week analysis:', {
+      totalShifts: definedShifts.length,
+      firstWeekShifts: firstWeekShifts.length,
+      employees: employees.length
+    });
 
-    // STRATEGY: Create weekly pattern and repeat
-    const weeklyPattern = await this.createWeeklyPattern(
-      definedShifts,
-      activeEmployees,
-      availabilities,
-      constraints.enforceNoTraineeAlone
+    // Transform data for scheduling algorithm
+    const { schedulingEmployees, schedulingShifts, managerShifts } = transformToSchedulingData(
+      employees.filter(emp => emp.isActive),
+      firstWeekShifts,
+      availabilities
     );
 
-    console.log('🎯 Weekly pattern created for', weeklyPattern.weekShifts.length, 'shifts');
+    console.log('🎯 Transformed data for scheduling:', {
+      employees: schedulingEmployees.length,
+      shifts: schedulingShifts.length,
+      managerShifts: managerShifts.length
+    });
 
-    // Apply pattern to all weeks in the plan
-    const assignments = this.applyWeeklyPattern(definedShifts, weeklyPattern);
-    
-    const violations = this.findViolations(assignments, activeEmployees, definedShifts, constraints.enforceNoTraineeAlone);
+    // Run the scheduling algorithm
+    const schedulingResult = scheduleWithManager(
+      schedulingShifts,
+      schedulingEmployees,
+      managerShifts,
+      {
+        enforceNoTraineeAlone: constraints.enforceNoTraineeAlone ?? true,
+        enforceExperiencedWithChef: constraints.enforceExperiencedWithChef ?? true,
+        maxRepairAttempts: constraints.maxRepairAttempts ?? 50
+      }
+    );
 
-    console.log('📊 Weekly pattern assignment completed:');
-    console.log('- Pattern shifts:', weeklyPattern.weekShifts.length);
-    console.log('- Total plan shifts:', definedShifts.length);
-    console.log('- Assignments made:', Object.values(assignments).flat().length);
-    console.log('- Violations:', violations.length);
+    console.log('📊 Scheduling completed:', {
+      assignments: Object.keys(schedulingResult.assignments).length,
+      violations: schedulingResult.violations.length,
+      success: schedulingResult.success
+    });
+
+    // Apply weekly pattern to all shifts
+    const weeklyPattern: WeeklyPattern = {
+      weekShifts: firstWeekShifts,
+      assignments: schedulingResult.assignments,
+      weekNumber: 1
+    };
+
+    const allAssignments = this.applyWeeklyPattern(definedShifts, weeklyPattern);
 
     return {
-      assignments,
-      violations,
-      success: violations.length === 0,
+      assignments: allAssignments,
+      violations: schedulingResult.violations,
+      success: schedulingResult.violations.length === 0,
       pattern: weeklyPattern
     };
   }
