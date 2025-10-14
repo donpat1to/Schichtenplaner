@@ -29,7 +29,8 @@ import {
   resolveOverstaffedExperienced,
   prioritizeWarningsWithPool,
   resolveExperiencedAloneNotAllowed,
-  checkAllProblemsResolved
+  checkAllProblemsResolved,
+  createDetailedResolutionReport
 } from './repairFunctions';
 
 // Phase A: Regular employee scheduling (without manager)
@@ -144,7 +145,7 @@ function phaseBInsertManager(
   console.log(`🎯 Phase B: Processing ${managerShifts.length} manager shifts`);
 
   for (const shiftId of managerShifts) {
-    //const shift = nonManagerShifts.find(s => s.id === shiftId) || { id: shiftId, requiredEmployees: 2 };
+    let _shift = nonManagerShifts.find(s => s.id === shiftId) || { id: shiftId, requiredEmployees: 2 };
     
     // Assign manager to his chosen shifts
     if (!assignments[shiftId].includes(manager.id)) {
@@ -240,11 +241,12 @@ export function enhancedPhaseCRepairValidate(
   const employeeMap = new Map(employees.map(emp => [emp.id, emp]));
   const manager = employees.find(emp => emp.role === 'manager');
 
-  console.log('🔄 Starting Enhanced Phase C: Smart Repair & Validation');
+  console.log('🔄 Starting Enhanced Phase C: Detailed Repair & Validation');
 
   // 1. Manager-Schutzregel
   managerShifts.forEach(shiftId => {
     repairContext.lockedShifts.add(shiftId);
+    repairContext.warnings.push(`Schicht ${shiftId} als Manager-Schicht gesperrt`);
   });
 
   // 2. Überbesetzte erfahrene Mitarbeiter identifizieren und in Pool verschieben
@@ -276,6 +278,7 @@ export function enhancedPhaseCRepairValidate(
           severity: 'error',
           message: `Leere Schicht: ${shift.id}`
         });
+        repairContext.warnings.push(`Konnte leere Schicht ${shift.id} nicht beheben`);
       }
     }
     
@@ -302,7 +305,7 @@ export function enhancedPhaseCRepairValidate(
         shiftId: shift.id,
         employeeId: experiencedAloneCheck.employeeId,
         severity: 'error',
-        message: `Erfahrener Mitarbeiter ${emp?.name || experiencedAloneCheck.employeeId} arbeitet allein, darf aber nicht alleine arbeiten`
+        message: `Erfahrener Mitarbeiter ${emp?.name || experiencedAloneCheck.employeeId} arbeitet allein in Schicht ${shift.id}`
       });
     }
   });
@@ -325,26 +328,26 @@ export function enhancedPhaseCRepairValidate(
   managerShifts.forEach(shiftId => {
     const assignment = assignments[shiftId] || [];
     
-    // Manager allein -> KRITISCH (error)
+    // Manager allein
     if (isManagerAlone(assignment, manager?.id)) {
-        repairContext.violations.push({
+      repairContext.violations.push({
         type: 'ManagerAlone',
         shiftId: shiftId,
-        severity: 'error', // KRITISCH
+        severity: 'error',
         message: `Manager allein in Schicht ${shiftId}`
-        });
+      });
     }
     
-    // Manager + nur Neue -> NUR WARNUNG (warning)
+    // Manager + nur Neue
     if (isManagerShiftWithOnlyNew(assignment, employeeMap, manager?.id)) {
-        repairContext.violations.push({
+      repairContext.violations.push({
         type: 'ManagerWithOnlyNew',
         shiftId: shiftId,
-        severity: 'warning', // NUR WARNUNG
+        severity: 'warning',
         message: `Manager mit nur Neuen in Schicht ${shiftId}`
-        });
+      });
     }
-    });
+  });
 
   // Erstelle finale Violations-Liste
   const uniqueViolations = repairContext.violations.filter((v, index, self) =>
@@ -360,56 +363,40 @@ export function enhancedPhaseCRepairValidate(
   );
 
   const finalViolations = [
-    // Nur ERROR-Violations als ERROR markieren
     ...uniqueViolations
-        .filter(v => v.severity === 'error')
-        .map(v => `ERROR: ${v.message}`),
-    
-    // WARNING-Violations als WARNING markieren  
+      .filter(v => v.severity === 'error')
+      .map(v => `ERROR: ${v.message}`),
     ...uniqueViolations
-        .filter(v => v.severity === 'warning')
-        .map(v => `WARNING: ${v.message}`),
-    
-    // Andere Warnungen als INFO (Aktionen)
+      .filter(v => v.severity === 'warning')
+      .map(v => `WARNING: ${v.message}`),
     ...uniqueWarnings.map(w => `INFO: ${w}`)
-    ];
+  ];
 
-  // 9. FINALE ÜBERPRÜFUNG: Prüfe ob alle kritischen Probleme gelöst wurden
-  const resolutionCheck = checkAllProblemsResolved(
+  // 9. DETAILLIERTER REPARATUR-BERICHT
+  const resolutionReport = createDetailedResolutionReport(
     assignments, 
     employeeMap, 
     shifts, 
     managerShifts, 
-    finalViolations
+    repairContext
   );
 
-  const resolutionReport = [
-    '=== REPARATUR-BERICHT ===',
-    `Aufgelöste Probleme: ${resolutionCheck.resolved.length}`,
-    `Verbleibende Probleme: ${resolutionCheck.remaining.length}`,
-    `Alle kritischen Probleme behoben: ${resolutionCheck.allResolved ? '✅ JA' : '❌ NEIN'}`,
-    '',
-    '--- AUFGELÖSTE PROBLEME ---',
-    ...(resolutionCheck.resolved.length > 0 ? resolutionCheck.resolved : ['Keine']),
-    '',
-    '--- VERBLEIBENDE PROBLEME ---',
-    ...(resolutionCheck.remaining.length > 0 ? resolutionCheck.remaining : ['Keine']),
-    '',
-    '=== ENDE BERICHT ==='
-  ];
+  // Bestimme ob alle kritischen Probleme behoben wurden
+  const criticalProblems = uniqueViolations.filter(v => v.severity === 'error');
+  const allProblemsResolved = criticalProblems.length === 0;
 
   console.log('📊 Enhanced Phase C completed:', {
-    poolSize: repairContext.unassignedPool.length,
-    violations: uniqueViolations.length,
-    warnings: uniqueWarnings.length,
-    allProblemsResolved: resolutionCheck.allResolved
+    totalActions: uniqueWarnings.length,
+    criticalProblems: criticalProblems.length,
+    warnings: uniqueViolations.filter(v => v.severity === 'warning').length,
+    allProblemsResolved
   });
 
   return {
     assignments,
     violations: finalViolations,
     resolutionReport,
-    allProblemsResolved: resolutionCheck.allResolved
+    allProblemsResolved
   };
 }
 
@@ -421,7 +408,7 @@ export function scheduleWithManager(
 ): SchedulingResult & { resolutionReport?: string[]; allProblemsResolved?: boolean } {
   
   const assignments: Assignment = {};
-  //const allViolations: string[] = [];
+  const allViolations: string[] = [];
 
   // Initialisiere Zuweisungen
   shifts.forEach(shift => {
@@ -444,14 +431,14 @@ export function scheduleWithManager(
   console.log('🔄 Starting Phase B: Enhanced Manager insertion');
   
   // Phase B: Erweiterte Manager-Einfügung
-  /*const phaseBResult = phaseBInsertManager(
+  const phaseBResult = phaseBInsertManager(
     assignments, 
     manager, 
     managerShifts, 
     employees, 
     nonManagerShifts,
     constraints
-  );*/
+  );
 
   console.log('🔄 Starting Enhanced Phase C: Smart Repair & Validation');
   

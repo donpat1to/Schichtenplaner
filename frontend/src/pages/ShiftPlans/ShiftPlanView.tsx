@@ -148,6 +148,56 @@ const ShiftPlanView: React.FC = () => {
     return date.getDay() === 0 ? 7 : date.getDay();
   };
 
+  const debugManagerAvailability = () => {
+    if (!shiftPlan || !employees.length || !availabilities.length) return;
+    
+    const manager = employees.find(emp => emp.role === 'admin');
+    if (!manager) {
+      console.log('❌ Kein Manager (admin) gefunden');
+      return;
+    }
+    
+    console.log('🔍 Manager-Analyse:', {
+      manager: manager.name,
+      managerId: manager.id,
+      totalAvailabilities: availabilities.length,
+      managerAvailabilities: availabilities.filter(a => a.employeeId === manager.id).length
+    });
+    
+    // Prüfe speziell die leeren Manager-Schichten
+    const emptyManagerShifts = [
+      'a8ef4ce0-adfd-4ec3-8c58-efa0f7347f9f',
+      'a496a8d6-f7a0-4d77-96de-c165379378c4', 
+      'ea2d73d1-8354-4833-8c87-40f318ce8be0',
+      '90eb5454-2ae2-4445-86b7-a6e0e2cf0b22'
+    ];
+    
+    emptyManagerShifts.forEach(shiftId => {
+      const scheduledShift = shiftPlan.scheduledShifts?.find(s => s.id === shiftId);
+      if (scheduledShift) {
+        const dayOfWeek = getDayOfWeek(scheduledShift.date);
+        const shiftKey = `${dayOfWeek}-${scheduledShift.timeSlotId}`;
+        
+        const managerAvailability = availabilities.find(a => 
+          a.employeeId === manager.id && 
+          a.dayOfWeek === dayOfWeek && 
+          a.timeSlotId === scheduledShift.timeSlotId
+        );
+        
+        console.log(`📊 Schicht ${shiftId}:`, {
+          date: scheduledShift.date,
+          dayOfWeek,
+          timeSlotId: scheduledShift.timeSlotId,
+          shiftKey,
+          managerAvailability: managerAvailability ? managerAvailability.preferenceLevel : 'NICHT GEFUNDEN',
+          status: managerAvailability ? 
+            (managerAvailability.preferenceLevel === 3 ? '❌ NICHT VERFÜGBAR' : '✅ VERFÜGBAR') : 
+            '❌ KEINE VERFÜGBARKEITSDATEN'
+        });
+      }
+    });
+  };
+
   const handlePreviewAssignment = async () => {
     if (!shiftPlan) return;
 
@@ -164,6 +214,26 @@ const ShiftPlanView: React.FC = () => {
         }
       );
 
+      // DEBUG: Überprüfe die tatsächlichen Violations
+      console.log('🔍 VIOLATIONS ANALYSIS:', {
+        allViolations: result.violations,
+        criticalViolations: result.violations.filter(v => 
+          v.includes('ERROR:') || v.includes('❌ KRITISCH:')
+        ),
+        warningViolations: result.violations.filter(v => 
+          v.includes('WARNING:') || v.includes('⚠️')
+        ),
+        infoViolations: result.violations.filter(v => 
+          v.includes('INFO:')
+        ),
+        criticalCount: result.violations.filter(v => 
+          v.includes('ERROR:') || v.includes('❌ KRITISCH:')
+        ).length,
+        canPublish: result.violations.filter(v => 
+          v.includes('ERROR:') || v.includes('❌ KRITISCH:')
+        ).length === 0
+      });
+
       setAssignmentResult(result);
       setShowAssignmentPreview(true);
 
@@ -173,48 +243,23 @@ const ShiftPlanView: React.FC = () => {
         result.resolutionReport.forEach(line => console.log(line));
       }
 
-      // KORRIGIERT: Entscheidung basierend auf Reparatur-Bericht statt allProblemsResolved
-      const allCriticalResolved = result.resolutionReport && 
-        result.resolutionReport.some(line => 
-          line.includes('Alle kritischen Probleme behoben: ✅ JA')
-        );
+      // Entscheidung basierend auf tatsächlichen kritischen Violations
+      const criticalCount = result.violations.filter(v => 
+        v.includes('ERROR:') || v.includes('❌ KRITISCH:')
+      ).length;
 
-      if (allCriticalResolved) {
+      if (criticalCount === 0) {
         showNotification({
           type: 'success',
           title: 'Erfolg', 
           message: 'Alle kritischen Probleme wurden behoben! Der Schichtplan kann veröffentlicht werden.'
         });
       } else {
-        // Zähle nur kritische Probleme (ERROR oder ❌ KRITISCH)
-        const criticalProblems = result.violations.filter(v => 
-          v.includes('ERROR:') || v.includes('❌ KRITISCH:')
-        );
-        
-        // Zähle Warnungen separat
-        const warnings = result.violations.filter(v => 
-          v.includes('WARNING:') || v.includes('⚠️')
-        );
-
-        if (criticalProblems.length > 0) {
-          showNotification({
-            type: 'error',
-            title: 'Kritische Probleme',
-            message: `${criticalProblems.length} kritische Probleme müssen behoben werden`
-          });
-        } else if (warnings.length > 0) {
-          showNotification({
-            type: 'warning',
-            title: 'Warnungen',
-            message: `${warnings.length} Warnungen - Plan kann trotzdem veröffentlicht werden`
-          });
-        } else {
-          showNotification({
-            type: 'success',
-            title: 'Erfolg',
-            message: 'Keine Probleme gefunden! Der Schichtplan kann veröffentlicht werden.'
-          });
-        }
+        showNotification({
+          type: 'error',
+          title: 'Kritische Probleme',
+          message: `${criticalCount} kritische Probleme müssen behoben werden`
+        });
       }
 
     } catch (error) {
@@ -312,14 +357,28 @@ const ShiftPlanView: React.FC = () => {
     try {
       setReverting(true);
       
+      // 1. Zuerst zurücksetzen
       const updatedPlan = await shiftPlanService.revertToDraft(id);
-      setShiftPlan(updatedPlan);
+      
+      // 2. Dann ALLE Daten neu laden
+      await loadShiftPlanData();
+      
+      // 3. Assignment-Result zurücksetzen
       setAssignmentResult(null);
+      
+      // 4. Preview schließen falls geöffnet
+      setShowAssignmentPreview(false);
 
       showNotification({
         type: 'success',
         title: 'Erfolg',
-        message: 'Schichtplan wurde erfolgreich zurück in den Entwurfsstatus gesetzt.'
+        message: 'Schichtplan wurde erfolgreich zurück in den Entwurfsstatus gesetzt. Alle Daten wurden neu geladen.'
+      });
+
+      console.log('Scheduled shifts after revert:', {
+        hasScheduledShifts: !!shiftPlan.scheduledShifts,
+        count: shiftPlan.scheduledShifts?.length || 0,
+        firstFew: shiftPlan.scheduledShifts?.slice(0, 3)
       });
 
     } catch (error) {
@@ -705,28 +764,56 @@ const ShiftPlanView: React.FC = () => {
           }}>
             <h2>Wochenmuster-Zuordnung</h2>
             
-            {/* Reparatur-Bericht anzeigen */}
+            {/* Detaillierter Reparatur-Bericht anzeigen */}
             {assignmentResult.resolutionReport && (
               <div style={{
-                backgroundColor: '#e8f4fd',
-                border: '1px solid #b8d4f0',
+                backgroundColor: '#f8f9fa',
+                border: '1px solid #e9ecef',
                 borderRadius: '4px',
                 padding: '15px',
                 marginBottom: '20px',
-                fontSize: '14px'
+                fontSize: '14px',
+                maxHeight: '400px',
+                overflow: 'auto'
               }}>
-                <h4 style={{ color: '#2c3e50', marginTop: 0 }}>Reparatur-Bericht</h4>
-                <div style={{ maxHeight: '200px', overflow: 'auto' }}>
-                  {assignmentResult.resolutionReport.map((line, index) => (
-                    <div key={index} style={{ 
-                      color: line.includes('✅') ? '#2ecc71' : line.includes('❌') ? '#e74c3c' : '#2c3e50',
-                      fontFamily: 'monospace',
-                      fontSize: '12px',
-                      marginBottom: '2px'
-                    }}>
-                      {line}
-                    </div>
-                  ))}
+                <h4 style={{ color: '#2c3e50', marginTop: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span>📋</span> Detaillierter Reparatur-Bericht
+                </h4>
+                <div style={{ 
+                  fontFamily: 'monospace', 
+                  fontSize: '12px',
+                  lineHeight: '1.4'
+                }}>
+                  {assignmentResult.resolutionReport.map((line, index) => {
+                    let color = '#2c3e50';
+                    let fontWeight = 'normal';
+                    
+                    if (line.includes('✅') || line.includes('ALLES KRITISCHEN PROBLEME BEHOBEN')) {
+                      color = '#2ecc71';
+                      fontWeight = 'bold';
+                    } else if (line.includes('❌') || line.includes('KRITISCHEN PROBLEME')) {
+                      color = '#e74c3c';
+                      fontWeight = 'bold';
+                    } else if (line.includes('⚠️')) {
+                      color = '#f39c12';
+                    } else if (line.includes('📊') || line.includes('🔧') || line.includes('📅') || line.includes('🚨') || line.includes('🛠️') || line.includes('💡') || line.includes('🎯')) {
+                      color = '#3498db';
+                      fontWeight = 'bold';
+                    } else if (line.startsWith('   •') || line.startsWith('   -')) {
+                      color = '#7f8c8d';
+                    }
+                    
+                    return (
+                      <div key={index} style={{ 
+                        color,
+                        fontWeight,
+                        marginBottom: line === '' ? '5px' : '2px',
+                        paddingLeft: line.startsWith('   ') ? '20px' : '0px'
+                      }}>
+                        {line}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -736,11 +823,10 @@ const ShiftPlanView: React.FC = () => {
               <div style={{ marginBottom: '20px' }}>
                 <h4>Zusammenfassung:</h4>
                 
-                {/* Entscheidung basierend auf Reparatur-Bericht */}
-                {assignmentResult.resolutionReport && 
-                assignmentResult.resolutionReport.some(line => 
-                  line.includes('Alle kritischen Probleme behoben: ✅ JA')
-                ) ? (
+                {/* Entscheidung basierend auf tatsächlichen kritischen Problemen */}
+                {assignmentResult.violations.filter(v => 
+                  v.includes('ERROR:') || v.includes('❌ KRITISCH:')
+                ).length === 0 ? (
                   <div style={{
                     padding: '15px',
                     backgroundColor: '#d4edda',
@@ -822,33 +908,28 @@ const ShiftPlanView: React.FC = () => {
               
               <button
                 onClick={handlePublish}
-                disabled={publishing || !(assignmentResult.resolutionReport && 
-                  assignmentResult.resolutionReport.some(line => 
-                    line.includes('Alle kritischen Probleme behoben: ✅ JA')
-                  ))
-                }
+                disabled={publishing || assignmentResult.violations.filter(v => 
+                  v.includes('ERROR:') || v.includes('❌ KRITISCH:')
+                ).length > 0}
                 style={{
                   padding: '10px 20px',
-                  backgroundColor: (assignmentResult.resolutionReport && 
-                    assignmentResult.resolutionReport.some(line => 
-                      line.includes('Alle kritischen Probleme behoben: ✅ JA')
-                    )) ? '#2ecc71' : '#95a5a6',
+                  backgroundColor: assignmentResult.violations.filter(v => 
+                    v.includes('ERROR:') || v.includes('❌ KRITISCH:')
+                  ).length === 0 ? '#2ecc71' : '#95a5a6',
                   color: 'white',
                   border: 'none',
                   borderRadius: '4px',
-                  cursor: (assignmentResult.resolutionReport && 
-                    assignmentResult.resolutionReport.some(line => 
-                      line.includes('Alle kritischen Probleme behoben: ✅ JA')
-                    )) ? 'pointer' : 'not-allowed',
+                  cursor: assignmentResult.violations.filter(v => 
+                    v.includes('ERROR:') || v.includes('❌ KRITISCH:')
+                  ).length === 0 ? 'pointer' : 'not-allowed',
                   fontWeight: 'bold',
                   fontSize: '16px'
                 }}
               >
                 {publishing ? 'Veröffentliche...' : (
-                  (assignmentResult.resolutionReport && 
-                    assignmentResult.resolutionReport.some(line => 
-                      line.includes('Alle kritischen Probleme behoben: ✅ JA')
-                    )) 
+                  assignmentResult.violations.filter(v => 
+                    v.includes('ERROR:') || v.includes('❌ KRITISCH:')
+                  ).length === 0 
                     ? 'Schichtplan veröffentlichen' 
                     : 'Kritische Probleme müssen behoben werden'
                 )}

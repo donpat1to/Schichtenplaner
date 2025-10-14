@@ -864,3 +864,192 @@ export function checkAllProblemsResolved(
 
   return { resolved, remaining, allResolved };
 }
+
+export function createDetailedResolutionReport(
+  assignments: Assignment,
+  employees: Map<string, SchedulingEmployee>,
+  shifts: SchedulingShift[],
+  managerShifts: string[],
+  repairContext: RepairContext
+): string[] {
+  const report: string[] = [];
+  
+  report.push('=== DETAILIERTER REPARATUR-BERICHT ===');
+  report.push('');
+
+  // 1. ZUSAMMENFASSUNG
+  report.push('📊 ZUSAMMENFASSUNG');
+  const totalShifts = shifts.length;
+  const assignedShifts = Object.values(assignments).filter(a => a.length > 0).length;
+  const emptyShifts = totalShifts - assignedShifts;
+  
+  report.push(`   • Gesamtschichten: ${totalShifts}`);
+  report.push(`   • Zugewiesene Schichten: ${assignedShifts}`);
+  report.push(`   • Leere Schichten: ${emptyShifts}`);
+  report.push(`   • Pool-Mitarbeiter: ${repairContext.unassignedPool.length}`);
+  report.push(`   • Gesperrte Schichten: ${repairContext.lockedShifts.size}`);
+  report.push('');
+
+  // 2. DURCHGEFÜHRTE AKTIONEN
+  if (repairContext.warnings.length > 0) {
+    report.push('🔧 DURCHGEFÜHRTE REPARATURAKTIONEN');
+    repairContext.warnings.forEach((action, index) => {
+      if (action.includes('zugewiesen') || action.includes('entfernt') || action.includes('getauscht') || action.includes('bewegt')) {
+        report.push(`   ✅ ${action}`);
+      }
+    });
+    report.push('');
+  }
+
+  // 3. DETAILLIERTE SCHICHTANALYSE
+  report.push('📅 DETAILLIERTE SCHICHTANALYSE');
+  
+  shifts.forEach(shift => {
+    const assignment = assignments[shift.id] || [];
+    const assignedEmployees = assignment.map(empId => {
+      const emp = employees.get(empId);
+      return emp ? `${emp.name} (${emp.role})` : 'Unbekannt';
+    }).join(', ');
+    
+    const isManagerShift = managerShifts.includes(shift.id);
+    const isEmpty = assignment.length === 0;
+    const hasOnlyNew = onlyNeuAssigned(assignment, employees);
+    const experiencedAloneCheck = hasExperiencedAloneNotAllowed(assignment, employees);
+    
+    let status = '✅ OK';
+    if (isEmpty) status = '❌ LEER';
+    else if (isManagerShift && hasOnlyNew) status = '⚠️ MANAGER + NUR NEUE';
+    else if (experiencedAloneCheck.hasViolation) status = '❌ ERFAHRENER ALLEIN';
+    else if (hasOnlyNew) status = '⚠️ NUR NEUE';
+    
+    report.push(`   • Schicht ${shift.id}:`);
+    report.push(`     - Status: ${status}`);
+    report.push(`     - Zugewiesene: ${assignedEmployees || 'Keine'}`);
+    report.push(`     - Benötigt: ${shift.requiredEmployees} Mitarbeiter`);
+    report.push(`     - Aktuell: ${assignment.length} Mitarbeiter`);
+    if (isManagerShift) report.push(`     - 💼 MANAGER-SCHICHT`);
+    report.push('');
+  });
+
+  // 4. PROBLEMANALYSE NACH TYP
+  report.push('🚨 PROBLEMANALYSE NACH TYP');
+  
+  const emptyShiftsList = shifts.filter(shift => 
+    (assignments[shift.id] || []).length === 0
+  );
+  
+  const managerWithOnlyNewList = shifts.filter(shift =>
+    managerShifts.includes(shift.id) && 
+    isManagerShiftWithOnlyNew(assignments[shift.id] || [], employees, Array.from(employees.values()).find(e => e.role === 'manager')?.id)
+  );
+  
+  const experiencedAloneList = shifts.filter(shift => {
+    const check = hasExperiencedAloneNotAllowed(assignments[shift.id] || [], employees);
+    return check.hasViolation;
+  });
+  
+  const onlyNewList = shifts.filter(shift =>
+    !managerShifts.includes(shift.id) && 
+    onlyNeuAssigned(assignments[shift.id] || [], employees)
+  );
+
+  if (emptyShiftsList.length > 0) {
+    report.push(`   ❌ LEERE SCHICHTEN (${emptyShiftsList.length}):`);
+    emptyShiftsList.forEach(shift => {
+      report.push(`     - ${shift.id}`);
+    });
+    report.push('');
+  }
+
+  if (managerWithOnlyNewList.length > 0) {
+    report.push(`   ⚠️ MANAGER + NUR NEUE (${managerWithOnlyNewList.length}):`);
+    managerWithOnlyNewList.forEach(shift => {
+      const assignment = assignments[shift.id] || [];
+      const employeesList = assignment.map(empId => {
+        const emp = employees.get(empId);
+        return emp ? emp.name : 'Unbekannt';
+      }).join(', ');
+      report.push(`     - ${shift.id}: ${employeesList}`);
+    });
+    report.push('');
+  }
+
+  if (experiencedAloneList.length > 0) {
+    report.push(`   ❌ ERFAHRENER ALLEIN (${experiencedAloneList.length}):`);
+    experiencedAloneList.forEach(shift => {
+      const check = hasExperiencedAloneNotAllowed(assignments[shift.id] || [], employees);
+      const emp = employees.get(check.employeeId!);
+      report.push(`     - ${shift.id}: ${emp?.name || check.employeeId}`);
+    });
+    report.push('');
+  }
+
+  if (onlyNewList.length > 0) {
+    report.push(`   ⚠️ NUR NEUE IN SCHICHT (${onlyNewList.length}):`);
+    onlyNewList.forEach(shift => {
+      report.push(`     - ${shift.id}`);
+    });
+    report.push('');
+  }
+
+  // 5. REPARATURVERSUCHE
+  report.push('🛠️ REPARATURVERSUCHE UND -ERGEBNISSE');
+  
+  // Zähle die verschiedenen Reparaturtypen
+  const assignmentActions = repairContext.warnings.filter(w => 
+    w.includes('zugewiesen')
+  ).length;
+  
+  const removalActions = repairContext.warnings.filter(w => 
+    w.includes('entfernt')
+  ).length;
+  
+  const swapActions = repairContext.warnings.filter(w => 
+    w.includes('getauscht') || w.includes('bewegt')
+  ).length;
+
+  report.push(`   • Zuweisungen: ${assignmentActions}`);
+  report.push(`   • Entfernungen: ${removalActions}`);
+  report.push(`   • Tausche/Bewegungen: ${swapActions}`);
+  report.push(`   • Gesamte Aktionen: ${repairContext.warnings.length}`);
+  report.push('');
+
+  // 6. EMPFEHLUNGEN
+  report.push('💡 EMPFEHLUNGEN ZUR PROBLEMBEHANDLUNG');
+  
+  if (emptyShiftsList.length > 0) {
+    report.push(`   • Für ${emptyShiftsList.length} leere Schichten:`);
+    report.push(`     - Verfügbare Mitarbeiter prüfen`);
+    report.push(`     - Vertragskapazitäten überprüfen`);
+    report.push(`     - Ggf. Schichtanforderungen reduzieren`);
+    report.push('');
+  }
+  
+  if (managerWithOnlyNewList.length > 0) {
+    report.push(`   • Für ${managerWithOnlyNewList.length} Manager+Neue-Schichten:`);
+    report.push(`     - Erfahrene Mitarbeiter zuweisen`);
+    report.push(`     - Manager-Verfügbarkeit anpassen`);
+    report.push(`     - Teamzusammensetzung optimieren`);
+    report.push('');
+  }
+
+  // 7. FINALE BEWERTUNG
+  report.push('🎯 FINALE BEWERTUNG');
+  
+  const totalProblems = emptyShiftsList.length + experiencedAloneList.length;
+  const totalWarnings = managerWithOnlyNewList.length + onlyNewList.length;
+  
+  if (totalProblems === 0) {
+    report.push('   ✅ ALLE KRITISCHEN PROBLEME BEHOBEN');
+    report.push('   Der Schichtplan kann veröffentlicht werden.');
+  } else {
+    report.push(`   ❌ ${totalProblems} KRITISCHE PROBLEME VERBLEIBEND`);
+    report.push(`   ⚠️ ${totalWarnings} WARNUNGEN`);
+    report.push('   Der Schichtplan kann nicht veröffentlicht werden.');
+  }
+  
+  report.push('');
+  report.push('=== ENDE DES DETAILIERTEN BERICHTES ===');
+
+  return report;
+}
