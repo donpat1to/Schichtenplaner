@@ -173,24 +173,48 @@ const ShiftPlanView: React.FC = () => {
         result.resolutionReport.forEach(line => console.log(line));
       }
 
-      // Verwende allProblemsResolved für die Erfolgsmeldung
-      if (result.allProblemsResolved) {
+      // KORRIGIERT: Entscheidung basierend auf Reparatur-Bericht statt allProblemsResolved
+      const allCriticalResolved = result.resolutionReport && 
+        result.resolutionReport.some(line => 
+          line.includes('Alle kritischen Probleme behoben: ✅ JA')
+        );
+
+      if (allCriticalResolved) {
         showNotification({
           type: 'success',
           title: 'Erfolg', 
           message: 'Alle kritischen Probleme wurden behoben! Der Schichtplan kann veröffentlicht werden.'
         });
       } else {
-        const criticalCount = result.violations.filter(v => v.includes('❌ KRITISCH:')).length;
-        const warningCount = result.violations.filter(v => v.includes('⚠️')).length;
+        // Zähle nur kritische Probleme (ERROR oder ❌ KRITISCH)
+        const criticalProblems = result.violations.filter(v => 
+          v.includes('ERROR:') || v.includes('❌ KRITISCH:')
+        );
         
-        showNotification({
-          type: warningCount > 0 ? 'warning' : 'error',
-          title: criticalCount > 0 ? 'Kritische Probleme' : 'Warnungen',
-          message: criticalCount > 0 
-            ? `${criticalCount} kritische Probleme müssen behoben werden`
-            : `${warningCount} Warnungen - Plan kann trotzdem veröffentlicht werden`
-        });
+        // Zähle Warnungen separat
+        const warnings = result.violations.filter(v => 
+          v.includes('WARNING:') || v.includes('⚠️')
+        );
+
+        if (criticalProblems.length > 0) {
+          showNotification({
+            type: 'error',
+            title: 'Kritische Probleme',
+            message: `${criticalProblems.length} kritische Probleme müssen behoben werden`
+          });
+        } else if (warnings.length > 0) {
+          showNotification({
+            type: 'warning',
+            title: 'Warnungen',
+            message: `${warnings.length} Warnungen - Plan kann trotzdem veröffentlicht werden`
+          });
+        } else {
+          showNotification({
+            type: 'success',
+            title: 'Erfolg',
+            message: 'Keine Probleme gefunden! Der Schichtplan kann veröffentlicht werden.'
+          });
+        }
       }
 
     } catch (error) {
@@ -622,7 +646,7 @@ const ShiftPlanView: React.FC = () => {
                   disabled={!canPublish() || publishing}
                   style={{
                     padding: '10px 20px',
-                    backgroundColor: canPublish() ? '#2ecc71' : '#95a5a6',
+                    backgroundColor: canPublish() ? '#3498db' : '#95a5a6',
                     color: 'white',
                     border: 'none',
                     borderRadius: '4px',
@@ -630,13 +654,13 @@ const ShiftPlanView: React.FC = () => {
                     fontWeight: 'bold'
                   }}
                 >
-                  {publishing ? 'Berechne...' : 'Automatisch zuweisen & Veröffentlichen'}
+                  {publishing ? 'Berechne...' : 'Automatisch zuweisen'}
                 </button>
                 
                 {!canPublish() && (
                   <div style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
                     {availabilityStatus.percentage === 100 
-                      ? 'Bereit zur Veröffentlichung' 
+                      ? 'Bereit zur Berechnung' 
                       : `${availabilityStatus.total - availabilityStatus.completed} Mitarbeiter müssen noch Verfügbarkeit eintragen`}
                   </div>
                 )}
@@ -659,91 +683,123 @@ const ShiftPlanView: React.FC = () => {
 
       {/* Assignment Preview Modal */}
       {showAssignmentPreview && assignmentResult && (
-      <div style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: 1000
-      }}>
         <div style={{
-          backgroundColor: 'white',
-          borderRadius: '8px',
-          padding: '30px',
-          maxWidth: '800px',
-          maxHeight: '80vh',
-          overflow: 'auto'
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
         }}>
-          <h2>Wochenmuster-Zuordnung</h2>
-          
-          {/* Reparatur-Bericht anzeigen */}
-          {assignmentResult.resolutionReport && (
-            <div style={{
-              backgroundColor: '#e8f4fd',
-              border: '1px solid #b8d4f0',
-              borderRadius: '4px',
-              padding: '15px',
-              marginBottom: '20px',
-              fontSize: '14px'
-            }}>
-              <h4 style={{ color: '#2c3e50', marginTop: 0 }}>Reparatur-Bericht</h4>
-              <div style={{ maxHeight: '200px', overflow: 'auto' }}>
-                {assignmentResult.resolutionReport.map((line, index) => (
-                  <div key={index} style={{ 
-                    color: line.includes('✅') ? '#2ecc71' : line.includes('❌') ? '#e74c3c' : '#2c3e50',
-                    fontFamily: 'monospace',
-                    fontSize: '12px',
-                    marginBottom: '2px'
-                  }}>
-                    {line}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            padding: '30px',
+            maxWidth: '800px',
+            maxHeight: '80vh',
+            overflow: 'auto'
+          }}>
+            <h2>Wochenmuster-Zuordnung</h2>
             
+            {/* Reparatur-Bericht anzeigen */}
+            {assignmentResult.resolutionReport && (
+              <div style={{
+                backgroundColor: '#e8f4fd',
+                border: '1px solid #b8d4f0',
+                borderRadius: '4px',
+                padding: '15px',
+                marginBottom: '20px',
+                fontSize: '14px'
+              }}>
+                <h4 style={{ color: '#2c3e50', marginTop: 0 }}>Reparatur-Bericht</h4>
+                <div style={{ maxHeight: '200px', overflow: 'auto' }}>
+                  {assignmentResult.resolutionReport.map((line, index) => (
+                    <div key={index} style={{ 
+                      color: line.includes('✅') ? '#2ecc71' : line.includes('❌') ? '#e74c3c' : '#2c3e50',
+                      fontFamily: 'monospace',
+                      fontSize: '12px',
+                      marginBottom: '2px'
+                    }}>
+                      {line}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+              
+            {/* KORRIGIERTE ZUSAMMENFASSUNG */}
             {assignmentResult && (
               <div style={{ marginBottom: '20px' }}>
                 <h4>Zusammenfassung:</h4>
-                {assignmentResult.allProblemsResolved ? (
-                  <p style={{ color: '#2ecc71', fontWeight: 'bold' }}>
-                    ✅ Alle kritischen Probleme behoben! Der Plan kann veröffentlicht werden.
-                  </p>
-                ) : (
-                  <div>
-                    <p style={{ color: '#e74c3c', fontWeight: 'bold' }}>
-                      ❌ Es gibt kritische Probleme die behoben werden müssen:
+                
+                {/* Entscheidung basierend auf Reparatur-Bericht */}
+                {assignmentResult.resolutionReport && 
+                assignmentResult.resolutionReport.some(line => 
+                  line.includes('Alle kritischen Probleme behoben: ✅ JA')
+                ) ? (
+                  <div style={{
+                    padding: '15px',
+                    backgroundColor: '#d4edda',
+                    border: '1px solid #c3e6cb',
+                    borderRadius: '4px',
+                    color: '#155724',
+                    marginBottom: '15px'
+                  }}>
+                    <h5 style={{ margin: '0 0 10px 0', color: '#155724' }}>✅ Bereit zur Veröffentlichung</h5>
+                    <p style={{ margin: 0 }}>
+                      Alle kritischen Probleme wurden behoben. Der Schichtplan kann veröffentlicht werden.
                     </p>
-                    <ul>
+                  </div>
+                ) : (
+                  <div style={{
+                    padding: '15px',
+                    backgroundColor: '#f8d7da',
+                    border: '1px solid #f5c6cb',
+                    borderRadius: '4px',
+                    color: '#721c24',
+                    marginBottom: '15px'
+                  }}>
+                    <h5 style={{ margin: '0 0 10px 0', color: '#721c24' }}>❌ Kritische Probleme</h5>
+                    <p style={{ margin: '0 0 10px 0' }}>
+                      Folgende kritische Probleme müssen behoben werden, bevor der Plan veröffentlicht werden kann:
+                    </p>
+                    <ul style={{ margin: 0, paddingLeft: '20px' }}>
                       {assignmentResult.violations
-                        .filter(v => v.includes('❌ KRITISCH:'))
+                        .filter(v => v.includes('ERROR:') || v.includes('❌ KRITISCH:'))
                         .map((violation, index) => (
-                          <li key={index} style={{ color: '#e74c3c', fontSize: '14px' }}>
-                            {violation.replace('❌ KRITISCH: ', '')}
+                          <li key={index} style={{ fontSize: '14px' }}>
+                            {violation.replace('ERROR: ', '').replace('❌ KRITISCH: ', '')}
                           </li>
                         ))}
                     </ul>
-                    {assignmentResult.violations.some(v => v.includes('⚠️')) && (
-                      <div style={{ marginTop: '10px' }}>
-                        <p style={{ color: '#f39c12', fontWeight: 'bold' }}>
-                          ⚠️ Warnungen (beeinflussen nicht die Veröffentlichung):
-                        </p>
-                        <ul>
-                          {assignmentResult.violations
-                            .filter(v => v.includes('⚠️'))
-                            .map((warning, index) => (
-                              <li key={index} style={{ color: '#f39c12', fontSize: '14px' }}>
-                                {warning.replace('⚠️ WARNHINWEIS: ', '')}
-                              </li>
-                            ))}
-                        </ul>
-                      </div>
-                    )}
+                  </div>
+                )}
+                
+                {/* Warnungen separat anzeigen - NUR wenn welche vorhanden sind */}
+                {assignmentResult.violations.some(v => v.includes('WARNING:') || v.includes('⚠️')) && (
+                  <div style={{
+                    padding: '10px',
+                    backgroundColor: '#fff3cd',
+                    border: '1px solid #ffeaa7',
+                    borderRadius: '4px',
+                    color: '#856404'
+                  }}>
+                    <h6 style={{ margin: '0 0 5px 0', color: '#856404' }}>
+                      ⚠️ Hinweise & Warnungen
+                    </h6>
+                    <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                      {assignmentResult.violations
+                        .filter(v => v.includes('WARNING:') || v.includes('⚠️'))
+                        .map((warning, index) => (
+                          <li key={index} style={{ fontSize: '13px' }}>
+                            {warning.replace('WARNING: ', '').replace('⚠️ WARNHINWEIS: ', '')}
+                          </li>
+                        ))}
+                    </ul>
                   </div>
                 )}
               </div>
@@ -766,22 +822,41 @@ const ShiftPlanView: React.FC = () => {
               
               <button
                 onClick={handlePublish}
-                disabled={publishing || !assignmentResult.allProblemsResolved}
+                disabled={publishing || !(assignmentResult.resolutionReport && 
+                  assignmentResult.resolutionReport.some(line => 
+                    line.includes('Alle kritischen Probleme behoben: ✅ JA')
+                  ))
+                }
                 style={{
-                  padding: '8px 16px',
-                  backgroundColor: assignmentResult.allProblemsResolved ? '#2ecc71' : '#95a5a6',
+                  padding: '10px 20px',
+                  backgroundColor: (assignmentResult.resolutionReport && 
+                    assignmentResult.resolutionReport.some(line => 
+                      line.includes('Alle kritischen Probleme behoben: ✅ JA')
+                    )) ? '#2ecc71' : '#95a5a6',
                   color: 'white',
                   border: 'none',
                   borderRadius: '4px',
-                  cursor: assignmentResult.allProblemsResolved ? 'pointer' : 'not-allowed'
+                  cursor: (assignmentResult.resolutionReport && 
+                    assignmentResult.resolutionReport.some(line => 
+                      line.includes('Alle kritischen Probleme behoben: ✅ JA')
+                    )) ? 'pointer' : 'not-allowed',
+                  fontWeight: 'bold',
+                  fontSize: '16px'
                 }}
               >
-                {publishing ? 'Veröffentliche...' : 'Veröffentlichen'}
+                {publishing ? 'Veröffentliche...' : (
+                  (assignmentResult.resolutionReport && 
+                    assignmentResult.resolutionReport.some(line => 
+                      line.includes('Alle kritischen Probleme behoben: ✅ JA')
+                    )) 
+                    ? 'Schichtplan veröffentlichen' 
+                    : 'Kritische Probleme müssen behoben werden'
+                )}
               </button>
             </div>
           </div>
         </div>
-      )}
+      )}  
 
       {/* Timetable */}
       <div style={{

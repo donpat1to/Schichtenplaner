@@ -1,7 +1,7 @@
 // frontend/src/services/scheduling/repairFunctions.ts
 import { SchedulingEmployee, SchedulingShift, Assignment, RepairContext } from './types';
 import { canAssign, assignEmployee, unassignEmployee, 
-  hasErfahrener, candidateScore, 
+  candidateScore, 
   countExperiencedCanWorkAlone, 
   isManagerAlone, isManagerShiftWithOnlyNew, 
   onlyNeuAssigned, canRemove,
@@ -776,7 +776,7 @@ export function checkAllProblemsResolved(
     }
     
     if (violation.startsWith('ERROR:')) {
-      // ... bestehende ERROR-Logik ...
+      remaining.push(`❌ NICHT BEHOBEN: ${violation.replace('ERROR: ', '')}`);
     } else if (violation.startsWith('WARNING:')) {
       const warningText = violation.replace('WARNING: ', '');
       const shiftIdMatch = warningText.match(/Schicht\s+([a-f0-9-]+)/);

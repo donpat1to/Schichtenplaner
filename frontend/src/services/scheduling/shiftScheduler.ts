@@ -14,20 +14,15 @@ import {
   assignEmployee, 
   hasErfahrener,
   wouldBeAloneIfAdded,
-  findViolations,
   isManagerShiftWithOnlyNew,
   isManagerAlone,
   hasExperiencedAloneNotAllowed
 } from './utils';
 import { 
   attemptMoveErfahrenerTo,
-  attemptSwapBringErfahrener,
-  attemptLocalFixNeuAlone,
   attemptUnassignOrSwap,
-  attemptFillFromOverallocated,
   attemptAddErfahrenerToShift,
   attemptFillFromPool,
-  checkManagerShiftRules, 
   resolveTwoExperiencedInShift,
   attemptMoveExperiencedToManagerShift,
   attemptSwapForExperienced,
@@ -149,7 +144,7 @@ function phaseBInsertManager(
   console.log(`🎯 Phase B: Processing ${managerShifts.length} manager shifts`);
 
   for (const shiftId of managerShifts) {
-    const shift = nonManagerShifts.find(s => s.id === shiftId) || { id: shiftId, requiredEmployees: 2 };
+    //const shift = nonManagerShifts.find(s => s.id === shiftId) || { id: shiftId, requiredEmployees: 2 };
     
     // Assign manager to his chosen shifts
     if (!assignments[shiftId].includes(manager.id)) {
@@ -426,7 +421,7 @@ export function scheduleWithManager(
 ): SchedulingResult & { resolutionReport?: string[]; allProblemsResolved?: boolean } {
   
   const assignments: Assignment = {};
-  const allViolations: string[] = [];
+  //const allViolations: string[] = [];
 
   // Initialisiere Zuweisungen
   shifts.forEach(shift => {
@@ -449,14 +444,14 @@ export function scheduleWithManager(
   console.log('🔄 Starting Phase B: Enhanced Manager insertion');
   
   // Phase B: Erweiterte Manager-Einfügung
-  const phaseBResult = phaseBInsertManager(
+  /*const phaseBResult = phaseBInsertManager(
     assignments, 
     manager, 
     managerShifts, 
     employees, 
     nonManagerShifts,
     constraints
-  );
+  );*/
 
   console.log('🔄 Starting Enhanced Phase C: Smart Repair & Validation');
   
