@@ -1,4 +1,5 @@
 // backend/src/models/helpers/shiftPlanHelpers.ts
+import { shiftAssignmentService } from '../../services/shiftAssignmentService.js';
 import { ShiftPlan, Shift, ScheduledShift, TimeSlot } from '../ShiftPlan.js';
 
 // Validation helpers
@@ -78,15 +79,16 @@ export function calculateTotalRequiredEmployees(plan: ShiftPlan): number {
   return plan.shifts.reduce((total, shift) => total + shift.requiredEmployees, 0);
 }
 
-export function getScheduledShiftByDateAndTime(
+/*export async function getScheduledShiftByDateAndTime(
   plan: ShiftPlan, 
   date: string, 
   timeSlotId: string
-): ScheduledShift | undefined {
-  return plan.scheduledShifts?.find(shift => 
-    shift.date === date && shift.timeSlotId === timeSlotId
+): Promise<ScheduledShift | undefined> {
+  const scheduledShifts = await shiftAssignmentService.getScheduledShiftsForPlan(plan.id);
+  return scheduledShifts.find(
+    shift => shift.date === date && shift.timeSlotId === timeSlotId
   );
-}
+}*/
 
 export function canPublishPlan(plan: ShiftPlan): { canPublish: boolean; errors: string[] } {
   const errors: string[] = [];

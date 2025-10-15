@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS scheduled_shifts (
   required_employees INTEGER NOT NULL CHECK (required_employees >= 1 AND required_employees <= 10) DEFAULT 2,
   assigned_employees TEXT DEFAULT '[]', -- JSON array of employee IDs
   FOREIGN KEY (plan_id) REFERENCES shift_plans(id) ON DELETE CASCADE,
-  FOREIGN KEY (time_slot_id) REFERENCES time_slots(id),
+  FOREIGN KEY (time_slot_id) REFERENCES time_slots(id) ON DELETE CASCADE,
   UNIQUE(plan_id, date, time_slot_id)
 );
 
@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS employee_availability (
   notes TEXT,
   FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
   FOREIGN KEY (plan_id) REFERENCES shift_plans(id) ON DELETE CASCADE,
-  FOREIGN KEY (time_slot_id) REFERENCES time_slots(id),
+  FOREIGN KEY (time_slot_id) REFERENCES time_slots(id) ON DELETE CASCADE,
   UNIQUE(employee_id, plan_id, day_of_week, time_slot_id)
 );
 

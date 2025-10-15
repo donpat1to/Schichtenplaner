@@ -11,7 +11,6 @@ export interface ShiftPlan {
   createdAt: string;
   timeSlots: TimeSlot[];
   shifts: Shift[];
-  scheduledShifts?: ScheduledShift[]; // Only for non-template plans with dates
 }
 
 export interface TimeSlot {

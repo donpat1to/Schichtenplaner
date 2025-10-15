@@ -5,6 +5,7 @@ import { authService } from './authService';
 import { scheduleWithManager } from './scheduling/shiftScheduler';
 import { transformToSchedulingData } from './scheduling/dataAdapter';
 import { AssignmentResult, WeeklyPattern } from './scheduling/types';
+import { isScheduledShift } from '../models/helpers';
 
 const API_BASE_URL = 'http://localhost:3002/api/scheduled-shifts';
 
@@ -130,7 +131,7 @@ export class ShiftAssignmentService {
     console.log('🔄 Starting enhanced scheduling algorithm...');
 
     // Get defined shifts for the first week
-    const definedShifts = this.getDefinedShifts(shiftPlan);
+    const definedShifts = await this.getDefinedShifts(shiftPlan);
     const firstWeekShifts = this.getFirstWeekShifts(definedShifts);
     
     console.log('📊 First week analysis:', {
@@ -399,8 +400,15 @@ export class ShiftAssignmentService {
 
   // ========== EXISTING HELPER METHODS ==========
 
-  private static getDefinedShifts(shiftPlan: ShiftPlan): ScheduledShift[] {
-    if (!shiftPlan.scheduledShifts) return [];
+  static async getDefinedShifts(shiftPlan: ShiftPlan): Promise<ScheduledShift[]> {
+    let scheduledShifts: ScheduledShift[] = [];
+    try {
+      scheduledShifts = await shiftAssignmentService.getScheduledShiftsForPlan(shiftPlan.id);
+    } catch (err) {
+      console.error("Failed to load scheduled shifts:", err);
+      return [];
+    }
+    if (scheduledShifts.length) return [];
 
     const definedShiftPatterns = new Set(
       shiftPlan.shifts.map(shift => 
@@ -408,7 +416,7 @@ export class ShiftAssignmentService {
       )
     );
 
-    const definedShifts = shiftPlan.scheduledShifts.filter(scheduledShift => {
+    const definedShifts = scheduledShifts.filter(scheduledShift => {
       const dayOfWeek = this.getDayOfWeek(scheduledShift.date);
       const pattern = `${dayOfWeek}-${scheduledShift.timeSlotId}`;
       return definedShiftPatterns.has(pattern);

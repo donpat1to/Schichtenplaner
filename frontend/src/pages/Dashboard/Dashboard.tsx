@@ -4,8 +4,9 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { shiftPlanService } from '../../services/shiftPlanService';
 import { employeeService } from '../../services/employeeService';
-import { ShiftPlan } from '../../models/ShiftPlan';
+import { ShiftPlan, ScheduledShift } from '../../models/ShiftPlan';
 import { Employee } from '../../models/Employee';
+import { shiftAssignmentService } from '../../services/shiftAssignmentService';
 
 interface DashboardData {
   currentShiftPlan: ShiftPlan | null;
@@ -29,6 +30,7 @@ interface DashboardData {
 const Dashboard: React.FC = () => {
   const { user, hasRole } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [currentPlanShifts, setCurrentPlanShifts] = useState<ScheduledShift[]>([]);
   const [data, setData] = useState<DashboardData>({
     currentShiftPlan: null,
     upcomingShifts: [],
@@ -53,13 +55,25 @@ const Dashboard: React.FC = () => {
       
       const [shiftPlans, employees] = await Promise.all([
         shiftPlanService.getShiftPlans(),
-        employeeService.getEmployees()
+        employeeService.getEmployees(),
       ]);
+
+      // Find current shift plan
+      const today = new Date().toISOString().split('T')[0];
+      const currentPlan = findCurrentShiftPlan(shiftPlans, today);
+
+      // Load shifts for current plan
+      if (currentPlan) {
+        const shifts = await shiftAssignmentService.getScheduledShiftsForPlan(currentPlan.id);
+        setCurrentPlanShifts(shifts);
+      } else {
+        setCurrentPlanShifts([]);
+      }
 
       console.log('📊 Loaded data:', {
         plans: shiftPlans.length,
         employees: employees.length,
-        plansWithShifts: shiftPlans.filter(p => p.scheduledShifts && p.scheduledShifts.length > 0).length
+        currentPlanShifts
       });
 
       // Debug: Log plan details
@@ -68,14 +82,14 @@ const Dashboard: React.FC = () => {
           status: plan.status,
           startDate: plan.startDate,
           endDate: plan.endDate,
-          scheduledShifts: plan.scheduledShifts?.length || 0,
+          //scheduledShifts: plan.scheduledShifts?.length || 0,
           isTemplate: plan.isTemplate
         });
       });
 
       // Find current shift plan (published and current date within range)
-      const today = new Date().toISOString().split('T')[0];
-      const currentPlan = findCurrentShiftPlan(shiftPlans, today);
+      //const today = new Date().toISOString().split('T')[0];
+      //const currentPlan = findCurrentShiftPlan(shiftPlans, today);
 
       // Get user's upcoming shifts
       const userShifts = await loadUserUpcomingShifts(shiftPlans, today);
@@ -96,7 +110,7 @@ const Dashboard: React.FC = () => {
 
       console.log('✅ Dashboard data loaded:', {
         currentPlan: currentPlan?.name,
-        userShifts: userShifts.length,
+        //userShifts: userShifts.length,
         teamStats,
         recentPlans: recentPlans.length
       });
@@ -142,13 +156,14 @@ const Dashboard: React.FC = () => {
 
       // Check each plan for user assignments
       for (const plan of shiftPlans) {
-        if (plan.status !== 'published' || !plan.scheduledShifts || plan.scheduledShifts.length === 0) {
+        const scheduledShifts = (await shiftAssignmentService.getScheduledShiftsForPlan(plan.id));
+        if (plan.status !== 'published' || scheduledShifts.length === 0) {
           continue;
         }
 
-        console.log(`🔍 Checking plan ${plan.name} for user shifts:`, plan.scheduledShifts.length);
+        console.log(`🔍 Checking plan ${plan.name} for user shifts:`, scheduledShifts.length);
 
-        for (const scheduledShift of plan.scheduledShifts) {
+        for (const scheduledShift of scheduledShifts) {
           // Ensure assignedEmployees is an array
           const assignedEmployees = Array.isArray(scheduledShift.assignedEmployees) 
             ? scheduledShift.assignedEmployees 
@@ -237,16 +252,19 @@ const Dashboard: React.FC = () => {
     return `${start} - ${end}`;
   };
 
-  const calculatePlanProgress = (plan: ShiftPlan): { covered: number; total: number; percentage: number } => {
-    if (!plan.scheduledShifts || plan.scheduledShifts.length === 0) {
+  const calculatePlanProgress = (plan: ShiftPlan, shifts: ScheduledShift[]): { 
+    covered: number; total: number; percentage: number 
+  } => {
+    if (!plan.id || shifts.length === 0) {
       console.log(`📊 Plan ${plan.name} has no scheduled shifts`);
       return { covered: 0, total: 0, percentage: 0 };
     }
 
-    const totalShifts = plan.scheduledShifts.length;
-    const coveredShifts = plan.scheduledShifts.filter(shift => {
-      const assigned = Array.isArray(shift.assignedEmployees) ? shift.assignedEmployees : [];
-      return assigned.length > 0;
+    const currentDate = new Date();
+    const totalShifts = shifts.length;
+    const coveredShifts = shifts.filter(shift => {
+      const shiftDate = new Date(shift.date);
+      return currentDate > shiftDate;
     }).length;
 
     const percentage = totalShifts > 0 ? Math.round((coveredShifts / totalShifts) * 100) : 0;
@@ -302,7 +320,7 @@ const Dashboard: React.FC = () => {
         <div><strong>End Date:</strong> {data.currentShiftPlan.endDate}</div>
         <div><strong>Shifts Defined:</strong> {data.currentShiftPlan.shifts?.length || 0}</div>
         <div><strong>Time Slots:</strong> {data.currentShiftPlan.timeSlots?.length || 0}</div>
-        <div><strong>Scheduled Shifts:</strong> {data.currentShiftPlan.scheduledShifts?.length || 0}</div>
+        <div><strong>Scheduled Shifts:</strong> {data.currentShiftPlan.shifts.length || 0}</div>
         
         {data.currentShiftPlan.shifts && data.currentShiftPlan.shifts.length > 0 && (
           <div style={{ marginTop: '10px' }}>
@@ -319,7 +337,9 @@ const Dashboard: React.FC = () => {
     );
   };
 
-  const progress = data.currentShiftPlan ? calculatePlanProgress(data.currentShiftPlan) : { covered: 0, total: 0, percentage: 0 };
+  const progress = data.currentShiftPlan 
+    ? calculatePlanProgress(data.currentShiftPlan, currentPlanShifts) 
+    : { covered: 0, total: 0, percentage: 0 };
 
   return (
     <div>
