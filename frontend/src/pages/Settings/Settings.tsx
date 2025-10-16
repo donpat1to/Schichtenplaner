@@ -313,28 +313,42 @@ const Settings: React.FC = () => {
                   </div>
                 </div>
               </div>
+            </div>
 
-              {/* Editable name */}
-              <div>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#2c3e50' }}>
-                  Vollständiger Name *
-                </label>
-                <input
-                  type="text"
-                  name="name"
-                  value={profileForm.name}
-                  onChange={handleProfileChange}
-                  required
-                  style={{
-                    width: '97%',
-                    padding: '10px',
-                    border: '1px solid #ddd',
-                    borderRadius: '4px',
-                    fontSize: '16px'
-                  }}
-                  placeholder="Ihr vollständiger Name"
-                />
-              </div>
+            <div
+              style={{
+                marginTop: '10px',
+                padding: '15px',
+                backgroundColor: '#f8f9fa',
+                borderRadius: '6px',
+                border: '1px solid #e9ecef',
+              }}
+            >
+              <label
+                style={{
+                  display: 'block',
+                  marginBottom: '8px',
+                  fontWeight: 'bold',
+                  color: '#2c3e50',
+                }}
+              >
+                Vollständiger Name *
+              </label>
+              <input
+                type="text"
+                name="name"
+                value={profileForm.name}
+                onChange={handleProfileChange}
+                required
+                style={{
+                  width: '97.5%',
+                  padding: '10px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px',
+                }}
+                placeholder="Ihr vollständiger Name"
+              />
             </div>
 
             <div style={{ 

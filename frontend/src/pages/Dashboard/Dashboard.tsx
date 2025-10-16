@@ -20,9 +20,9 @@ interface DashboardData {
   }>;
   teamStats: {
     totalEmployees: number;
-    availableToday: number;
-    onVacation: number;
-    sickLeave: number;
+    manager: number;
+    trainee: number;
+    experienced: number;
   };
   recentPlans: ShiftPlan[];
 }
@@ -36,9 +36,9 @@ const Dashboard: React.FC = () => {
     upcomingShifts: [],
     teamStats: {
       totalEmployees: 0,
-      availableToday: 0,
-      onVacation: 0,
-      sickLeave: 0
+      manager: 0,
+      trainee: 0,
+      experienced: 0
     },
     recentPlans: []
   });
@@ -205,16 +205,17 @@ const Dashboard: React.FC = () => {
 
   const calculateTeamStats = (employees: Employee[]) => {
     const totalEmployees = employees.length;
-    
-    // For now, we'll use simpler calculations
-    // In a real app, you'd check actual availability from the database
-    const availableToday = Math.max(1, Math.floor(totalEmployees * 0.7)); // 70% available as estimate
-    
+
+    // Count by type
+    const managerCount = employees.filter(e => e.employeeType === 'manager').length;
+    const traineeCount = employees.filter(e => e.employeeType === 'trainee').length;
+    const experiencedCount = employees.filter(e => e.employeeType === 'experienced').length;
+
     return {
       totalEmployees,
-      availableToday,
-      onVacation: 0, // Would need vacation tracking
-      sickLeave: 0   // Would need sick leave tracking
+      manager: managerCount,
+      trainee: traineeCount,
+      experienced: experiencedCount,
     };
   };
 
@@ -367,19 +368,6 @@ const Dashboard: React.FC = () => {
             })}
           </p>
         </div>
-        <button 
-          onClick={handleRefresh}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#3498db',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer'
-          }}
-        >
-          🔄 Aktualisieren
-        </button>
       </div>
 
       <PlanDebugInfo />
@@ -557,27 +545,27 @@ const Dashboard: React.FC = () => {
           <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>👥 Team-Übersicht</h3>
           <div style={{ display: 'grid', gap: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>Gesamt Mitarbeiter:</span>
+              <span>Mitarbeiter:</span>
               <span style={{ fontWeight: 'bold', fontSize: '18px' }}>
                 {data.teamStats.totalEmployees}
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>Verfügbar heute:</span>
+              <span>Chef:</span>
               <span style={{ fontWeight: 'bold', color: '#2ecc71' }}>
-                {data.teamStats.availableToday}
+                {data.teamStats.manager}
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>Im Urlaub:</span>
+              <span>Erfahrene:</span>
               <span style={{ fontWeight: 'bold', color: '#f39c12' }}>
-                {data.teamStats.onVacation}
+                {data.teamStats.experienced}
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>Krankgeschrieben:</span>
+              <span>Neue:</span>
               <span style={{ fontWeight: 'bold', color: '#e74c3c' }}>
-                {data.teamStats.sickLeave}
+                {data.teamStats.trainee}
               </span>
             </div>
           </div>
@@ -649,7 +637,7 @@ const Dashboard: React.FC = () => {
             border: '1px solid #e0e0e0',
             boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
           }}>
-            <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>📝 Letzte Schichtpläne</h3>
+            <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>📝 Schichtpläne</h3>
             {data.recentPlans.length > 0 ? (
               <div style={{ display: 'grid', gap: '12px' }}>
                 {data.recentPlans.map(plan => (

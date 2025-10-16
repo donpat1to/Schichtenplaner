@@ -113,13 +113,26 @@ export class ShiftAssignmentService {
         throw new Error(`Failed to fetch scheduled shifts: ${response.status}`);
       }
 
-      return await response.json();
+      const shifts = await response.json();
+      
+      // DEBUG: Check the structure of returned shifts
+      console.log('🔍 SCHEDULED SHIFTS STRUCTURE:', shifts.slice(0, 3));
+      
+      // Fix: Ensure timeSlotId is properly mapped
+      const fixedShifts = shifts.map((shift: any) => ({
+        ...shift,
+        timeSlotId: shift.timeSlotId || shift.time_slot_id, // Handle both naming conventions
+        requiredEmployees: shift.requiredEmployees || shift.required_employees || 2, // Default fallback
+        assignedEmployees: shift.assignedEmployees || shift.assigned_employees || []
+      }));
+
+      console.log('✅ Fixed scheduled shifts:', fixedShifts.length);
+      return fixedShifts;
     } catch (error) {
       console.error('Error fetching scheduled shifts for plan:', error);
       throw error;
     }
   }
-
 
   static async assignShifts(
     shiftPlan: ShiftPlan,
@@ -401,28 +414,25 @@ export class ShiftAssignmentService {
   // ========== EXISTING HELPER METHODS ==========
 
   static async getDefinedShifts(shiftPlan: ShiftPlan): Promise<ScheduledShift[]> {
-    let scheduledShifts: ScheduledShift[] = [];
     try {
-      scheduledShifts = await shiftAssignmentService.getScheduledShiftsForPlan(shiftPlan.id);
+      const scheduledShifts = await shiftAssignmentService.getScheduledShiftsForPlan(shiftPlan.id);
+      console.log('📋 Loaded scheduled shifts:', scheduledShifts.length);
+
+      if (!shiftPlan.shifts || shiftPlan.shifts.length === 0) {
+        console.warn('⚠️ No shifts defined in shift plan');
+        return scheduledShifts;
+      }
+
+      // Use first week for weekly pattern (7 days)
+      const firstWeekShifts = this.getFirstWeekShifts(scheduledShifts);
+      console.log('📅 Using first week shifts for pattern:', firstWeekShifts.length);
+      
+      return firstWeekShifts;
+      
     } catch (err) {
-      console.error("Failed to load scheduled shifts:", err);
+      console.error("❌ Failed to load scheduled shifts:", err);
       return [];
     }
-    if (scheduledShifts.length) return [];
-
-    const definedShiftPatterns = new Set(
-      shiftPlan.shifts.map(shift => 
-        `${shift.dayOfWeek}-${shift.timeSlotId}`
-      )
-    );
-
-    const definedShifts = scheduledShifts.filter(scheduledShift => {
-      const dayOfWeek = this.getDayOfWeek(scheduledShift.date);
-      const pattern = `${dayOfWeek}-${scheduledShift.timeSlotId}`;
-      return definedShiftPatterns.has(pattern);
-    });
-
-    return definedShifts;
   }
 
   private static countAvailableEmployees(

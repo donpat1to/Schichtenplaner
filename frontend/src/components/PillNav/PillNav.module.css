@@ -1,0 +1,88 @@
+/* frontend/src/components/PillNav/PillNav.module.css */
+.pillNavContainer {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.pillNavContainer::-webkit-scrollbar {
+  display: none;
+}
+
+.pill {
+  padding: 8px 16px;
+  border-radius: 9999px;
+  border: 1px solid;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  white-space: nowrap;
+  outline: none;
+}
+
+.pill:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Solid Variant */
+.pillSolid {
+  background-color: transparent;
+  color: #6b7280;
+  border-color: #d1d5db;
+}
+
+.pillSolidActive {
+  background-color: #2563eb;
+  color: white;
+  border-color: #2563eb;
+}
+
+.pillSolid:hover:not(.pillSolidActive) {
+  background-color: #f3f4f6;
+  color: #374151;
+  border-color: #9ca3af;
+  transform: translateY(-1px);
+}
+
+/* Outline Variant */
+.pillOutline {
+  background-color: transparent;
+  color: #6b7280;
+  border-color: #d1d5db;
+}
+
+.pillOutlineActive {
+  color: #2563eb;
+  border-color: #2563eb;
+  font-weight: 600;
+}
+
+.pillOutline:hover:not(.pillOutlineActive) {
+  background-color: #f3f4f6;
+  color: #374151;
+  border-color: #9ca3af;
+  transform: translateY(-1px);
+}
+
+/* Ghost Variant */
+.pillGhost {
+  background-color: transparent;
+  color: #6b7280;
+  border-color: transparent;
+}
+
+.pillGhostActive {
+  background-color: #f3f4f6;
+  color: #111827;
+}
+
+.pillGhost:hover:not(.pillGhostActive) {
+  background-color: #f9fafb;
+  color: #374151;
+  transform: translateY(-1px);
+}

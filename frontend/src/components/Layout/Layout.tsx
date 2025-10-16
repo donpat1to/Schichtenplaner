@@ -1,4 +1,4 @@
-// frontend/src/components/Layout/Layout.tsx - KORRIGIERT
+// frontend/src/components/Layout/Layout.tsx - ELEGANT WHITE DESIGN
 import React from 'react';
 import Navigation from './Navigation';
 import Footer from './Footer';
@@ -13,16 +13,20 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       minHeight: '100vh',
       display: 'flex',
       flexDirection: 'column' as const,
+      background: '#FBFAF6',
+      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      lineHeight: 1.6,
+      color: '#161718',
     },
     mainContent: {
       flex: 1,
-      backgroundColor: '#f8f9fa',
       minHeight: 'calc(100vh - 140px)',
+      paddingTop: '80px',
     },
     contentContainer: {
       maxWidth: '1200px',
       margin: '0 auto',
-      padding: '2rem 20px',
+      padding: '3rem 2rem',
     },
   };
 

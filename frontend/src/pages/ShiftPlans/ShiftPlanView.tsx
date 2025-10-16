@@ -6,7 +6,7 @@ import { shiftPlanService } from '../../services/shiftPlanService';
 import { employeeService } from '../../services/employeeService';
 import { shiftAssignmentService, ShiftAssignmentService } from '../../services/shiftAssignmentService';
 import { AssignmentResult } from '../../services/scheduling';
-import { ShiftPlan, TimeSlot } from '../../models/ShiftPlan';
+import { ShiftPlan, TimeSlot, ScheduledShift } from '../../models/ShiftPlan';
 import { Employee, EmployeeAvailability } from '../../models/Employee';
 import { useNotification } from '../../contexts/NotificationContext';
 import { formatDate, formatTime } from '../../utils/foramatters';
@@ -39,11 +39,13 @@ const ShiftPlanView: React.FC = () => {
   const [assignmentResult, setAssignmentResult] = useState<AssignmentResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [publishing, setPublishing] = useState(false);
+  const [scheduledShifts, setScheduledShifts] = useState<ScheduledShift[]>([]);
   const [reverting, setReverting] = useState(false);
   const [showAssignmentPreview, setShowAssignmentPreview] = useState(false);
 
   useEffect(() => {
     loadShiftPlanData();
+    debugScheduledShifts();
   }, [id]);
 
   const loadShiftPlanData = async () => {
@@ -51,13 +53,15 @@ const ShiftPlanView: React.FC = () => {
     
     try {
       setLoading(true);
-      const [plan, employeesData] = await Promise.all([
+      const [plan, employeesData, shiftsData] = await Promise.all([
         shiftPlanService.getShiftPlan(id),
-        employeeService.getEmployees()
+        employeeService.getEmployees(),
+        shiftAssignmentService.getScheduledShiftsForPlan(id) // Load shifts here
       ]);
 
       setShiftPlan(plan);
       setEmployees(employeesData.filter(emp => emp.isActive));
+      setScheduledShifts(shiftsData);
 
       // Load availabilities for all employees
       const availabilityPromises = employeesData
@@ -73,6 +77,7 @@ const ShiftPlanView: React.FC = () => {
       );
       
       setAvailabilities(planAvailabilities);
+      debugAvailabilities();
 
     } catch (error) {
       console.error('Error loading shift plan data:', error);
@@ -86,8 +91,70 @@ const ShiftPlanView: React.FC = () => {
     }
   };
 
+  const debugAvailabilities = () => {
+    if (!shiftPlan || !employees.length || !availabilities.length) return;
+    
+    console.log('🔍 AVAILABILITY ANALYSIS:', {
+      totalAvailabilities: availabilities.length,
+      employeesWithAvailabilities: new Set(availabilities.map(a => a.employeeId)).size,
+      totalEmployees: employees.length,
+      availabilityByEmployee: employees.map(emp => {
+        const empAvailabilities = availabilities.filter(a => a.employeeId === emp.id);
+        return {
+          employee: emp.name,
+          availabilities: empAvailabilities.length,
+          preferences: empAvailabilities.map(a => ({
+            day: a.dayOfWeek,
+            timeSlot: a.timeSlotId,
+            preference: a.preferenceLevel
+          }))
+        };
+      })
+    });
+
+    // Prüfe spezifisch für Manager/Admin
+    const manager = employees.find(emp => emp.role === 'admin');
+    if (manager) {
+      const managerAvailabilities = availabilities.filter(a => a.employeeId === manager.id);
+      console.log('🔍 MANAGER AVAILABILITIES:', {
+        manager: manager.name,
+        availabilities: managerAvailabilities.length,
+        details: managerAvailabilities.map(a => ({
+          day: a.dayOfWeek,
+          timeSlot: a.timeSlotId,
+          preference: a.preferenceLevel
+        }))
+      });
+    }
+  };
+
+  const debugScheduledShifts = async () => {
+    if (!shiftPlan) return;
+    
+    try {
+      const shifts = await shiftAssignmentService.getScheduledShiftsForPlan(shiftPlan.id);
+      console.log('🔍 SCHEDULED SHIFTS IN DATABASE:', {
+        total: shifts.length,
+        shifts: shifts.map(s => ({
+          id: s.id,
+          date: s.date,
+          timeSlotId: s.timeSlotId,
+          requiredEmployees: s.requiredEmployees
+        }))
+      });
+
+      // Check if we have any shifts at all
+      if (shifts.length === 0) {
+        console.error('❌ NO SCHEDULED SHIFTS IN DATABASE - This is the problem!');
+        console.log('💡 Solution: Regenerate scheduled shifts for this plan');
+      }
+    } catch (error) {
+      console.error('❌ Error loading scheduled shifts:', error);
+    }
+  };
+
   // Extract plan-specific shifts using the same logic as AvailabilityManager
-  const getTimetableData = () => {
+    const getTimetableData = () => {
     if (!shiftPlan || !shiftPlan.shifts || !shiftPlan.timeSlots) {
       return { days: [], timeSlotsByDay: {}, allTimeSlots: [] };
     }
@@ -199,11 +266,53 @@ const ShiftPlanView: React.FC = () => {
     });
   };*/
 
+  const debugAssignments = async () => {
+    if (!shiftPlan) return;
+    
+    try {
+      const shifts = await shiftAssignmentService.getScheduledShiftsForPlan(shiftPlan.id);
+      console.log('🔍 DEBUG - Scheduled Shifts nach Veröffentlichung:', {
+        totalShifts: shifts.length,
+        shiftsWithAssignments: shifts.filter(s => s.assignedEmployees && s.assignedEmployees.length > 0).length,
+        allShifts: shifts.map(s => ({
+          id: s.id,
+          date: s.date,
+          timeSlotId: s.timeSlotId,
+          assignedEmployees: s.assignedEmployees,
+          assignedCount: s.assignedEmployees?.length || 0
+        }))
+      });
+    } catch (error) {
+      console.error('Debug error:', error);
+    }
+  };
+
   const handlePreviewAssignment = async () => {
     if (!shiftPlan) return;
+    debugScheduledShifts();
 
     try {
       setPublishing(true);
+    
+      // DEBUG: Überprüfe die Eingabedaten
+      console.log('🔍 INPUT DATA FOR SCHEDULING:', {
+        shiftPlan: {
+          id: shiftPlan.id,
+          name: shiftPlan.name,
+          shifts: shiftPlan.shifts?.length,
+          timeSlots: shiftPlan.timeSlots?.length
+        },
+        employees: employees.length,
+        availabilities: availabilities.length,
+        employeeDetails: employees.map(emp => ({
+          id: emp.id,
+          name: emp.name,
+          role: emp.role,
+          employeeType: emp.employeeType,
+          canWorkAlone: emp.canWorkAlone
+        }))
+      });
+
       const result = await ShiftAssignmentService.assignShifts(
         shiftPlan,
         employees,
@@ -215,6 +324,18 @@ const ShiftPlanView: React.FC = () => {
         }
       );
 
+      // DEBUG: Detaillierte Analyse des Results
+      console.log('🔍 DETAILED ASSIGNMENT RESULT:', {
+        totalAssignments: Object.keys(result.assignments).length,
+        assignments: result.assignments,
+        violations: result.violations,
+        hasResolutionReport: !!result.resolutionReport,
+        assignmentDetails: Object.entries(result.assignments).map(([shiftId, empIds]) => ({
+          shiftId,
+          employeeCount: empIds.length,
+          employees: empIds
+        }))
+      });
       // DEBUG: Überprüfe die tatsächlichen Violations
       console.log('🔍 VIOLATIONS ANALYSIS:', {
         allViolations: result.violations,
@@ -283,24 +404,24 @@ const ShiftPlanView: React.FC = () => {
       
       console.log('🔄 Starting to publish assignments...');
       
-      const scheduledShifts = await shiftAssignmentService.getScheduledShiftsForPlan(shiftPlan.id);
-
+      // ✅ KORREKTUR: Verwende die neu geladenen Shifts
+      const updatedShifts = await shiftAssignmentService.getScheduledShiftsForPlan(shiftPlan.id);
+      
       // Debug: Check if scheduled shifts exist
-      if (!scheduledShifts || scheduledShifts.length === 0) {
+      if (!updatedShifts || updatedShifts.length === 0) {
         throw new Error('No scheduled shifts found in the plan');
       }
 
-      // Update scheduled shifts with assignments
-      const updatePromises = scheduledShifts.map(async (scheduledShift) => {
+      console.log(`📊 Found ${updatedShifts.length} scheduled shifts to update`);
+
+      // ✅ KORREKTUR: Verwende updatedShifts statt scheduledShifts
+      const updatePromises = updatedShifts.map(async (scheduledShift) => {
         const assignedEmployees = assignmentResult.assignments[scheduledShift.id] || [];
         
-        console.log(`📝 Updating shift ${scheduledShift.id} with`, assignedEmployees.length, 'employees');
+        console.log(`📝 Updating shift ${scheduledShift.id} with`, assignedEmployees, 'employees');
         
         try {
-          // First, verify the shift exists
-          await shiftAssignmentService.getScheduledShift(scheduledShift.id);
-          
-          // Then update it
+          // Update the shift with assigned employees
           await shiftAssignmentService.updateScheduledShift(scheduledShift.id, {
             assignedEmployees
           });
@@ -320,26 +441,43 @@ const ShiftPlanView: React.FC = () => {
         status: 'published'
       });
 
+      // ✅ KORREKTUR: Explizit alle Daten neu laden und State aktualisieren
+      const [reloadedPlan, reloadedShifts] = await Promise.all([
+        shiftPlanService.getShiftPlan(shiftPlan.id),
+        shiftAssignmentService.getScheduledShiftsForPlan(shiftPlan.id)
+      ]);
+
+      setShiftPlan(reloadedPlan);
+      setScheduledShifts(reloadedShifts);
+
+      // Debug: Überprüfe die aktualisierten Daten
+      console.log('🔍 After publish - Reloaded data:', {
+        planStatus: reloadedPlan.status,
+        scheduledShiftsCount: reloadedShifts.length,
+        shiftsWithAssignments: reloadedShifts.filter(s => s.assignedEmployees && s.assignedEmployees.length > 0).length,
+        allAssignments: reloadedShifts.map(s => ({
+          id: s.id,
+          date: s.date,
+          assigned: s.assignedEmployees
+        }))
+      });
+
       showNotification({
         type: 'success',
         title: 'Erfolg',
         message: 'Schichtplan wurde erfolgreich veröffentlicht!'
       });
 
-      // Reload the plan to reflect changes
-      loadShiftPlanData();
       setShowAssignmentPreview(false);
 
     } catch (error) {
       console.error('❌ Error publishing shift plan:', error);
-
+      
       let message = 'Unbekannter Fehler';
       if (error instanceof Error) {
         message = error.message;
-      } else if (typeof error === 'string') {
-        message = error;
       }
-
+      
       showNotification({
         type: 'error',
         title: 'Fehler',
@@ -378,7 +516,7 @@ const ShiftPlanView: React.FC = () => {
         message: 'Schichtplan wurde erfolgreich zurück in den Entwurfsstatus gesetzt. Alle Daten wurden neu geladen.'
       });
 
-      const scheduledShifts = await shiftAssignmentService.getScheduledShiftsForPlan(shiftPlan.id);
+      //const scheduledShifts = await shiftAssignmentService.getScheduledShiftsForPlan(shiftPlan.id);
       console.log('Scheduled shifts after revert:', {
         hasScheduledShifts: !! scheduledShifts,
         count: scheduledShifts.length || 0,
@@ -422,15 +560,38 @@ const ShiftPlanView: React.FC = () => {
     };
   };
 
+  const debugCurrentState = () => {
+    console.log('🔍 CURRENT STATE DEBUG:', {
+      shiftPlan: shiftPlan ? {
+        id: shiftPlan.id,
+        name: shiftPlan.name,
+        status: shiftPlan.status
+      } : null,
+      scheduledShifts: {
+        count: scheduledShifts.length,
+        withAssignments: scheduledShifts.filter(s => s.assignedEmployees && s.assignedEmployees.length > 0).length,
+        details: scheduledShifts.map(s => ({
+          id: s.id,
+          date: s.date,
+          timeSlotId: s.timeSlotId,
+          assignedEmployees: s.assignedEmployees
+        }))
+      },
+      employees: employees.length
+    });
+  }; 
+
   // Render timetable using the same structure as AvailabilityManager
-  const renderTimetable = async () => {
+  const renderTimetable = () => {
+    debugAssignments();
+    debugCurrentState();
     const { days, allTimeSlots, timeSlotsByDay } = getTimetableData();
     if (!shiftPlan?.id) {
       console.warn("Shift plan ID is missing");
-      return []; // safely exit
+      return null;
     }
 
-    const scheduledShifts = await shiftAssignmentService.getScheduledShiftsForPlan(shiftPlan.id);
+    //const scheduledShifts = await shiftAssignmentService.getScheduledShiftsForPlan(shiftPlan.id);
 
 
     if (days.length === 0 || allTimeSlots.length === 0) {
@@ -534,10 +695,8 @@ const ShiftPlanView: React.FC = () => {
                     // Get assigned employees for this shift
                     let assignedEmployees: string[] = [];
                     let displayText = '';
-                    
 
-                    
-                    if (shiftPlan?.status === 'published' && scheduledShifts) {
+                    if (shiftPlan?.status === 'published') {
                       // For published plans, use actual assignments from scheduled shifts
                       const scheduledShift = scheduledShifts.find(scheduled => {
                         const scheduledDayOfWeek = getDayOfWeek(scheduled.date);
@@ -554,7 +713,7 @@ const ShiftPlanView: React.FC = () => {
                       }
                     } else if (assignmentResult) {
                       // For draft with preview, use assignment result
-                      const scheduledShift = scheduledShifts?.find(scheduled => {
+                      const scheduledShift = scheduledShifts.find(scheduled => {
                         const scheduledDayOfWeek = getDayOfWeek(scheduled.date);
                         return scheduledDayOfWeek === weekday.id && 
                                scheduled.timeSlotId === timeSlot.id;

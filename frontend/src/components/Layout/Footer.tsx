@@ -1,46 +1,51 @@
-// frontend/src/components/Layout/Footer.tsx
+// frontend/src/components/Layout/Footer.tsx - ELEGANT WHITE DESIGN
 import React from 'react';
 
 const Footer: React.FC = () => {
   const styles = {
     footer: {
-      background: '#2c3e50',
+      background: 'linear-gradient(135deg, #1a1325 0%, #24163a 100%)',
       color: 'white',
       marginTop: 'auto',
+      borderTop: '1px solid rgba(251, 250, 246, 0.1)',
     },
     footerContent: {
       maxWidth: '1200px',
       margin: '0 auto',
-      padding: '2rem 20px',
+      padding: '3rem 2rem 2rem',
       display: 'grid',
       gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-      gap: '2rem',
+      gap: '3rem',
     },
     footerSection: {
       display: 'flex',
       flexDirection: 'column' as const,
     },
     footerSectionH3: {
-      marginBottom: '1rem',
-      color: '#ecf0f1',
-      fontSize: '1.2rem',
+      marginBottom: '1.5rem',
+      color: '#FBFAF6',
+      fontSize: '1.1rem',
+      fontWeight: 600,
     },
     footerSectionH4: {
       marginBottom: '1rem',
-      color: '#ecf0f1',
-      fontSize: '1.1rem',
+      color: '#FBFAF6',
+      fontSize: '1rem',
+      fontWeight: 600,
     },
     footerLink: {
-      color: '#bdc3c7',
+      color: 'rgba(251, 250, 246, 0.7)',
       textDecoration: 'none',
-      marginBottom: '0.5rem',
-      transition: 'color 0.3s ease',
+      marginBottom: '0.75rem',
+      transition: 'all 0.2s ease',
+      fontSize: '0.9rem',
     },
     footerBottom: {
-      borderTop: '1px solid #34495e',
-      padding: '1rem 20px',
+      borderTop: '1px solid rgba(251, 250, 246, 0.1)',
+      padding: '1.5rem 2rem',
       textAlign: 'center' as const,
-      color: '#95a5a6',
+      color: 'rgba(251, 250, 246, 0.6)',
+      fontSize: '0.9rem',
     },
   };
 
@@ -49,9 +54,9 @@ const Footer: React.FC = () => {
       <div style={styles.footerContent}>
         <div style={styles.footerSection}>
           <h3 style={styles.footerSectionH3}>Schichtenplaner</h3>
-          <p style={{color: '#bdc3c7', margin: 0}}>
+          <p style={{color: 'rgba(251, 250, 246, 0.7)', margin: 0, lineHeight: 1.6}}>
             Professionelle Schichtplanung für Ihr Team. 
-            Effiziente Personalplanung für optimale Abläufe.
+            Effiziente Personalplanung für optimale Abläube.
           </p>
         </div>
         
@@ -61,10 +66,12 @@ const Footer: React.FC = () => {
             href="/help" 
             style={styles.footerLink}
             onMouseEnter={(e) => {
-              e.currentTarget.style.color = '#3498db';
+              e.currentTarget.style.color = '#FBFAF6';
+              e.currentTarget.style.transform = 'translateX(4px)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.color = '#bdc3c7';
+              e.currentTarget.style.color = 'rgba(251, 250, 246, 0.7)';
+              e.currentTarget.style.transform = 'translateX(0)';
             }}
           >
             Hilfe & Anleitungen
@@ -73,10 +80,12 @@ const Footer: React.FC = () => {
             href="/contact" 
             style={styles.footerLink}
             onMouseEnter={(e) => {
-              e.currentTarget.style.color = '#3498db';
+              e.currentTarget.style.color = '#FBFAF6';
+              e.currentTarget.style.transform = 'translateX(4px)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.color = '#bdc3c7';
+              e.currentTarget.style.color = 'rgba(251, 250, 246, 0.7)';
+              e.currentTarget.style.transform = 'translateX(0)';
             }}
           >
             Kontakt & Support
@@ -85,10 +94,12 @@ const Footer: React.FC = () => {
             href="/faq" 
             style={styles.footerLink}
             onMouseEnter={(e) => {
-              e.currentTarget.style.color = '#3498db';
+              e.currentTarget.style.color = '#FBFAF6';
+              e.currentTarget.style.transform = 'translateX(4px)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.color = '#bdc3c7';
+              e.currentTarget.style.color = 'rgba(251, 250, 246, 0.7)';
+              e.currentTarget.style.transform = 'translateX(0)';
             }}
           >
             Häufige Fragen
@@ -101,10 +112,12 @@ const Footer: React.FC = () => {
             href="/privacy" 
             style={styles.footerLink}
             onMouseEnter={(e) => {
-              e.currentTarget.style.color = '#3498db';
+              e.currentTarget.style.color = '#FBFAF6';
+              e.currentTarget.style.transform = 'translateX(4px)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.color = '#bdc3c7';
+              e.currentTarget.style.color = 'rgba(251, 250, 246, 0.7)';
+              e.currentTarget.style.transform = 'translateX(0)';
             }}
           >
             Datenschutzerklärung
@@ -113,10 +126,12 @@ const Footer: React.FC = () => {
             href="/imprint" 
             style={styles.footerLink}
             onMouseEnter={(e) => {
-              e.currentTarget.style.color = '#3498db';
+              e.currentTarget.style.color = '#FBFAF6';
+              e.currentTarget.style.transform = 'translateX(4px)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.color = '#bdc3c7';
+              e.currentTarget.style.color = 'rgba(251, 250, 246, 0.7)';
+              e.currentTarget.style.transform = 'translateX(0)';
             }}
           >
             Impressum
@@ -125,10 +140,12 @@ const Footer: React.FC = () => {
             href="/terms" 
             style={styles.footerLink}
             onMouseEnter={(e) => {
-              e.currentTarget.style.color = '#3498db';
+              e.currentTarget.style.color = '#FBFAF6';
+              e.currentTarget.style.transform = 'translateX(4px)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.color = '#bdc3c7';
+              e.currentTarget.style.color = 'rgba(251, 250, 246, 0.7)';
+              e.currentTarget.style.transform = 'translateX(0)';
             }}
           >
             Allgemeine Geschäftsbedingungen
@@ -141,10 +158,12 @@ const Footer: React.FC = () => {
             href="/about" 
             style={styles.footerLink}
             onMouseEnter={(e) => {
-              e.currentTarget.style.color = '#3498db';
+              e.currentTarget.style.color = '#FBFAF6';
+              e.currentTarget.style.transform = 'translateX(4px)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.color = '#bdc3c7';
+              e.currentTarget.style.color = 'rgba(251, 250, 246, 0.7)';
+              e.currentTarget.style.transform = 'translateX(0)';
             }}
           >
             Über uns
@@ -153,10 +172,12 @@ const Footer: React.FC = () => {
             href="/features" 
             style={styles.footerLink}
             onMouseEnter={(e) => {
-              e.currentTarget.style.color = '#3498db';
+              e.currentTarget.style.color = '#FBFAF6';
+              e.currentTarget.style.transform = 'translateX(4px)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.color = '#bdc3c7';
+              e.currentTarget.style.color = 'rgba(251, 250, 246, 0.7)';
+              e.currentTarget.style.transform = 'translateX(0)';
             }}
           >
             Funktionen
@@ -165,10 +186,12 @@ const Footer: React.FC = () => {
             href="/pricing" 
             style={styles.footerLink}
             onMouseEnter={(e) => {
-              e.currentTarget.style.color = '#3498db';
+              e.currentTarget.style.color = '#FBFAF6';
+              e.currentTarget.style.transform = 'translateX(4px)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.color = '#bdc3c7';
+              e.currentTarget.style.color = 'rgba(251, 250, 246, 0.7)';
+              e.currentTarget.style.transform = 'translateX(0)';
             }}
           >
             Preise
