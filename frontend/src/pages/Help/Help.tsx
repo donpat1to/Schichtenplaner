@@ -206,102 +206,7 @@ const Help: React.FC = () => {
               ))}
             </div>
           </div>
-
-        {/* Network Visualization */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '15px',
-          marginTop: '30px'
-        }}>
-          {/* Employees */}
-          <div style={{
-            backgroundColor: '#e8f4fd',
-            padding: '15px',
-            borderRadius: '8px',
-            border: '1px solid #b8d4f0'
-          }}>
-            <h4 style={{ margin: '0 0 10px 0', color: '#3498db' }}>👥 Mitarbeiter</h4>
-            <div style={{ fontSize: '14px', lineHeight: '1.4' }}>
-              <div>• Manager (1)</div>
-              <div>• Erfahrene ({currentStage >= 1 ? '3' : '0'})</div>
-              <div>• Neue ({currentStage >= 1 ? '2' : '0'})</div>
-            </div>
-          </div>
-
-          {/* Shifts */}
-          <div style={{
-            backgroundColor: '#fff3cd',
-            padding: '15px',
-            borderRadius: '8px',
-            border: '1px solid #ffeaa7'
-          }}>
-            <h4 style={{ margin: '0 0 10px 0', color: '#f39c12' }}>📅 Schichten</h4>
-            <div style={{ fontSize: '14px', lineHeight: '1.4' }}>
-              <div>• Vormittag (5)</div>
-              <div>• Nachmittag (4)</div>
-              <div>• Manager-Schichten (3)</div>
-            </div>
-          </div>
-
-          {/* Current Actions */}
-          <div style={{
-            backgroundColor: '#d4edda',
-            padding: '15px',
-            borderRadius: '8px',
-            border: '1px solid #c3e6cb'
-          }}>
-            <h4 style={{ margin: '0 0 10px 0', color: '#27ae60' }}>⚡ Aktive Aktionen</h4>
-            <div style={{ fontSize: '14px', lineHeight: '1.4' }}>
-              {currentStage === 0 && (
-                <>
-                  <div>• Grundzuweisung läuft</div>
-                  <div>• Erfahrene priorisieren</div>
-                </>
-              )}
-              {currentStage === 1 && (
-                <>
-                  <div>• Manager wird zugewiesen</div>
-                  <div>• Erfahrene suchen</div>
-                </>
-              )}
-              {currentStage === 2 && (
-                <>
-                  <div>• Überbesetzung prüfen</div>
-                  <div>• Pool-Verwaltung aktiv</div>
-                </>
-              )}
-              {currentStage === 3 && (
-                <>
-                  <div>• Finale Validierung</div>
-                  <div>• Bericht generieren</div>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Problems & Solutions */}
-          <div style={{
-            backgroundColor: '#f8d7da',
-            padding: '15px',
-            borderRadius: '8px',
-            border: '1px solid #f5c6cb'
-          }}>
-            <h4 style={{ margin: '0 0 10px 0', color: '#e74c3c' }}>🔍 Probleme & Lösungen</h4>
-            <div style={{ fontSize: '14px', lineHeight: '1.4' }}>
-              {currentStage >= 2 ? (
-                <>
-                  <div style={{ color: '#27ae60' }}>✅ 2 Probleme behoben</div>
-                  <div style={{ color: '#e74c3c' }}>❌ 0 kritische Probleme</div>
-                  <div style={{ color: '#f39c12' }}>⚠️ 1 Warnung</div>
-                </>
-              ) : (
-                <div>Noch keine Probleme analysiert</div>
-              )}
-            </div>
-          </div>
         </div>
-      </div>
 
       {/* Business Rules */}
       <div style={{ 
@@ -312,7 +217,7 @@ const Help: React.FC = () => {
         boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
         border: '1px solid #e0e0e0'
       }}>
-        <h2 style={{ color: '#2c3e50', marginBottom: '20px' }}>📋 Geschäftsregeln</h2>
+        <h2 style={{ color: '#2c3e50', marginBottom: '20px' }}>📋 Validierungs Regeln</h2>
         <div style={{ display: 'grid', gap: '10px' }}>
           {businessRules.map((rule, index) => (
             <div
@@ -383,7 +288,10 @@ const Help: React.FC = () => {
           </div>
         </div>
 
-        <div style={{ 
+        
+      </div>
+
+      <div style={{ 
           marginTop: '25px',
           padding: '20px',
           backgroundColor: '#e8f4fd',
@@ -398,7 +306,6 @@ const Help: React.FC = () => {
             <li>Planen Sie Manager-Verfügbarkeit im Voraus</li>
           </ul>
         </div>
-      </div>
 
       <style>{`
         @keyframes pulse {

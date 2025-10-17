@@ -295,6 +295,8 @@ export const getAvailabilities = async (req: AuthRequest, res: Response): Promis
       ORDER BY day_of_week, time_slot_id
     `, [employeeId]);
 
+    //console.log('✅ Successfully got availabilities from employee:', availabilities);
+
     res.json(availabilities.map(avail => ({
       id: avail.id,
       employeeId: avail.employee_id,
@@ -348,6 +350,9 @@ export const updateAvailabilities = async (req: AuthRequest, res: Response): Pro
 
       await db.run('COMMIT');
 
+      console.log('✅ Successfully updated availablities employee:', );
+
+
       // Return updated availabilities
       const updatedAvailabilities = await db.all<any>(`
         SELECT * FROM employee_availability 
@@ -364,6 +369,8 @@ export const updateAvailabilities = async (req: AuthRequest, res: Response): Pro
         preferenceLevel: avail.preference_level,
         notes: avail.notes
       })));
+
+      console.log('✅ Successfully updated employee:', updateAvailabilities);
 
     } catch (error) {
       await db.run('ROLLBACK');

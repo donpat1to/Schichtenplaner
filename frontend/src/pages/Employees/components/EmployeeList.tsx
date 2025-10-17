@@ -1,4 +1,4 @@
-// frontend/src/pages/Employees/components/EmployeeList.tsx - KORRIGIERT
+// frontend/src/pages/Employees/components/EmployeeList.tsx
 import React, { useState } from 'react';
 import { ROLE_CONFIG, EMPLOYEE_TYPE_CONFIG } from '../../../models/defaults/employeeDefaults';
 import { Employee } from '../../../models/Employee';
@@ -11,6 +11,9 @@ interface EmployeeListProps {
   onManageAvailability: (employee: Employee) => void;
 }
 
+type SortField = 'name' | 'employeeType' | 'canWorkAlone' | 'role' | 'lastLogin';
+type SortDirection = 'asc' | 'desc';
+
 const EmployeeList: React.FC<EmployeeListProps> = ({
   employees,
   onEdit,
@@ -19,8 +22,11 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
 }) => {
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('active');
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortField, setSortField] = useState<SortField>('name');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const { user: currentUser, hasRole } = useAuth();
 
+  // Filter employees based on active/inactive and search term
   const filteredEmployees = employees.filter(employee => {
     if (filter === 'active' && !employee.isActive) return false;
     if (filter === 'inactive' && employee.isActive) return false;
@@ -37,6 +43,60 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
     
     return true;
   });
+
+  // Sort employees based on selected field and direction
+  const sortedEmployees = [...filteredEmployees].sort((a, b) => {
+    let aValue: any;
+    let bValue: any;
+
+    switch (sortField) {
+      case 'name':
+        aValue = a.name.toLowerCase();
+        bValue = b.name.toLowerCase();
+        break;
+      case 'employeeType':
+        aValue = a.employeeType;
+        bValue = b.employeeType;
+        break;
+      case 'canWorkAlone':
+        aValue = a.canWorkAlone;
+        bValue = b.canWorkAlone;
+        break;
+      case 'role':
+        aValue = a.role;
+        bValue = b.role;
+        break;
+      case 'lastLogin':
+        // Handle null values for lastLogin (put them at the end)
+        aValue = a.lastLogin ? new Date(a.lastLogin).getTime() : 0;
+        bValue = b.lastLogin ? new Date(b.lastLogin).getTime() : 0;
+        break;
+      default:
+        return 0;
+    }
+
+    if (sortDirection === 'asc') {
+      return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+    } else {
+      return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
+    }
+  });
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      // Toggle direction if same field
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New field, default to ascending
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const getSortIndicator = (field: SortField) => {
+    if (sortField !== field) return '↕';
+    return sortDirection === 'asc' ? '↑' : '↓';
+  };
 
   // Simplified permission checks
   const canDeleteEmployee = (employee: Employee): boolean => {
@@ -78,8 +138,8 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
 
   const getIndependenceBadge = (canWorkAlone: boolean) => {
     return canWorkAlone 
-      ? { text: '✅ Eigenständig', color: '#27ae60', bgColor: '#d5f4e6' }
-      : { text: '❌ Betreuung', color: '#e74c3c', bgColor: '#fadbd8' };
+      ? { text: 'Eigenständig', color: '#27ae60', bgColor: '#d5f4e6' }
+      : { text: 'Betreuung', color: '#e74c3c', bgColor: '#fadbd8' };
   };
 
   type Role = typeof ROLE_CONFIG[number]['value'];
@@ -161,7 +221,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
         </div>
 
         <div style={{ color: '#7f8c8d', fontSize: '14px' }}>
-          {filteredEmployees.length} von {employees.length} Mitarbeitern
+          {sortedEmployees.length} von {employees.length} Mitarbeitern
         </div>
       </div>
 
@@ -185,16 +245,41 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
           color: '#2c3e50',
           alignItems: 'center'
         }}>
-          <div>Name & E-Mail</div>
-          <div style={{ textAlign: 'center' }}>Typ</div>
-          <div style={{ textAlign: 'center' }}>Eigenständigkeit</div>
-          <div style={{ textAlign: 'center' }}>Rolle</div>
+          <div 
+            onClick={() => handleSort('name')}
+            style={{ cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: '5px' }}
+          >
+            Name & E-Mail {getSortIndicator('name')}
+          </div>
+          <div 
+            onClick={() => handleSort('employeeType')}
+            style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: '5px', justifyContent: 'center' }}
+          >
+            Typ {getSortIndicator('employeeType')}
+          </div>
+          <div 
+            onClick={() => handleSort('canWorkAlone')}
+            style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: '5px', justifyContent: 'center' }}
+          >
+            Eigenständigkeit {getSortIndicator('canWorkAlone')}
+          </div>
+          <div 
+            onClick={() => handleSort('role')}
+            style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: '5px', justifyContent: 'center' }}
+          >
+            Rolle {getSortIndicator('role')}
+          </div>
           <div style={{ textAlign: 'center' }}>Status</div>
-          <div style={{ textAlign: 'center' }}>Letzter Login</div>
+          <div 
+            onClick={() => handleSort('lastLogin')}
+            style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: '5px', justifyContent: 'center' }}
+          >
+            Letzter Login {getSortIndicator('lastLogin')}
+          </div>
           <div style={{ textAlign: 'center' }}>Aktionen</div>
         </div>
 
-        {filteredEmployees.map(employee => {
+        {sortedEmployees.map(employee => {
           const employeeType = getEmployeeTypeBadge(employee.employeeType);
           const independence = getIndependenceBadge(employee.canWorkAlone);
           const roleColor = getRoleBadge(employee.role);

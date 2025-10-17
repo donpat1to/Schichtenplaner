@@ -4,7 +4,7 @@ import React from 'react';
 const Footer: React.FC = () => {
   const styles = {
     footer: {
-      background: 'linear-gradient(135deg, #1a1325 0%, #24163a 100%)',
+      background: 'linear-gradient(0deg, #161718 0%, #24163a 100%)',
       color: 'white',
       marginTop: 'auto',
       borderTop: '1px solid rgba(251, 250, 246, 0.1)',
@@ -44,7 +44,7 @@ const Footer: React.FC = () => {
       borderTop: '1px solid rgba(251, 250, 246, 0.1)',
       padding: '1.5rem 2rem',
       textAlign: 'center' as const,
-      color: 'rgba(251, 250, 246, 0.6)',
+      color: '#FBFAF6',
       fontSize: '0.9rem',
     },
   };
@@ -201,8 +201,8 @@ const Footer: React.FC = () => {
       
       <div style={styles.footerBottom}>
         <p style={{margin: 0}}>
-          &copy; 2025 Schichtenplaner. Alle Rechte vorbehalten. | 
-          Made with ❤️ for efficient team management
+          &copy; 2025 Schichtenplaner | 
+          Made with <span style={{ color: '#854eca' }}>♥</span> for efficient team management
         </p>
       </div>
     </footer>

@@ -740,53 +740,6 @@ export const generateScheduledShiftsForPlan = async (req: Request, res: Response
   }
 };
 
-export const revertToDraft = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { id } = req.params;
-    const userId = (req as AuthRequest).user?.userId;
-
-    if (!userId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    // Check if plan exists
-    const existingPlan = await getShiftPlanById(id);
-    //const existingPlan: ShiftPlan = await db.get('SELECT * FROM shift_plans WHERE id = ?', [id]);
-    if (!existingPlan) {
-      res.status(404).json({ error: 'Shift plan not found' });
-      return;
-    }
-
-    // Only allow reverting from published to draft
-    if (existingPlan.status !== 'published') {
-      res.status(400).json({ error: 'Can only revert published plans to draft' });
-      return;
-    }
-
-    // Update plan status to draft
-    await db.run(
-      'UPDATE shift_plans SET status = ? WHERE id = ?',
-      ['draft', id]
-    );
-
-    // Clear all assigned employees from scheduled shifts
-    await db.run(
-      'UPDATE scheduled_shifts SET assigned_employees = ? WHERE plan_id = ?',
-      [JSON.stringify([]), id]
-    );
-
-    console.log(`✅ Plan ${id} reverted to draft status`);
-
-    // Return updated plan
-    const updatedPlan = await getShiftPlanById(id);
-    res.json(updatedPlan);
-
-  } catch (error) {
-    console.error('Error reverting plan to draft:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-};
 
 export const regenerateScheduledShifts = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -920,5 +873,64 @@ export const updateScheduledShift = async (req: AuthRequest, res: Response): Pro
   } catch (error: any) {
     console.error('❌ Error updating scheduled shift:', error);
     res.status(500).json({ error: 'Internal server error: ' + error.message });
+  }
+};
+
+export const clearAssignments = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    console.log('🔄 Clearing assignments for plan:', id);
+
+    // Check if plan exists
+    const existingPlan = await db.get('SELECT * FROM shift_plans WHERE id = ?', [id]);
+    if (!existingPlan) {
+      res.status(404).json({ error: 'Shift plan not found' });
+      return;
+    }
+
+    await db.run('BEGIN TRANSACTION');
+
+    try {
+      // Get all scheduled shifts for this plan
+      const scheduledShifts = await db.all<any>(
+        'SELECT id FROM scheduled_shifts WHERE plan_id = ?',
+        [id]
+      );
+
+      console.log(`📋 Found ${scheduledShifts.length} scheduled shifts to clear`);
+
+      // Clear all assignments (set assigned_employees to empty array)
+      for (const shift of scheduledShifts) {
+        await db.run(
+          'UPDATE scheduled_shifts SET assigned_employees = ? WHERE id = ?',
+          [JSON.stringify([]), shift.id]
+        );
+        console.log(`✅ Cleared assignments for shift: ${shift.id}`);
+      }
+
+      // Update plan status back to draft
+      await db.run(
+        'UPDATE shift_plans SET status = ? WHERE id = ?',
+        ['draft', id]
+      );
+
+      await db.run('COMMIT');
+
+      console.log(`✅ Successfully cleared all assignments for plan ${id}`);
+
+      res.json({ 
+        message: 'Assignments cleared successfully', 
+        clearedShifts: scheduledShifts.length 
+      });
+
+    } catch (error) {
+      await db.run('ROLLBACK');
+      throw error;
+    }
+
+  } catch (error) {
+    console.error('❌ Error clearing assignments:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 };

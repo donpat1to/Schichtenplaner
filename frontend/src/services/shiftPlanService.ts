@@ -128,26 +128,6 @@ export const shiftPlanService = {
     }
   },
 
-  async revertToDraft(id: string): Promise<ShiftPlan> {
-    const response = await fetch(`${API_BASE}/${id}/revert-to-draft`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...authService.getAuthHeaders()
-      }
-    });
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        authService.logout();
-        throw new Error('Nicht authorisiert - bitte erneut anmelden');
-      }
-      throw new Error('Fehler beim Zurücksetzen des Schichtplans');
-    }
-
-    return response.json();
-  },
-
   // Get specific template or plan
   getTemplate: async (id: string): Promise<ShiftPlan> => {
     const response = await fetch(`${API_BASE}/${id}`, {
@@ -218,5 +198,30 @@ export const shiftPlanService = {
       label: preset.name,
       description: preset.description
     }));
+  },
+
+  async clearAssignments(planId: string): Promise<void> {
+    try {
+      console.log('🔄 Clearing assignments for plan:', planId);
+      
+      const response = await fetch(`${API_BASE}/${planId}/clear-assignments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authService.getAuthHeaders()
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || `Failed to clear assignments: ${response.status}`);
+      }
+
+      console.log('✅ Assignments cleared successfully');
+      
+    } catch (error) {
+      console.error('❌ Error clearing assignments:', error);
+      throw error;
+    }
   },
 };

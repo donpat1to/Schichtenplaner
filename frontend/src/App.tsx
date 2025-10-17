@@ -5,7 +5,6 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import NotificationContainer from './components/Notification/NotificationContainer';
 import Layout from './components/Layout/Layout';
-import { DesignSystemProvider, GlobalStyles } from './design/DesignSystem';
 import Login from './pages/Auth/Login';
 import Dashboard from './pages/Dashboard/Dashboard';
 import ShiftPlanList from './pages/ShiftPlans/ShiftPlanList';
@@ -133,17 +132,14 @@ const AppContent: React.FC = () => {
 
 function App() {
   return (
-    <DesignSystemProvider>
-      <GlobalStyles />
-      <NotificationProvider>
-        <AuthProvider>
-          <Router>
-            <NotificationContainer />
-            <AppContent />
-          </Router>
-        </AuthProvider>
-      </NotificationProvider>
-    </DesignSystemProvider>
+    <NotificationProvider>
+      <AuthProvider>
+        <Router>
+          <NotificationContainer />
+          <AppContent />
+        </Router>
+      </AuthProvider>
+    </NotificationProvider>
   );
 }
 

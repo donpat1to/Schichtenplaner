@@ -19,12 +19,12 @@ router.post('/:id/generate-shifts', requireRole(['admin', 'instandhalter']), gen
 router.post('/:id/regenerate-shifts', requireRole(['admin', 'instandhalter']), regenerateScheduledShifts);
 
 // GET all scheduled shifts for a plan
-router.get('/plan/:planId', requireRole(['admin']), getScheduledShiftsFromPlan);
+router.get('/plan/:planId', authMiddleware, getScheduledShiftsFromPlan);
 
 // GET specific scheduled shift
-router.get('/:id', requireRole(['admin']), getScheduledShift);
+router.get('/:id', authMiddleware, getScheduledShift);
 
 // UPDATE scheduled shift
-router.put('/:id', requireRole(['admin']), updateScheduledShift);
+router.put('/:id', authMiddleware, updateScheduledShift);
 
 export default router;

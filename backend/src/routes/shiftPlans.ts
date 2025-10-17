@@ -8,7 +8,7 @@ import {
   updateShiftPlan, 
   deleteShiftPlan,
   createFromPreset,
-  revertToDraft,
+  clearAssignments
 } from '../controllers/shiftPlanController.js';
 
 const router = express.Router();
@@ -18,13 +18,13 @@ router.use(authMiddleware);
 // Combined routes for both shift plans and templates
 
 // GET all shift plans (including templates)
-router.get('/', getShiftPlans);
+router.get('/' , authMiddleware, getShiftPlans);
 
 // GET templates only
 //router.get('/templates', getTemplates);
 
 // GET specific shift plan or template
-router.get('/:id', getShiftPlan);
+router.get('/:id', authMiddleware, getShiftPlan);
 
 // POST create new shift plan
 router.post('/', requireRole(['admin', 'instandhalter']), createShiftPlan);
@@ -41,7 +41,7 @@ router.put('/:id', requireRole(['admin', 'instandhalter']), updateShiftPlan);
 // DELETE shift plan or template
 router.delete('/:id', requireRole(['admin', 'instandhalter']), deleteShiftPlan);
 
-// PUT revert published plan to draft
-router.put('/:id/revert-to-draft', requireRole(['admin', 'instandhalter']), revertToDraft);
+// POST clear assignments and reset to draft
+router.post('/:id/clear-assignments', requireRole(['admin', 'instandhalter']), clearAssignments);
 
 export default router;

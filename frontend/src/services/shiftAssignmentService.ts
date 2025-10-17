@@ -2,12 +2,12 @@
 import { ShiftPlan, ScheduledShift } from '../models/ShiftPlan';
 import { Employee, EmployeeAvailability } from '../models/Employee';
 import { authService } from './authService';
-import { scheduleWithManager } from './scheduling/shiftScheduler';
-import { transformToSchedulingData } from './scheduling/dataAdapter';
-import { AssignmentResult, WeeklyPattern } from './scheduling/types';
+import { IntelligentShiftScheduler, AssignmentResult, WeeklyPattern } from './scheduling';
 import { isScheduledShift } from '../models/helpers';
 
 const API_BASE_URL = 'http://localhost:3002/api/scheduled-shifts';
+
+
 
 // Helper function to get auth headers
 const getAuthHeaders = () => {
@@ -21,7 +21,7 @@ const getAuthHeaders = () => {
 export class ShiftAssignmentService {
   async updateScheduledShift(id: string, updates: { assignedEmployees: string[] }): Promise<void> {
     try {
-      console.log('🔄 Updating scheduled shift via API:', { id, updates });
+      //console.log('🔄 Updating scheduled shift via API:', { id, updates });
       
       const response = await fetch(`${API_BASE_URL}/${id}`, {
         method: 'PUT',
@@ -141,65 +141,64 @@ export class ShiftAssignmentService {
     constraints: any = {}
   ): Promise<AssignmentResult> {
 
-    console.log('🔄 Starting enhanced scheduling algorithm...');
+    console.log('🧠 Starting intelligent scheduling for FIRST WEEK ONLY...');
 
-    // Get defined shifts for the first week
-    const definedShifts = await this.getDefinedShifts(shiftPlan);
-    const firstWeekShifts = this.getFirstWeekShifts(definedShifts);
+    // Load all scheduled shifts
+    const scheduledShifts = await shiftAssignmentService.getScheduledShiftsForPlan(shiftPlan.id);
     
-    console.log('📊 First week analysis:', {
-      totalShifts: definedShifts.length,
-      firstWeekShifts: firstWeekShifts.length,
-      employees: employees.length
-    });
+    if (scheduledShifts.length === 0) {
+      return {
+        assignments: {},
+        violations: ['❌ KRITISCH: Keine Schichten verfügbar für die Zuordnung'],
+        success: false,
+        resolutionReport: ['🚨 ABBRUCH: Keine Schichten im Plan verfügbar']
+      };
+    }
 
-    // Transform data for scheduling algorithm
-    const { schedulingEmployees, schedulingShifts, managerShifts } = transformToSchedulingData(
+    // Set cache for scheduler
+    IntelligentShiftScheduler.scheduledShiftsCache.set(shiftPlan.id, scheduledShifts);
+
+    // 🔥 RUN SCHEDULING FOR FIRST WEEK ONLY
+    const schedulingResult = await IntelligentShiftScheduler.generateOptimalSchedule(
+      shiftPlan,
       employees.filter(emp => emp.isActive),
-      firstWeekShifts,
-      availabilities
+      availabilities,
+      constraints
     );
 
-    console.log('🎯 Transformed data for scheduling:', {
-      employees: schedulingEmployees.length,
-      shifts: schedulingShifts.length,
-      managerShifts: managerShifts.length
+    // Get first week shifts for pattern
+    const firstWeekShifts = this.getFirstWeekShifts(scheduledShifts);
+    
+    console.log('🔄 Creating weekly pattern from FIRST WEEK:', {
+      firstWeekShifts: firstWeekShifts.length,
+      allShifts: scheduledShifts.length,
+      patternAssignments: Object.keys(schedulingResult.assignments).length
     });
 
-    // Run the enhanced scheduling algorithm with better constraints
-    const schedulingResult = scheduleWithManager(
-      schedulingShifts,
-      schedulingEmployees,
-      managerShifts,
-      {
-        enforceNoTraineeAlone: constraints.enforceNoTraineeAlone ?? true,
-        enforceExperiencedWithChef: constraints.enforceExperiencedWithChef ?? true,
-        maxRepairAttempts: constraints.maxRepairAttempts ?? 50,
-        targetEmployeesPerShift: constraints.targetEmployeesPerShift ?? 2 // Flexible target
-      }
-    );
-
-    console.log('📊 Enhanced scheduling completed:', {
-      assignments: Object.keys(schedulingResult.assignments).length,
-      violations: schedulingResult.violations.length,
-      success: schedulingResult.success
-    });
-
-    // Apply weekly pattern to all shifts
     const weeklyPattern: WeeklyPattern = {
       weekShifts: firstWeekShifts,
-      assignments: schedulingResult.assignments,
+      assignments: schedulingResult.assignments, // 🔥 Diese enthalten nur erste Woche
       weekNumber: 1
     };
 
-    const allAssignments = this.applyWeeklyPattern(definedShifts, weeklyPattern);
+    // 🔥 APPLY PATTERN TO ALL WEEKS
+    const allAssignments = this.applyWeeklyPattern(scheduledShifts, weeklyPattern);
+
+    console.log('✅ Pattern applied to all weeks:', {
+      firstWeekAssignments: Object.keys(schedulingResult.assignments).length,
+      allWeeksAssignments: Object.keys(allAssignments).length
+    });
+
+    // Clean cache
+    IntelligentShiftScheduler.scheduledShiftsCache.delete(shiftPlan.id);
 
     return {
-      assignments: allAssignments,
+      assignments: allAssignments, // 🔥 Diese enthalten alle Wochen
       violations: schedulingResult.violations,
-      success: schedulingResult.violations.length === 0,
+      success: schedulingResult.success,
       pattern: weeklyPattern,
-      resolutionReport: schedulingResult.resolutionReport // Füge diese Zeile hinzu
+      resolutionReport: schedulingResult.resolutionReport,
+      qualityMetrics: schedulingResult.qualityMetrics
     };
   }
 
@@ -336,29 +335,48 @@ export class ShiftAssignmentService {
     
     const assignments: { [shiftId: string]: string[] } = {};
     
-    // Group all shifts by week
-    const shiftsByWeek = this.groupShiftsByWeek(allShifts);
+    // Group all shifts by week AND day-timeSlot combination
+    const shiftsByPatternKey = new Map<string, ScheduledShift[]>();
     
-    console.log('📅 Applying weekly pattern to', Object.keys(shiftsByWeek).length, 'weeks');
-
-    // For each week, apply the pattern from week 1
-    Object.entries(shiftsByWeek).forEach(([weekKey, weekShifts]) => {
-      const weekNumber = parseInt(weekKey);
+    allShifts.forEach(shift => {
+      const dayOfWeek = this.getDayOfWeek(shift.date);
+      const patternKey = `${dayOfWeek}-${shift.timeSlotId}`;
       
-      weekShifts.forEach(shift => {
-        // Find the corresponding shift in the weekly pattern
-        const patternShift = this.findMatchingPatternShift(shift, weeklyPattern.weekShifts);
-        
-        if (patternShift) {
-          // Use the same assignment as the pattern shift
-          assignments[shift.id] = [...weeklyPattern.assignments[patternShift.id]];
-        } else {
-          // No matching pattern shift, leave empty
-          assignments[shift.id] = [];
-        }
-      });
+      if (!shiftsByPatternKey.has(patternKey)) {
+        shiftsByPatternKey.set(patternKey, []);
+      }
+      shiftsByPatternKey.get(patternKey)!.push(shift);
     });
+    
+    console.log('📊 Pattern application analysis:');
+    console.log('- Unique pattern keys:', shiftsByPatternKey.size);
+    console.log('- Pattern keys:', Array.from(shiftsByPatternKey.keys()));
 
+    // For each shift in all weeks, find the matching pattern shift
+    allShifts.forEach(shift => {
+      const dayOfWeek = this.getDayOfWeek(shift.date);
+      //const patternKey = `${dayOfWeek}-${shift.timeSlotId}`;
+      const patternKey = `${shift.timeSlotId}`;
+
+      // Find the pattern shift for this day-timeSlot combination
+      const patternShift = weeklyPattern.weekShifts.find(patternShift => {
+        const patternDayOfWeek = this.getDayOfWeek(patternShift.date);
+        return patternDayOfWeek === dayOfWeek && 
+              patternShift.timeSlotId === shift.timeSlotId;
+      });
+      
+      if (patternShift && weeklyPattern.assignments[patternShift.id]) {
+        assignments[shift.id] = [...weeklyPattern.assignments[patternShift.id]];
+      } else {
+        assignments[shift.id] = [];
+        console.warn(`❌ No pattern found for shift: ${patternKey}`);
+      }
+    });
+    
+    // DEBUG: Check assignment coverage
+    const assignedShifts = Object.values(assignments).filter(a => a.length > 0).length;
+    console.log(`📊 Assignment coverage: ${assignedShifts}/${allShifts.length} shifts assigned`);
+    
     return assignments;
   }
 

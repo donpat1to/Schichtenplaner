@@ -282,12 +282,7 @@ const Dashboard: React.FC = () => {
       percentage
     };
   };
-
-  // Add refresh functionality
-  const handleRefresh = () => {
-    loadDashboardData();
-  };
-
+  
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '40px' }}>
@@ -369,8 +364,6 @@ const Dashboard: React.FC = () => {
           </p>
         </div>
       </div>
-
-      <PlanDebugInfo />
 
       {/* Quick Actions - Nur für Admins/Instandhalter */}
       {hasRole(['admin', 'instandhalter']) && (

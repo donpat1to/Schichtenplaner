@@ -437,6 +437,8 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       
       await employeeService.updateAvailabilities(employee.id, requestData);
       console.log('✅ VERFÜGBARKEITEN ERFOLGREICH GESPEICHERT');
+
+      window.dispatchEvent(new CustomEvent('availabilitiesChanged'));
       
       onSave();
     } catch (err: any) {
