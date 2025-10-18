@@ -156,7 +156,10 @@ export class ShiftAssignmentService {
     }
 
     // Set cache for scheduler
-    IntelligentShiftScheduler.scheduledShiftsCache.set(shiftPlan.id, scheduledShifts);
+    IntelligentShiftScheduler.scheduledShiftsCache.set(shiftPlan.id, { 
+      shifts: scheduledShifts, 
+      timestamp: Date.now() 
+    });
 
     // 🔥 RUN SCHEDULING FOR FIRST WEEK ONLY
     const schedulingResult = await IntelligentShiftScheduler.generateOptimalSchedule(
@@ -344,7 +347,7 @@ export class ShiftAssignmentService {
     // Group pattern shifts by day-timeSlot for easy lookup
     const patternMap = new Map<string, string[]>();
     
-    weeklyPattern.weekShifts.forEach(patternShift => {
+    weeklyPattern.weekShifts.forEach((patternShift: ScheduledShift) => {
       const dayOfWeek = this.getDayOfWeek(patternShift.date);
       const patternKey = `${dayOfWeek}-${patternShift.timeSlotId}`;
       
