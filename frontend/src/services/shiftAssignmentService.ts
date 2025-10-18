@@ -2,7 +2,7 @@
 import { ShiftPlan, ScheduledShift } from '../models/ShiftPlan';
 import { Employee, EmployeeAvailability } from '../models/Employee';
 import { authService } from './authService';
-import { IntelligentShiftScheduler, AssignmentResult, WeeklyPattern } from '../hooks/useScheduling';
+//import { IntelligentShiftScheduler, AssignmentResult, WeeklyPattern } from './scheduling/useScheduling';
 import { isScheduledShift } from '../models/helpers';
 
 const API_BASE_URL = 'http://localhost:3002/api/scheduled-shifts';
