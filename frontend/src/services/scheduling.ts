@@ -21,50 +21,6 @@ export class IntelligentShiftScheduler {
   // Store scheduled shifts for lookup
   static scheduledShiftsCache: Map<string, ScheduledShift[]> = new Map();
 
-  // Find optimal shifts for a specific employee considering exact contract limits
-  private static findOptimalShiftsForEmployee(
-    employee: Employee,
-    scheduledShifts: ScheduledShift[],
-    assignments: { [shiftId: string]: string[] },
-    availabilityMap: Map<string, Map<string, number>>,
-    allEmployees: Employee[],
-    constraints: SchedulingConstraints
-  ): ScheduledShift[] {
-    
-    return scheduledShifts
-      .filter(shift => {
-        // Check if shift needs more employees
-        const currentAssignments = assignments[shift.id] || [];
-        if (currentAssignments.length >= shift.requiredEmployees) return false;
-
-        // Check availability
-        const dayOfWeek = this.getDayOfWeek(shift.date);
-        const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
-        const preference = availabilityMap.get(employee.id)?.get(shiftKey);
-        if (preference === 3 || preference === undefined) return false;
-
-        // Check if assignment is compatible
-        return this.canAssignEmployee(employee, shift, currentAssignments, allEmployees, constraints);
-      })
-      .sort((a, b) => {
-        // Prioritize shifts where employee is most needed and most available
-        const aCurrent = assignments[a.id]?.length || 0;
-        const bCurrent = assignments[b.id]?.length || 0;
-        const aNeeded = a.requiredEmployees - aCurrent;
-        const bNeeded = b.requiredEmployees - bCurrent;
-
-        // Also consider availability preference
-        const aDay = this.getDayOfWeek(a.date);
-        const bDay = this.getDayOfWeek(b.date);
-        const aPref = availabilityMap.get(employee.id)?.get(`${aDay}-${a.timeSlotId}`) || 3;
-        const bPref = availabilityMap.get(employee.id)?.get(`${bDay}-${b.timeSlotId}`) || 3;
-
-        // Higher need and better preference first
-        if (aNeeded !== bNeeded) return bNeeded - aNeeded;
-        return aPref - bPref; // Lower preference number = better
-      });
-  }
-
   // PHASE B: Manager Integration
   private static async phaseBManagerIntegration(
     baseAssignments: { [shiftId: string]: string[] },
@@ -138,66 +94,6 @@ export class IntelligentShiftScheduler {
     }
   }
 
-  // Identify manager shifts based on availability and business rules
-  private static identifyManagerShifts(
-    scheduledShifts: ScheduledShift[],
-    managerEmployees: Employee[],
-    availabilityMap: Map<string, Map<string, number>>
-  ): ScheduledShift[] {
-    
-    return scheduledShifts.filter(shift => {
-      const dayOfWeek = this.getDayOfWeek(shift.date);
-      const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
-      
-      // Check if any manager is available for this shift
-      return managerEmployees.some(manager => {
-        const preference = availabilityMap.get(manager.id)?.get(shiftKey);
-        return preference !== undefined && preference !== 3;
-      });
-    });
-  }
-
-  // Assign manager to shifts
-  private static async assignManagerToShifts(
-    manager: Employee,
-    managerShifts: ScheduledShift[],
-    assignments: { [shiftId: string]: string[] },
-    availabilityMap: Map<string, Map<string, number>>,
-    constraints: SchedulingConstraints,
-    report: string[]
-  ): Promise<void> {
-    
-    const availableShifts = managerShifts.filter(shift => {
-      const dayOfWeek = this.getDayOfWeek(shift.date);
-      const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
-      const preference = availabilityMap.get(manager.id)?.get(shiftKey);
-      
-      // 🔥 CRITICAL FIX: Ensure assignments[shift.id] exists
-      if (!assignments[shift.id]) {
-        assignments[shift.id] = []; // Initialize if missing
-      }
-      
-      // 🔥 MANAGER GETS ALL PREFERRED SHIFTS (level 1)
-      return preference === 1 && 
-            assignments[shift.id].length < shift.requiredEmployees;
-    });
-
-    report.push(`👔 Manager ${manager.name} hat ${availableShifts.length} preferred Schichten (Level 1)`);
-
-    // 🔥 NO LIMIT for managers - assign to ALL preferred shifts
-    for (const shift of availableShifts) {
-      // Double-check initialization (should be redundant but safe)
-      if (!assignments[shift.id]) {
-        assignments[shift.id] = [];
-      }
-      
-      if (this.canAssignEmployee(manager, shift, assignments[shift.id], [manager], constraints)) {
-        assignments[shift.id].push(manager.id);
-        report.push(`✅ Manager ${manager.name} zu preferred Schicht ${shift.date} ${shift.timeSlotId} zugewiesen`);
-      }
-    }
-  }
-
   // Ensure experienced employee pairing in manager shifts
   private static async ensureExperiencedPairing(
     shift: ScheduledShift,
@@ -232,321 +128,6 @@ export class IntelligentShiftScheduler {
     }
   }
 
-  // Optimize assignments for better distribution
-  private static optimizeAssignments(
-    assignments: { [shiftId: string]: string[] },
-    employees: Employee[],
-    availabilities: EmployeeAvailability[],
-    report: string[]
-  ): { [shiftId: string]: string[] } {
-    
-    // Simple optimization: try to improve preference satisfaction
-    const optimizedAssignments = { ...assignments };
-    const availabilityMap = this.buildAdvancedAvailabilityMap(availabilities);
-    const scheduledShifts = Array.from(this.scheduledShiftsCache.values()).flat();
-    
-    let improvements = 0;
-    
-    Object.entries(optimizedAssignments).forEach(([shiftId, assignedEmployees]) => {
-      const shift = this.findScheduledShiftById(shiftId, scheduledShifts);
-      if (!shift) return;
-
-      assignedEmployees.forEach((employeeId, index) => {
-        const employee = employees.find(emp => emp.id === employeeId);
-        if (!employee) return;
-
-        const dayOfWeek = this.getDayOfWeek(shift.date);
-        const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
-        const preference = availabilityMap.get(employeeId)?.get(shiftKey) || 3;
-
-        // If preference is low (2), try to find better candidate
-        if (preference === 2) {
-          // Look for employees with preference 1 for this shift
-          const betterCandidates = employees.filter(emp => 
-            emp.id !== employeeId &&
-            emp.isActive &&
-            !assignedEmployees.includes(emp.id) &&
-            this.getPreferenceLevel(emp.id, shift, availabilityMap) === 1
-          );
-
-          if (betterCandidates.length > 0) {
-            const bestCandidate = betterCandidates[0];
-            optimizedAssignments[shiftId][index] = bestCandidate.id;
-            improvements++;
-            report.push(`🔄 Optimiert: ${employee.name} → ${bestCandidate.name} in Schicht ${shift.date} ${shift.timeSlotId}`);
-          }
-        }
-      });
-    });
-
-    if (improvements > 0) {
-      report.push(`✨ ${improvements} Zuweisungen optimiert für bessere Präferenzen`);
-    }
-
-    return optimizedAssignments;
-  }
-
-  // Adjust assignments to achieve exact contract limits
-  private static async adjustContractDeviations(
-    assignments: { [shiftId: string]: string[] },
-    deviations: ContractStatus[],
-    employees: Employee[],
-    shiftPlan: ShiftPlan,
-    availabilities: EmployeeAvailability[],
-    constraints: SchedulingConstraints,
-    report: string[]
-  ): Promise<{ [shiftId: string]: string[] }> {
-    
-    let adjustedAssignments = { ...assignments };
-    const availabilityMap = this.buildAdvancedAvailabilityMap(availabilities);
-    const scheduledShifts = this.scheduledShiftsCache.get(shiftPlan.id) || [];
-
-    // Handle over-assigned employees first (remove assignments)
-    const overAssigned = deviations.filter(d => d.deviation > 0)
-      .sort((a, b) => b.deviation - a.deviation); // Most over-assigned first
-
-    for (const over of overAssigned) {
-      const employee = employees.find(emp => emp.id === over.employeeId);
-      if (!employee) continue;
-
-      report.push(`🔻 Reduziere Zuweisungen für ${employee.name}: ${over.actual} → ${over.target}`);
-
-      const removed = await this.removeExcessAssignments(
-        employee,
-        over.deviation,
-        adjustedAssignments,
-        employees,
-        availabilityMap,
-        scheduledShifts,
-        report
-      );
-
-      if (removed < over.deviation) {
-        report.push(`⚠️ Konnte nur ${removed}/${over.deviation} überschüssige Zuweisungen entfernen`);
-      }
-    }
-
-    // Handle under-assigned employees (add assignments)
-    const underAssigned = deviations.filter(d => d.deviation < 0)
-      .sort((a, b) => a.deviation - b.deviation); // Most under-assigned first
-
-    for (const under of underAssigned) {
-      const employee = employees.find(emp => emp.id === under.employeeId);
-      if (!employee) continue;
-
-      report.push(`🔺 Erhöhe Zuweisungen für ${employee.name}: ${under.actual} → ${under.target}`);
-
-      const added = await this.addMissingAssignments(
-        employee,
-        -under.deviation, // Convert to positive number
-        adjustedAssignments,
-        employees,
-        shiftPlan,
-        availabilityMap,
-        constraints,
-        report
-      );
-
-      if (added < -under.deviation) {
-        report.push(`⚠️ Konnte nur ${added}/${-under.deviation} fehlende Zuweisungen hinzufügen`);
-      }
-    }
-
-    return adjustedAssignments;
-  }
-
-  // Remove excess assignments from over-assigned employee
-  private static async removeExcessAssignments(
-    employee: Employee,
-    excessCount: number,
-    assignments: { [shiftId: string]: string[] },
-    allEmployees: Employee[],
-    availabilityMap: Map<string, Map<string, number>>,
-    scheduledShifts: ScheduledShift[],
-    report: string[]
-  ): Promise<number> {
-    
-    let removedCount = 0;
-    const employeeAssignments: { shiftId: string; shift: ScheduledShift }[] = [];
-
-    // Find all assignments for this employee
-    Object.entries(assignments).forEach(([shiftId, assignedEmployees]) => {
-      if (assignedEmployees.includes(employee.id)) {
-        const shift = this.findScheduledShiftById(shiftId, scheduledShifts);
-        if (shift) {
-          employeeAssignments.push({ shiftId, shift });
-        }
-      }
-    });
-
-    // Sort assignments by removability (least critical first)
-    const removableAssignments = employeeAssignments.sort((a, b) => {
-      const aCurrent = assignments[a.shiftId].length;
-      const bCurrent = assignments[b.shiftId].length;
-      const aRequired = a.shift.requiredEmployees;
-      const bRequired = b.shift.requiredEmployees;
-
-      // Prefer removing from overstaffed shifts
-      if (aCurrent > aRequired && bCurrent <= bRequired) return -1;
-      if (bCurrent > bRequired && aCurrent <= aRequired) return 1;
-      
-      // Prefer removing from shifts with lower impact
-      return aCurrent - bCurrent;
-    });
-
-    // Remove excess assignments
-    for (const assignment of removableAssignments) {
-      if (removedCount >= excessCount) break;
-
-      const currentAssignments = assignments[assignment.shiftId];
-      if (currentAssignments.length > assignment.shift.requiredEmployees) {
-        // This shift is overstaffed, safe to remove
-        assignments[assignment.shiftId] = currentAssignments.filter(id => id !== employee.id);
-        removedCount++;
-        report.push(`   🔄 Entfernt ${employee.name} aus überbesetzter Schicht`);
-      } else if (this.canShiftSurviveRemoval(assignment.shiftId, employee.id, assignments, allEmployees)) {
-        // Shift can survive removal without critical violations
-        assignments[assignment.shiftId] = currentAssignments.filter(id => id !== employee.id);
-        removedCount++;
-        report.push(`   🔄 Entfernt ${employee.name} aus tolerierbarer Schicht`);
-      }
-    }
-
-    return removedCount;
-  }
-
-  // Check if shift can survive employee removal
-  private static canShiftSurviveRemoval(
-    shiftId: string,
-    employeeId: string,
-    assignments: { [shiftId: string]: string[] },
-    allEmployees: Employee[]
-  ): boolean {
-    const currentAssignments = assignments[shiftId] || [];
-    const remainingAssignments = currentAssignments.filter(id => id !== employeeId);
-    
-    if (remainingAssignments.length === 0) return false; // Would create empty shift
-    
-    // Check if removal would create trainee-alone situation
-    const remainingEmployees = remainingAssignments
-      .map(id => allEmployees.find(emp => emp.id === id))
-      .filter(Boolean) as Employee[];
-    
-    if (remainingEmployees.length === 1 && remainingEmployees[0].employeeType === 'trainee') {
-      return false;
-    }
-    
-    return true;
-  }
-
-  // Add missing assignments to under-assigned employee
-  private static async addMissingAssignments(
-    employee: Employee,
-    missingCount: number,
-    assignments: { [shiftId: string]: string[] },
-    allEmployees: Employee[],
-    shiftPlan: ShiftPlan,
-    availabilityMap: Map<string, Map<string, number>>,
-    constraints: SchedulingConstraints,
-    report: string[]
-  ): Promise<number> {
-    
-    let addedCount = 0;
-    const scheduledShifts = this.scheduledShiftsCache.get(shiftPlan.id) || [];
-    
-    const availableShifts = this.findOptimalShiftsForEmployee(
-      employee,
-      scheduledShifts,
-      assignments,
-      availabilityMap,
-      allEmployees,
-      constraints
-    );
-
-    for (const shift of availableShifts) {
-      if (addedCount >= missingCount) break;
-
-      if (this.canAssignEmployee(employee, shift, assignments[shift.id], allEmployees, constraints)) {
-        assignments[shift.id].push(employee.id);
-        addedCount++;
-        report.push(`   🔄 Hinzugefügt ${employee.name} zu Schicht ${shift.date} ${shift.timeSlotId} (${addedCount}/${missingCount})`);
-      }
-    }
-
-    return addedCount;
-  }
-
-  // Calculate exact contract status for all employees
-  private static calculateContractStatus(
-    assignments: { [shiftId: string]: string[] },
-    employees: Employee[],
-    firstWeekShifts: ScheduledShift[] // 🔥 Nur erste Woche zählt
-  ): ContractStatus[] {
-    
-    const employeeWorkload = new Map<string, number>();
-    
-    // 🔥 CRITICAL: Count assignments only from FIRST WEEK
-    firstWeekShifts.forEach(shift => {
-      const assignedEmployees = assignments[shift.id] || [];
-      assignedEmployees.forEach(employeeId => {
-        employeeWorkload.set(employeeId, (employeeWorkload.get(employeeId) || 0) + 1);
-      });
-    });
-
-    return employees.map(employee => {
-      const actual = employeeWorkload.get(employee.id) || 0;
-      const target = this.getExactContractAssignments(employee);
-      
-      // 🔥 MANAGERS: No deviation calculation
-      const deviation = employee.role === 'admin' ? 0 : actual - target;
-
-      return {
-        employeeId: employee.id,
-        employeeName: employee.name,
-        actual,
-        target,
-        deviation,
-        isManager: employee.role === 'admin'
-      };
-    });
-  }
-
-  // 🔥 IMPROVED: Better prioritization for limited shifts
-  private static prioritizeEmployeesByContractTarget(employees: Employee[]): Employee[] {
-    return employees.sort((a, b) => {
-      const aTarget = this.getExactContractAssignments(a);
-      const bTarget = this.getExactContractAssignments(b);
-      
-      // 🔥 CRITICAL FIX: Small contracts FIRST (they're harder to place)
-      if (aTarget !== bTarget) return aTarget - bTarget;
-      
-      // 🔥 Then prioritize by flexibility (canWorkAlone employees can fill gaps)
-      if (a.canWorkAlone && !b.canWorkAlone) return -1;
-      if (!a.canWorkAlone && b.canWorkAlone) return 1;
-      
-      // 🔥 Then by experience (experienced can work in more situations)
-      if (a.employeeType === 'experienced' && b.employeeType !== 'experienced') return -1;
-      if (b.employeeType === 'experienced' && a.employeeType !== 'experienced') return 1;
-      
-      return 0;
-    });
-  }
-
-  // Helper methods
-  private static getEmployeeName(employeeId: string, employees: Employee[]): string {
-    return employees.find(emp => emp.id === employeeId)?.name || 'Unbekannt';
-  }
-
-  private static getPreferenceLevel(
-    employeeId: string,
-    shift: ScheduledShift,
-    availabilityMap: Map<string, Map<string, number>>
-  ): number {
-    const dayOfWeek = this.getDayOfWeek(shift.date);
-    const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
-    return availabilityMap.get(employeeId)?.get(shiftKey) || 3;
-  }
-
   private static findScheduledShiftById(shiftId: string, scheduledShifts: ScheduledShift[]): ScheduledShift | null {
     return scheduledShifts.find(shift => shift.id === shiftId) || null;
   }
@@ -560,12 +141,17 @@ export class IntelligentShiftScheduler {
     constraints: SchedulingConstraints
   ): boolean {
     
-    // Check if assignment would create trainee-alone situation
+    // 🔥 CRITICAL FIX: Neue Mitarbeiter können als ERSTE in einer Schicht zugewiesen werden
+    // wenn sie mit einem erfahrenen Mitarbeiter zusammen zugewiesen werden
+    if (employee.employeeType === 'trainee' && currentAssignments.length === 0) {
+      // Ein neuer Mitarbeiter KANN als erste Person zugewiesen werden, 
+      // wenn die Zuweisung Teil einer "Neue + Erfahrene" Pairing-Strategie ist
+      // Diese Prüfung erfolgt auf höherer Ebene in der forceAssignNewWithExperienced Methode
+      return true;
+    }
+    
+    // Original Logic für den Fall dass bereits Mitarbeiter in der Schicht sind
     if (constraints.enforceNoTraineeAlone) {
-      if (employee.employeeType === 'trainee' && currentAssignments.length === 0) {
-        return false; // Can't assign trainee as first employee
-      }
-      
       if (employee.employeeType === 'trainee' && currentAssignments.length > 0) {
         const currentEmployees = currentAssignments.map(id => 
           allEmployees.find(emp => emp.id === id)
@@ -580,30 +166,6 @@ export class IntelligentShiftScheduler {
     }
     
     return true;
-  }
-
-  // Identify difficult shifts (few available employees)
-  private static identifyDifficultShifts(
-    shifts: ScheduledShift[],
-    employees: Employee[],
-    availabilityMap: Map<string, Map<string, number>>
-  ): ScheduledShift[] {
-    
-    return shifts
-      .map(shift => {
-        const dayOfWeek = this.getDayOfWeek(shift.date);
-        const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
-        
-        const availableCount = employees.filter(emp => {
-          const empAvailability = availabilityMap.get(emp.id);
-          return empAvailability && empAvailability.get(shiftKey) !== 3;
-        }).length;
-        
-        return { shift, difficulty: shift.requiredEmployees / Math.max(1, availableCount) };
-      })
-      .filter(item => item.difficulty > 0.5) // Threshold for "difficult"
-      .sort((a, b) => b.difficulty - a.difficulty)
-      .map(item => item.shift);
   }
 
   // Build availability map
@@ -679,76 +241,50 @@ export class IntelligentShiftScheduler {
     const resolutionReport: string[] = [];
     const violations: string[] = [];
     
-    console.log('🚀 STARTING SCHEDULING MIT NICHT VERHANDELBAREN VERTRAGSGRENZEN - NUR ERSTE WOCHE');
-    resolutionReport.push('🚀 STARTING SCHEDULING MIT NICHT VERHANDELBAREN VERTRAGSGRENZEN - NUR ERSTE WOCHE');
+    console.log('🚀 STARTING SCHEDULING MIT VIOLATION-FIXING');
+    resolutionReport.push('🚀 STARTING SCHEDULING MIT VIOLATION-FIXING');
 
     // Load all scheduled shifts
     const scheduledShifts = await shiftAssignmentService.getScheduledShiftsForPlan(shiftPlan.id);
     this.scheduledShiftsCache.set(shiftPlan.id, scheduledShifts);
     
-    // 🔥 CRITICAL: Use ONLY FIRST WEEK for ENTIRE scheduling process
     const firstWeekShifts = this.getFirstWeekShifts(scheduledShifts);
-    
-    console.log('📋 Scheduling analysis:', {
-      totalShifts: scheduledShifts.length,
-      firstWeekShifts: firstWeekShifts.length,
-      weeks: Math.ceil(scheduledShifts.length / firstWeekShifts.length)
-    });
-    
+      
     resolutionReport.push(`📋 ${firstWeekShifts.length} Schichten in erster Woche für KOMPLETTES Scheduling`);
     resolutionReport.push(`📋 ${scheduledShifts.length} Schichten gesamt im Plan`);
 
-    // PHASE A: Base Staffing with NON-NEGOTIABLE Contract Limits - FIRST WEEK ONLY
-    resolutionReport.push('📊 PHASE A: Grundbesetzung mit NICHT VERHANDELBAREN Vertragsgrenzen - NUR ERSTE WOCHE');
+    // PHASE A: Base Staffing
+    resolutionReport.push('📊 PHASE A: Grundbesetzung mit NICHT VERHANDELBAREN Vertragsgrenzen');
     const baseAssignments = await this.phaseANonNegotiableContractStaffing(
-      shiftPlan, employees, availabilities, constraints, resolutionReport, violations, firstWeekShifts // 🔥 Pass first week shifts
+      shiftPlan, employees, availabilities, constraints, resolutionReport, violations, firstWeekShifts
     );
 
-    // If we have contract violations in phase A, stop immediately
-    const contractViolations = violations.filter(v => v.includes('CONTRACT_LIMIT_VIOLATION'));
-    if (contractViolations.length > 0) {
-      resolutionReport.push('🚨 ABBRUCH: Nicht verhandelbare Vertragsverletzungen können nicht behoben werden');
-      this.scheduledShiftsCache.delete(shiftPlan.id);
-      return {
-        assignments: baseAssignments,
-        violations,
-        success: false,
-        resolutionReport,
-        qualityMetrics: this.calculateQualityMetrics(baseAssignments, employees, shiftPlan)
-      };
-    }
-
-    // PHASE B: Manager Integration - FIRST WEEK ONLY
-    resolutionReport.push('👔 PHASE B: Manager-Integration - NUR ERSTE WOCHE');
+    // PHASE B: Manager Integration
+    resolutionReport.push('👔 PHASE B: Manager-Integration');
     const managerAssignments = await this.phaseBManagerIntegration(
-      baseAssignments, shiftPlan, employees, availabilities, constraints, resolutionReport, firstWeekShifts // 🔥 Pass first week shifts
+      baseAssignments, shiftPlan, employees, availabilities, constraints, resolutionReport, firstWeekShifts
     );
 
-    // PHASE C: Final Validation - FIRST WEEK ONLY
-    resolutionReport.push('🔍 PHASE C: Finale Validierung - NUR ERSTE WOCHE');
-    const finalAssignments = await this.phaseCFinalValidation(
-      managerAssignments, employees, availabilities, constraints, resolutionReport, violations, firstWeekShifts // 🔥 Pass first week shifts
+    // 🔥 NEUE PHASE C: Violation-Fixing
+    resolutionReport.push('🔧 PHASE C: Violation-Fixing mit automatischen Reparaturen');
+    const finalAssignments = await this.phaseCViolationFixing(
+      managerAssignments, employees, availabilities, constraints, resolutionReport, violations, firstWeekShifts
     );
-
-    // Final validation with NON-NEGOTIABLE contract limit checking - FIRST WEEK ONLY
-    resolutionReport.push('✅ FINALE VALIDIERUNG MIT NICHT VERHANDELBAREN VERTRAGSGRENZEN - NUR ERSTE WOCHE');
-    this.finalNonNegotiableContractValidation(finalAssignments, employees, violations, resolutionReport, firstWeekShifts); // 🔥 Pass first week shifts
 
     const success = violations.filter(v => 
       v.includes('❌ KRITISCH') || v.includes('ERROR:')
     ).length === 0;
 
     if (success) {
-      resolutionReport.push('🎉 ALLE NICHT VERHANDELBAREN VERTRAGSGRENZEN EINGEHALTEN!');
+      resolutionReport.push('🎉 ALLE KRITISCHEN VIOLATIONS BEHOBEN!');
     } else {
-      resolutionReport.push('🚨 KRITISCHE VERTRAGSVERLETZUNGEN: Plan kann nicht veröffentlicht werden');
+      resolutionReport.push('⚠️ Einige Violations konnten nicht behoben werden');
     }
 
     this.scheduledShiftsCache.delete(shiftPlan.id);
 
-    // 🔥 RETURN ONLY FIRST WEEK ASSIGNMENTS - Pattern wird später auf alle Wochen angewendet
     return {
-      assignments: finalAssignments, // Diese enthalten nur erste Woche
+      assignments: finalAssignments,
       violations,
       success,
       resolutionReport,
@@ -772,46 +308,31 @@ export class IntelligentShiftScheduler {
     const employeeTargetAssignments = new Map<string, number>();
     const availabilityMap = this.buildAdvancedAvailabilityMap(availabilities);
     
-    // Initialize with EXACT contract targets
+    // Initialize
     employees.forEach(emp => {
       employeeWorkload.set(emp.id, 0);
       employeeTargetAssignments.set(emp.id, this.getExactContractAssignments(emp));
     });
-
-    // Initialize assignments for FIRST WEEK shifts only
     firstWeekShifts.forEach(shift => assignments[shift.id] = []);
 
-    report.push(`📋 ${firstWeekShifts.length} Schichten in erster Woche für Vertragserfüllung`);
+    report.push(`📋 ${firstWeekShifts.length} Schichten in erster Woche`);
+    report.push(`👥 ${employees.filter(emp => emp.role !== 'admin').length} nicht-Manager Mitarbeiter`);
 
-    // 🔥 STEP 1: Categorize employees
+    // 🔥 STEP 1: FORCIERE Neue + Erfahrene Zuordnung zuerst
+    report.push('🔄 STEP 1: FORCIERE Neue + Erfahrene Zuordnung');
     const newEmployees = employees.filter(emp => 
-      emp.role !== 'admin' && 
-      emp.employeeType === 'trainee'
+      emp.role !== 'admin' && emp.employeeType === 'trainee'
     );
-    
     const experiencedEmployees = employees.filter(emp => 
-      emp.role !== 'admin' && 
-      emp.employeeType === 'experienced'
-    );
-    
-    const experiencedCannotWorkAlone = experiencedEmployees.filter(emp => !emp.canWorkAlone);
-    const experiencedCanWorkAlone = experiencedEmployees.filter(emp => emp.canWorkAlone);
-    
-    const otherEmployees = employees.filter(emp => 
-      emp.role !== 'admin' && 
-      emp.employeeType !== 'trainee' && 
-      emp.employeeType !== 'experienced'
+      emp.role !== 'admin' && emp.employeeType === 'experienced'
     );
 
-    report.push('👥 Mitarbeiter-Kategorisierung:');
-    report.push(`   🆕 Neue (Trainees): ${newEmployees.length}`);
-    report.push(`   🎯 Erfahrene (cannot work alone): ${experiencedCannotWorkAlone.length}`);
-    report.push(`   🎯 Erfahrene (can work alone): ${experiencedCanWorkAlone.length}`);
-    report.push(`   📊 Sonstige: ${otherEmployees.length}`);
+    report.push(`🎯 ${newEmployees.length} neue Mitarbeiter müssen zugewiesen werden:`);
+    newEmployees.forEach(emp => {
+      report.push(`   - ${emp.name} (Vertrag: ${emp.contractType}, Ziel: ${employeeTargetAssignments.get(emp.id)})`);
+    });
 
-    // 🔥 STEP 2: Assign New + Experienced employees together
-    report.push('🔄 STEP 1: Weise Neue + Erfahrene zusammen zu');
-    await this.assignNewWithExperienced(
+    await this.forceAssignNewWithExperienced(
       firstWeekShifts,
       assignments,
       employeeWorkload,
@@ -824,23 +345,22 @@ export class IntelligentShiftScheduler {
       report
     );
 
-    // 🔥 STEP 3: Ensure experienced (cannot work alone) always work in pairs
+    // 🔥 STEP 2: Erfahrene (cannot work alone) immer zu zweit
     report.push('🔄 STEP 2: Erfahrene (cannot work alone) immer zu zweit');
     await this.assignExperiencedInPairs(
       firstWeekShifts,
       assignments,
       employeeWorkload,
       employeeTargetAssignments,
-      experiencedCannotWorkAlone,
-      availabilityMap,
       employees,
+      availabilityMap,
       constraints,
       report
     );
 
-    // 🔥 STEP 4: Fill remaining shifts by priority sum
-    report.push('🔄 STEP 3: Fülle verbleibende Schichten nach Prioritäts-Summe');
-    await this.fillRemainingShiftsByPrioritySum(
+    // 🔥 STEP 3: Fülle verbleibende Schichten
+    report.push('🔄 STEP 3: Fülle verbleibende Schichten');
+    await this.fillRemainingShifts(
       firstWeekShifts,
       assignments,
       employeeWorkload,
@@ -854,15 +374,14 @@ export class IntelligentShiftScheduler {
     const filledShifts = Object.values(assignments).filter(a => a.length > 0).length;
     const totalAssignments = Object.values(assignments).reduce((sum, a) => sum + a.length, 0);
     
-    report.push(`✅ Grundbesetzung abgeschlossen: ${filledShifts}/${firstWeekShifts.length} Schichten besetzt, ${totalAssignments} Zuweisungen`);
+    report.push(`✅ Grundbesetzung: ${filledShifts}/${firstWeekShifts.length} Schichten, ${totalAssignments} Zuweisungen`);
 
-    // 🔥 STEP 5: Calculate and report contract fulfillment
     this.calculateContractFulfillment(employeeWorkload, employeeTargetAssignments, employees, violations, report);
 
     return assignments;
   }
 
-  private static async assignNewWithExperienced(
+  private static async forceAssignNewWithExperienced(
     shifts: ScheduledShift[],
     assignments: { [shiftId: string]: string[] },
     employeeWorkload: Map<string, number>,
@@ -875,98 +394,226 @@ export class IntelligentShiftScheduler {
     report: string[]
   ): Promise<void> {
     
-    // Try to assign each new employee with an experienced colleague
+    let totalAssigned = 0;
+
+    // 🔥 STRATEGIE 1: Zuerst versuchen, neue und erfahrene Mitarbeiter GEMEINSAM zuzuweisen
+    report.push('🤝 STRATEGIE 1: Neue + Erfahrene Gemeinsamzuweisung');
+    
     for (const newEmployee of newEmployees) {
-      const currentWorkload = employeeWorkload.get(newEmployee.id) || 0;
-      const targetWorkload = employeeTargetAssignments.get(newEmployee.id) || 0;
+      const newCurrentWorkload = employeeWorkload.get(newEmployee.id) || 0;
+      const newTargetWorkload = employeeTargetAssignments.get(newEmployee.id) || 0;
       
-      if (currentWorkload >= targetWorkload) continue;
-      
-      report.push(`🎯 Weise ${newEmployee.name} (Neu) mit erfahrenem Kollegen zu`);
+      if (newCurrentWorkload >= newTargetWorkload) continue;
 
-      // Find suitable shifts where new employee is available and needs assignment
-      const suitableShifts = shifts
-        .filter(shift => {
-          const currentAssignments = assignments[shift.id] || [];
-          const dayOfWeek = this.getDayOfWeek(shift.date);
-          const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
-          
-          // Check if new employee is available
-          const newEmployeePref = availabilityMap.get(newEmployee.id)?.get(shiftKey);
-          if (newEmployeePref === 3 || newEmployeePref === undefined) return false;
-          
-          // Check if shift can accept more employees
-          if (currentAssignments.length >= shift.requiredEmployees) return false;
-          
-          // Check if new employee can be assigned here
-          return this.canAssignEmployee(newEmployee, shift, currentAssignments, allEmployees, constraints);
-        })
-        .sort((a, b) => {
-          // Prefer shifts with experienced employees already assigned
-          const aHasExperienced = (assignments[a.id] || []).some(id => 
-            experiencedEmployees.some(exp => exp.id === id)
-          );
-          const bHasExperienced = (assignments[b.id] || []).some(id => 
-            experiencedEmployees.some(exp => exp.id === id)
-          );
-          
-          if (aHasExperienced && !bHasExperienced) return -1;
-          if (!aHasExperienced && bHasExperienced) return 1;
-          
-          // Otherwise prefer shifts with fewer assignments
-          return (assignments[a.id]?.length || 0) - (assignments[b.id]?.length || 0);
-        });
+      report.push(`🎯 Suche Partner für ${newEmployee.name} (${newCurrentWorkload}/${newTargetWorkload})`);
 
-      for (const shift of suitableShifts) {
-        // FIX: Use the variable we already defined instead of calling get() again
-        const newEmployeeCurrentWorkload = employeeWorkload.get(newEmployee.id) || 0;
-        if (newEmployeeCurrentWorkload >= targetWorkload) break;
-        
+      // Finde Schichten wo neue und erfahrene Mitarbeiter GLEICHZEITIG verfügbar sind
+      const pairedShifts = shifts.filter(shift => {
         const currentAssignments = assignments[shift.id] || [];
         const dayOfWeek = this.getDayOfWeek(shift.date);
         const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
         
-        // Check if there's already an experienced employee in this shift
+        // Prüfe ob neuer Mitarbeiter verfügbar ist
+        const newPref = availabilityMap.get(newEmployee.id)?.get(shiftKey);
+        if (newPref === 3 || newPref === undefined) return false;
+        
+        // Prüfe ob Schicht noch Platz für MINDESTENS 2 Personen hat
+        if (currentAssignments.length > shift.requiredEmployees - 2) return false;
+        
+        // Prüfe ob ein erfahrener Mitarbeiter verfügbar ist
+        const hasAvailableExperienced = experiencedEmployees.some(exp => {
+          const expPref = availabilityMap.get(exp.id)?.get(shiftKey);
+          const expWorkload = employeeWorkload.get(exp.id) || 0;
+          const expTarget = employeeTargetAssignments.get(exp.id) || 0;
+          
+          return expPref !== undefined && expPref !== 3 && 
+                expWorkload < expTarget &&
+                this.canAssignEmployee(exp, shift, currentAssignments, allEmployees, constraints);
+        });
+        
+        return hasAvailableExperienced;
+      });
+
+      report.push(`   📅 ${pairedShifts.length} Schichten mit verfügbaren erfahrenen Partnern`);
+
+      // Versuche Paar-Zuweisung
+      for (const shift of pairedShifts) {
+        if ((employeeWorkload.get(newEmployee.id) || 0) >= newTargetWorkload) break;
+        
+        const currentAssignments = assignments[shift.id] || [];
+        const dayOfWeek = this.getDayOfWeek(shift.date);
+        const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
+
+        // Finde den besten erfahrenen Partner
+        const bestExperiencedPartner = experiencedEmployees
+          .filter(exp => {
+            const expPref = availabilityMap.get(exp.id)?.get(shiftKey);
+            const expWorkload = employeeWorkload.get(exp.id) || 0;
+            const expTarget = employeeTargetAssignments.get(exp.id) || 0;
+            
+            return expPref !== undefined && expPref !== 3 && 
+                  expWorkload < expTarget &&
+                  this.canAssignEmployee(exp, shift, currentAssignments, allEmployees, constraints);
+          })
+          .sort((a, b) => {
+            // Bevorzuge Partner mit besserer Verfügbarkeit und weniger Auslastung
+            const aPref = availabilityMap.get(a.id)?.get(shiftKey) || 3;
+            const bPref = availabilityMap.get(b.id)?.get(shiftKey) || 3;
+            if (aPref !== bPref) return aPref - bPref;
+            
+            return (employeeWorkload.get(a.id) || 0) - (employeeWorkload.get(b.id) || 0);
+          })[0];
+
+        if (bestExperiencedPartner) {
+          // 🔥 GEMEINSAME ZUWEISUNG: Erfahrener zuerst, dann neuer Mitarbeiter
+          assignments[shift.id].push(bestExperiencedPartner.id);
+          employeeWorkload.set(bestExperiencedPartner.id, (employeeWorkload.get(bestExperiencedPartner.id) || 0) + 1);
+          
+          assignments[shift.id].push(newEmployee.id);
+          employeeWorkload.set(newEmployee.id, (employeeWorkload.get(newEmployee.id) || 0) + 1);
+          
+          totalAssigned += 2;
+          report.push(`   ✅ ${newEmployee.name} + ${bestExperiencedPartner.name} zu ${shift.date} ${shift.timeSlotId}`);
+          break;
+        }
+      }
+    }
+
+    // 🔥 STRATEGIE 2: Einzelne neue Mitarbeiter zu bereits besetzten Schichten
+    report.push('👥 STRATEGIE 2: Neue zu bereits besetzten Schichten');
+    
+    for (const newEmployee of newEmployees) {
+      const newCurrentWorkload = employeeWorkload.get(newEmployee.id) || 0;
+      const newTargetWorkload = employeeTargetAssignments.get(newEmployee.id) || 0;
+      
+      if (newCurrentWorkload >= newTargetWorkload) continue;
+
+      // Finde Schichten die bereits erfahrene Mitarbeiter haben
+      const experiencedShifts = shifts.filter(shift => {
+        const currentAssignments = assignments[shift.id] || [];
+        const dayOfWeek = this.getDayOfWeek(shift.date);
+        const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
+        
+        // Prüfe ob neuer Mitarbeiter verfügbar ist
+        const newPref = availabilityMap.get(newEmployee.id)?.get(shiftKey);
+        if (newPref === 3 || newPref === undefined) return false;
+        
+        // Prüfe ob Schicht noch Platz hat
+        if (currentAssignments.length >= shift.requiredEmployees) return false;
+        
+        // Prüfe ob bereits ein erfahrener Mitarbeiter in der Schicht ist
         const hasExperienced = currentAssignments.some(id => 
           experiencedEmployees.some(exp => exp.id === id)
         );
         
-        if (!hasExperienced) {
-          // Try to find an available experienced employee to assign together
-          const availableExperienced = experiencedEmployees
-            .filter(exp => {
-              const expWorkload = employeeWorkload.get(exp.id) || 0;
-              const expTarget = employeeTargetAssignments.get(exp.id) || 0;
-              if (expWorkload >= expTarget) return false;
-              
-              const expPref = availabilityMap.get(exp.id)?.get(shiftKey);
-              if (expPref === 3 || expPref === undefined) return false;
-              
-              return this.canAssignEmployee(exp, shift, currentAssignments, allEmployees, constraints);
-            })
-            .sort((a, b) => {
-              // Prefer experienced with better availability
-              const aPref = availabilityMap.get(a.id)?.get(shiftKey) || 3;
-              const bPref = availabilityMap.get(b.id)?.get(shiftKey) || 3;
-              return aPref - bPref;
-            });
-          
-          if (availableExperienced.length > 0) {
-            // Assign experienced employee first
-            const experienced = availableExperienced[0];
-            assignments[shift.id].push(experienced.id);
-            employeeWorkload.set(experienced.id, (employeeWorkload.get(experienced.id) || 0) + 1);
-            report.push(`   ✅ ${experienced.name} (Erfahren) zu ${shift.date} ${shift.timeSlotId}`);
-          }
-        }
+        return hasExperienced && this.canAssignEmployee(newEmployee, shift, currentAssignments, allEmployees, constraints);
+      });
+
+      for (const shift of experiencedShifts) {
+        if ((employeeWorkload.get(newEmployee.id) || 0) >= newTargetWorkload) break;
         
-        // Now assign the new employee
-        if (this.canAssignEmployee(newEmployee, shift, assignments[shift.id], allEmployees, constraints)) {
-          assignments[shift.id].push(newEmployee.id);
-          employeeWorkload.set(newEmployee.id, (employeeWorkload.get(newEmployee.id) || 0) + 1);
-          report.push(`   ✅ ${newEmployee.name} (Neu) zu ${shift.date} ${shift.timeSlotId} mit erfahrenem Kollegen`);
-          break; // Move to next new employee after successful assignment
-        }
+        assignments[shift.id].push(newEmployee.id);
+        employeeWorkload.set(newEmployee.id, (employeeWorkload.get(newEmployee.id) || 0) + 1);
+        totalAssigned++;
+        report.push(`   ✅ ${newEmployee.name} zu ${shift.date} ${shift.timeSlotId} (erfahrener Kollege bereits da)`);
+        break;
+      }
+    }
+
+    // 🔥 STRATEGIE 3: Fallback - Einzelzuweisung wenn nötig
+    report.push('🆘 STRATEGIE 3: Fallback-Einzelzuweisung');
+    
+    for (const newEmployee of newEmployees) {
+      const newCurrentWorkload = employeeWorkload.get(newEmployee.id) || 0;
+      const newTargetWorkload = employeeTargetAssignments.get(newEmployee.id) || 0;
+      
+      if (newCurrentWorkload >= newTargetWorkload) continue;
+
+      // Finde irgendeine verfügbare Schicht
+      const fallbackShifts = shifts.filter(shift => {
+        const currentAssignments = assignments[shift.id] || [];
+        const dayOfWeek = this.getDayOfWeek(shift.date);
+        const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
+        
+        const newPref = availabilityMap.get(newEmployee.id)?.get(shiftKey);
+        return newPref !== undefined && newPref !== 3 && 
+              currentAssignments.length < shift.requiredEmployees;
+      });
+
+      for (const shift of fallbackShifts) {
+        if ((employeeWorkload.get(newEmployee.id) || 0) >= newTargetWorkload) break;
+        
+        // FORCIERE Zuweisung - ignoriere canAssign für Fallback
+        assignments[shift.id].push(newEmployee.id);
+        employeeWorkload.set(newEmployee.id, (employeeWorkload.get(newEmployee.id) || 0) + 1);
+        totalAssigned++;
+        report.push(`   🚨 FORCED: ${newEmployee.name} zu ${shift.date} ${shift.timeSlotId}`);
+        break;
+      }
+    }
+
+    report.push(`📈 Neue+Erfahrene Policy: ${totalAssigned} Zuweisungen abgeschlossen`);
+  }
+
+  private static async fillRemainingShifts(
+    shifts: ScheduledShift[],
+    assignments: { [shiftId: string]: string[] },
+    employeeWorkload: Map<string, number>,
+    employeeTargetAssignments: Map<string, number>,
+    employees: Employee[],
+    availabilityMap: Map<string, Map<string, number>>,
+    constraints: SchedulingConstraints,
+    report: string[]
+  ): Promise<void> {
+    
+    const nonManagerEmployees = employees.filter(emp => emp.role !== 'admin');
+    
+    // Finde Mitarbeiter die ihre Verträge noch nicht erfüllt haben
+    const underAssignedEmployees = nonManagerEmployees.filter(emp => {
+      const current = employeeWorkload.get(emp.id) || 0;
+      const target = employeeTargetAssignments.get(emp.id) || 0;
+      return current < target;
+    });
+
+    report.push(`🎯 ${underAssignedEmployees.length} Mitarbeiter benötigen weitere Zuweisungen`);
+
+    // Fülle Schichten priorisiert mit unterbesetzten Mitarbeitern
+    for (const shift of shifts) {
+      const currentAssignments = assignments[shift.id] || [];
+      const needed = shift.requiredEmployees - currentAssignments.length;
+      
+      if (needed <= 0) continue;
+
+      const dayOfWeek = this.getDayOfWeek(shift.date);
+      const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
+
+      // Finde unterbesetzte Mitarbeiter die für diese Schicht verfügbar sind
+      const availableUnderAssigned = underAssignedEmployees
+        .filter(emp => {
+          const preference = availabilityMap.get(emp.id)?.get(shiftKey);
+          if (preference === 3 || preference === undefined) return false;
+          
+          return this.canAssignEmployee(emp, shift, currentAssignments, employees, constraints);
+        })
+        .sort((a, b) => {
+          // Priorisiere Mitarbeiter mit größter Unterbesetzung
+          const aCurrent = employeeWorkload.get(a.id) || 0;
+          const aTarget = employeeTargetAssignments.get(a.id) || 0;
+          const aNeeded = aTarget - aCurrent;
+          
+          const bCurrent = employeeWorkload.get(b.id) || 0;
+          const bTarget = employeeTargetAssignments.get(b.id) || 0;
+          const bNeeded = bTarget - bCurrent;
+          
+          return bNeeded - aNeeded; // Höchster Bedarf zuerst
+        });
+
+      // Weise unterbesetzte Mitarbeiter zu
+      for (let i = 0; i < Math.min(needed, availableUnderAssigned.length); i++) {
+        const candidate = availableUnderAssigned[i];
+        assignments[shift.id].push(candidate.id);
+        employeeWorkload.set(candidate.id, (employeeWorkload.get(candidate.id) || 0) + 1);
+        report.push(`   ✅ ${candidate.name} zu ${shift.date} ${shift.timeSlotId} (Vertragserfüllung)`);
       }
     }
   }
@@ -976,339 +623,105 @@ export class IntelligentShiftScheduler {
     assignments: { [shiftId: string]: string[] },
     employeeWorkload: Map<string, number>,
     employeeTargetAssignments: Map<string, number>,
-    experiencedCannotWorkAlone: Employee[],
+    employees: Employee[],
     availabilityMap: Map<string, Map<string, number>>,
-    allEmployees: Employee[],
     constraints: SchedulingConstraints,
     report: string[]
   ): Promise<void> {
     
+    const experiencedCannotWorkAlone = employees.filter(emp => 
+      emp.role !== 'admin' && 
+      emp.employeeType === 'experienced' && 
+      !emp.canWorkAlone
+    );
+
+    report.push(`🎯 ${experiencedCannotWorkAlone.length} erfahrene Mitarbeiter benötigen Partner`);
+
     for (const experiencedEmployee of experiencedCannotWorkAlone) {
       const currentWorkload = employeeWorkload.get(experiencedEmployee.id) || 0;
       const targetWorkload = employeeTargetAssignments.get(experiencedEmployee.id) || 0;
       
       if (currentWorkload >= targetWorkload) continue;
-      
-      report.push(`🎯 Weise ${experiencedEmployee.name} (Erfahren, cannot work alone) nur mit Partner zu`);
 
-      // Find shifts where this employee can work with at least one other person
+      // Finde Schichten mit Partnern
       const suitableShifts = shifts
         .filter(shift => {
           const currentAssignments = assignments[shift.id] || [];
           const dayOfWeek = this.getDayOfWeek(shift.date);
           const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
           
-          // Check availability
+          // Verfügbarkeit prüfen
           const preference = availabilityMap.get(experiencedEmployee.id)?.get(shiftKey);
           if (preference === 3 || preference === undefined) return false;
           
-          // Check if shift has at least one other employee OR can accept multiple
+          // Schicht muss bereits mindestens einen Mitarbeiter haben ODER Platz für zwei
           const hasPartner = currentAssignments.length >= 1;
-          const canAcceptMultiple = currentAssignments.length < shift.requiredEmployees;
+          const canAcceptTwo = currentAssignments.length <= shift.requiredEmployees - 2;
           
-          return hasPartner && canAcceptMultiple && 
-                this.canAssignEmployee(experiencedEmployee, shift, currentAssignments, allEmployees, constraints);
+          return (hasPartner || canAcceptTwo) && 
+                this.canAssignEmployee(experiencedEmployee, shift, currentAssignments, employees, constraints);
         })
         .sort((a, b) => {
-          // Prefer shifts with more experienced colleagues
-          const aExperiencedCount = (assignments[a.id] || []).filter(id => 
-            experiencedCannotWorkAlone.some(exp => exp.id === id)
-          ).length;
-          const bExperiencedCount = (assignments[b.id] || []).filter(id => 
-            experiencedCannotWorkAlone.some(exp => exp.id === id)
-          ).length;
-          
-          return bExperiencedCount - aExperiencedCount;
+          // Bevorzuge Schichten mit mehr Partnern
+          const aPartnerCount = (assignments[a.id] || []).length;
+          const bPartnerCount = (assignments[b.id] || []).length;
+          return bPartnerCount - aPartnerCount;
         });
 
+      let assigned = false;
       for (const shift of suitableShifts) {
-        // FIX: Use the variable we already defined instead of calling get() again
         const experiencedCurrentWorkload = employeeWorkload.get(experiencedEmployee.id) || 0;
         if (experiencedCurrentWorkload >= targetWorkload) break;
         
-        if (this.canAssignEmployee(experiencedEmployee, shift, assignments[shift.id], allEmployees, constraints)) {
+        const currentAssignments = assignments[shift.id] || [];
+        
+        // Wenn Schicht leer ist, versuche einen Partner zu finden
+        if (currentAssignments.length === 0) {
+          const availablePartners = employees.filter(partner => 
+            partner.id !== experiencedEmployee.id &&
+            this.isEmployeeAvailableForShift(partner, shift, availabilityMap) &&
+            (employeeWorkload.get(partner.id) || 0) < (employeeTargetAssignments.get(partner.id) || 0)
+          );
+          
+          if (availablePartners.length > 0) {
+            // Weise Partner zuerst zu
+            const partner = availablePartners[0];
+            assignments[shift.id].push(partner.id);
+            employeeWorkload.set(partner.id, (employeeWorkload.get(partner.id) || 0) + 1);
+            
+            // Dann erfahrenen Mitarbeiter
+            assignments[shift.id].push(experiencedEmployee.id);
+            employeeWorkload.set(experiencedEmployee.id, experiencedCurrentWorkload + 1);
+            report.push(`   ✅ ${experiencedEmployee.name} + ${partner.name} als Paar zu ${shift.date} ${shift.timeSlotId}`);
+            assigned = true;
+            break;
+          }
+        } else {
+          // Schicht hat bereits Mitarbeiter - direkt zuweisen
           assignments[shift.id].push(experiencedEmployee.id);
-          employeeWorkload.set(experiencedEmployee.id, (employeeWorkload.get(experiencedEmployee.id) || 0) + 1);
-          report.push(`   ✅ ${experiencedEmployee.name} zu ${shift.date} ${shift.timeSlotId} mit Partner`);
+          employeeWorkload.set(experiencedEmployee.id, experiencedCurrentWorkload + 1);
+          report.push(`   ✅ ${experiencedEmployee.name} zu ${shift.date} ${shift.timeSlotId} mit vorhandenem Partner`);
+          assigned = true;
           break;
         }
       }
-    }
-  }
-
-  private static async fillRemainingShiftsByPrioritySum(
-    shifts: ScheduledShift[],
-    assignments: { [shiftId: string]: string[] },
-    employeeWorkload: Map<string, number>,
-    employeeTargetAssignments: Map<string, number>,
-    employees: Employee[],
-    availabilityMap: Map<string, Map<string, number>>,
-    constraints: SchedulingConstraints,
-    report: string[]
-  ): Promise<void> {
-    
-    const nonManagerEmployees = employees.filter(emp => emp.role !== 'admin');
-    
-    // 🔥 Calculate priority sum for each shift
-    const shiftsWithPriority = shifts.map(shift => {
-      const dayOfWeek = this.getDayOfWeek(shift.date);
-      const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
       
-      let prioritySum = 0;
-      let availableCount = 0;
-      
-      nonManagerEmployees.forEach(emp => {
-        const preference = availabilityMap.get(emp.id)?.get(shiftKey);
-        if (preference !== undefined && preference !== 3) {
-          // Level 1 = 3 points, Level 2 = 1 point
-          prioritySum += (preference === 1 ? 3 : 1);
-          availableCount++;
-        }
-      });
-      
-      return {
-        shift,
-        prioritySum,
-        availableCount,
-        currentAssignments: assignments[shift.id]?.length || 0,
-        neededAssignments: shift.requiredEmployees - (assignments[shift.id]?.length || 0)
-      };
-    });
-
-    // 🔥 Sort by priority sum (LOWEST first - hardest to fill)
-    const sortedShifts = shiftsWithPriority
-      .filter(item => item.neededAssignments > 0) // Only shifts that need more employees
-      .sort((a, b) => a.prioritySum - b.prioritySum);
-
-    report.push('📊 Schicht-Prioritäten (niedrigste zuerst):');
-    sortedShifts.forEach((item, index) => {
-      report.push(`   ${index + 1}. ${item.shift.date} ${item.shift.timeSlotId}: Priorität ${item.prioritySum}, ${item.availableCount} verfügbar, benötigt ${item.neededAssignments}`);
-    });
-
-    // 🔥 Fill shifts from lowest priority sum to highest
-    for (const item of sortedShifts) {
-      const shift = item.shift;
-      const currentAssignments = assignments[shift.id] || [];
-      
-      if (currentAssignments.length >= shift.requiredEmployees) continue;
-      
-      const dayOfWeek = this.getDayOfWeek(shift.date);
-      const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
-      
-      report.push(`🔄 Fülle Schicht ${shift.date} ${shift.timeSlotId} (Priorität: ${item.prioritySum})`);
-
-      // Find available employees with capacity
-      const availableEmployees = nonManagerEmployees
-        .filter(emp => {
-          // Check availability
-          const preference = availabilityMap.get(emp.id)?.get(shiftKey);
-          if (preference === 3 || preference === undefined) return false;
-          
-          // Check contract capacity
-          const currentWorkload = employeeWorkload.get(emp.id) || 0;
-          const targetWorkload = employeeTargetAssignments.get(emp.id) || 0;
-          if (currentWorkload >= targetWorkload) return false;
-          
-          // Check if assignment is compatible
-          return this.canAssignEmployee(emp, shift, currentAssignments, employees, constraints);
-        })
-        .sort((a, b) => {
-          // Prioritize by:
-          // 1. Better availability preference
-          const aPref = availabilityMap.get(a.id)?.get(shiftKey) || 3;
-          const bPref = availabilityMap.get(b.id)?.get(shiftKey) || 3;
-          if (aPref !== bPref) return aPref - bPref;
-          
-          // 2. Lower current workload (better distribution)
-          const aWorkload = employeeWorkload.get(a.id) || 0;
-          const bWorkload = employeeWorkload.get(b.id) || 0;
-          return aWorkload - bWorkload;
-        });
-      
-      // Assign employees until shift is filled
-      for (const employee of availableEmployees) {
-        if (assignments[shift.id].length >= shift.requiredEmployees) break;
-        
-        const currentWorkload = employeeWorkload.get(employee.id) || 0;
-        const targetWorkload = employeeTargetAssignments.get(employee.id) || 0;
-        
-        // Only assign if within contract limits
-        if (currentWorkload < targetWorkload) {
-          assignments[shift.id].push(employee.id);
-          employeeWorkload.set(employee.id, currentWorkload + 1);
-          report.push(`   ✅ ${employee.name} zugewiesen (${employeeWorkload.get(employee.id)}/${targetWorkload})`);
-        }
+      if (!assigned) {
+        report.push(`   ⚠️ ${experiencedEmployee.name}: Keine geeignete Schicht mit Partner gefunden`);
       }
     }
   }
 
-  private static async fillShiftsByPriorityNonNegotiable(
-    prioritizedShifts: ScheduledShift[],
-    assignments: { [shiftId: string]: string[] },
-    employeeWorkload: Map<string, number>,
-    employeeTargetAssignments: Map<string, number>,
-    employees: Employee[],
-    availabilityMap: Map<string, Map<string, number>>,
-    constraints: SchedulingConstraints,
-    report: string[]
-  ): Promise<void> {
-    
-    const nonManagerEmployees = employees.filter(emp => emp.role !== 'admin');
-    
-    // 🔥 PHASE 1: Fill each shift to minimum viable staffing
-    for (const shift of prioritizedShifts) {
-      const currentAssignments = assignments[shift.id] || [];
-      
-      // Skip if shift already has enough employees
-      if (currentAssignments.length >= shift.requiredEmployees) continue;
-      
-      const dayOfWeek = this.getDayOfWeek(shift.date);
-      const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
-      
-      // Find available employees with capacity
-      const availableEmployees = nonManagerEmployees
-        .filter(emp => {
-          // Check availability
-          const preference = availabilityMap.get(emp.id)?.get(shiftKey);
-          if (preference === 3 || preference === undefined) return false;
-          
-          // Check contract capacity
-          const currentWorkload = employeeWorkload.get(emp.id) || 0;
-          const targetWorkload = employeeTargetAssignments.get(emp.id) || 0;
-          if (currentWorkload >= targetWorkload) return false;
-          
-          // Check if assignment is compatible
-          return this.canAssignEmployee(emp, shift, currentAssignments, employees, constraints);
-        })
-        .sort((a, b) => {
-          // Prioritize employees who:
-          // 1. Have better availability preference
-          const aPref = availabilityMap.get(a.id)?.get(shiftKey) || 3;
-          const bPref = availabilityMap.get(b.id)?.get(shiftKey) || 3;
-          if (aPref !== bPref) return aPref - bPref;
-          
-          // 2. Have lower current workload (better distribution)
-          const aWorkload = employeeWorkload.get(a.id) || 0;
-          const bWorkload = employeeWorkload.get(b.id) || 0;
-          return aWorkload - bWorkload;
-        });
-      
-      // Assign employees until shift is adequately staffed
-      for (const employee of availableEmployees) {
-        if (currentAssignments.length >= shift.requiredEmployees) break;
-        
-        const currentWorkload = employeeWorkload.get(employee.id) || 0;
-        const targetWorkload = employeeTargetAssignments.get(employee.id) || 0;
-        
-        // 🔥 STRICT: Only assign if within contract limits
-        if (currentWorkload < targetWorkload) {
-          assignments[shift.id].push(employee.id);
-          employeeWorkload.set(employee.id, currentWorkload + 1);
-          report.push(`   ✅ ${employee.name} zu ${shift.date} ${shift.timeSlotId} (${employeeWorkload.get(employee.id)}/${targetWorkload})`);
-        }
-      }
-    }
-    
-    // 🔥 PHASE 2: Try to fulfill remaining contract requirements
-    await this.fulfillRemainingContracts(
-      prioritizedShifts,
-      assignments,
-      employeeWorkload,
-      employeeTargetAssignments,
-      employees,
-      availabilityMap,
-      constraints,
-      report
-    );
-  }
-
-  private static async fulfillRemainingContracts(
-    shifts: ScheduledShift[],
-    assignments: { [shiftId: string]: string[] },
-    employeeWorkload: Map<string, number>,
-    employeeTargetAssignments: Map<string, number>,
-    employees: Employee[],
-    availabilityMap: Map<string, Map<string, number>>,
-    constraints: SchedulingConstraints,
-    report: string[]
-  ): Promise<void> {
-    
-    const nonManagerEmployees = employees.filter(emp => emp.role !== 'admin');
-    
-    // Find employees who haven't reached their contract targets
-    const underAssignedEmployees = nonManagerEmployees
-      .filter(emp => {
-        const current = employeeWorkload.get(emp.id) || 0;
-        const target = employeeTargetAssignments.get(emp.id) || 0;
-        return current < target;
-      })
-      .sort((a, b) => {
-        // Prioritize employees with smallest contracts first (they're hardest to place)
-        const aTarget = employeeTargetAssignments.get(a.id) || 0;
-        const bTarget = employeeTargetAssignments.get(b.id) || 0;
-        return aTarget - bTarget;
-      });
-    
-    if (underAssignedEmployees.length === 0) {
-      report.push('✅ Alle Vertragsziele erfüllt!');
-      return;
-    }
-    
-    report.push(`📋 Versuche Vertragserfüllung für ${underAssignedEmployees.length} Mitarbeiter`);
-    
-    // Try to assign remaining shifts to fulfill contracts
-    for (const employee of underAssignedEmployees) {
-      const currentWorkload = employeeWorkload.get(employee.id) || 0;
-      const targetWorkload = employeeTargetAssignments.get(employee.id) || 0;
-      const needed = targetWorkload - currentWorkload;
-      
-      if (needed <= 0) continue;
-      
-      report.push(`🎯 Versuche ${employee.name}: ${currentWorkload} → ${targetWorkload} (${needed} benötigt)`);
-      
-      let assigned = 0;
-      
-      // Find available shifts for this employee
-      const availableShifts = shifts
-        .filter(shift => {
-          const currentAssignments = assignments[shift.id] || [];
-          const dayOfWeek = this.getDayOfWeek(shift.date);
-          const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
-          
-          // Check availability
-          const preference = availabilityMap.get(employee.id)?.get(shiftKey);
-          if (preference === 3 || preference === undefined) return false;
-          
-          // Check if shift can accept more employees
-          if (currentAssignments.length >= shift.requiredEmployees) return false;
-          
-          // Check if assignment is compatible
-          return this.canAssignEmployee(employee, shift, currentAssignments, employees, constraints);
-        })
-        .sort((a, b) => {
-          // Prefer shifts with fewer current assignments
-          return (assignments[a.id]?.length || 0) - (assignments[b.id]?.length || 0);
-        });
-      
-      // Assign to available shifts
-      for (const shift of availableShifts) {
-        if (assigned >= needed) break;
-        
-        // Final check for contract limit
-        const current = employeeWorkload.get(employee.id) || 0;
-        if (current >= targetWorkload) break;
-        
-        assignments[shift.id].push(employee.id);
-        employeeWorkload.set(employee.id, current + 1);
-        assigned++;
-        
-        report.push(`   🔄 ${employee.name} zu ${shift.date} ${shift.timeSlotId} (${current + 1}/${targetWorkload})`);
-      }
-      
-      if (assigned < needed) {
-        report.push(`   ⚠️ ${employee.name}: Nur ${assigned}/${needed} zusätzliche Schichten gefunden`);
-      }
-    }
+  // HELPER METHODE: Prüfe ob Mitarbeiter für Schicht verfügbar ist
+  private static isEmployeeAvailableForShift(
+    employee: Employee,
+    shift: ScheduledShift,
+    availabilityMap: Map<string, Map<string, number>>
+  ): boolean {
+    const dayOfWeek = this.getDayOfWeek(shift.date);
+    const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
+    const preference = availabilityMap.get(employee.id)?.get(shiftKey);
+    return preference !== undefined && preference !== 3;
   }
 
   private static calculateContractFulfillment(
@@ -1349,75 +762,6 @@ export class IntelligentShiftScheduler {
     }
   }
 
-  private static async fillRemainingShiftsFlexible(
-    scheduledShifts: ScheduledShift[],
-    assignments: { [shiftId: string]: string[] },
-    employeeWorkload: Map<string, number>,
-    employeeTargetAssignments: Map<string, number>,
-    employees: Employee[],
-    availabilityMap: Map<string, Map<string, number>>,
-    constraints: SchedulingConstraints,
-    report: string[]
-  ): Promise<void> {
-    
-    // 🔥 STRICT CONTRACT LIMITS: Only employees with remaining capacity
-    const employeesWithCapacity = employees.filter(emp => {
-      const current = employeeWorkload.get(emp.id) || 0;
-      const target = employeeTargetAssignments.get(emp.id) || 0;
-      return current < target; // 🔥 VERTRAGSLIMIT muss eingehalten werden
-    });
-
-    report.push(`👥 ${employeesWithCapacity.length} Mitarbeiter haben noch Kapazität für Vertragserfüllung`);
-
-    // Fill shifts with FLEXIBLE staffing rules but STRICT contract limits
-    for (const shift of scheduledShifts) {
-      const currentAssignments = assignments[shift.id] || [];
-      
-      const needsMoreEmployees = this.doesShiftNeedMoreEmployees(shift, currentAssignments, employees);
-      
-      if (!needsMoreEmployees) continue;
-
-      const availableEmployees = this.findAvailableEmployeesForShiftFlexible(
-        shift,
-        employeesWithCapacity, // 🔥 Nur Mitarbeiter mit Kapazität
-        availabilityMap,
-        employeeWorkload,
-        employeeTargetAssignments,
-        currentAssignments
-      );
-
-      const candidates = this.scoreCandidatesFlexible(
-        availableEmployees,
-        shift,
-        availabilityMap,
-        employeeWorkload,
-        currentAssignments
-      );
-
-      // Assign best candidates - BUT RESPECT CONTRACT LIMITS
-      for (const candidate of candidates) {
-        // 🔥 CRITICAL: Check contract limit before assignment
-        const currentWorkload = employeeWorkload.get(candidate.id) || 0;
-        const targetWorkload = employeeTargetAssignments.get(candidate.id) || 0;
-        
-        if (currentWorkload >= targetWorkload) {
-          continue; // 🔥 VERTRAGSLIMIT erreicht - überspringen
-        }
-
-        if (this.canAssignEmployeeFlexible(candidate, shift, currentAssignments, employees, constraints)) {
-          assignments[shift.id].push(candidate.id);
-          employeeWorkload.set(candidate.id, currentWorkload + 1);
-          report.push(`   🔄 ${candidate.name} zu Schicht ${shift.date} ${shift.timeSlotId} hinzugefügt`);
-          
-          // Check if we should stop assigning to this shift
-          if (!this.shouldAssignMoreToShift(shift, assignments[shift.id], employees)) {
-            break;
-          }
-        }
-      }
-    }
-  }
-
   private static getFirstWeekShifts(shifts: ScheduledShift[]): ScheduledShift[] {
     if (shifts.length === 0) return [];
     
@@ -1439,316 +783,6 @@ export class IntelligentShiftScheduler {
     });
 
     return firstWeekShifts;
-  }
-
-  // 🔥 IMPROVED: Enhanced assignment with fallback options
-  private static async assignToReachExactTargetNonNegotiable(
-    employee: Employee,
-    neededAssignments: number,
-    scheduledShifts: ScheduledShift[],
-    assignments: { [shiftId: string]: string[] },
-    employeeWorkload: Map<string, number>,
-    availabilityMap: Map<string, Map<string, number>>,
-    allEmployees: Employee[],
-    constraints: SchedulingConstraints,
-    report: string[]
-  ): Promise<number> {
-    
-    let assignedCount = 0;
-    
-    // 🔥 STRATEGY 1: Try preferred shifts first (Level 1)
-    const preferredShifts = this.findOptimalShiftsForEmployeeFlexible(
-      employee,
-      scheduledShifts,
-      assignments,
-      availabilityMap,
-      allEmployees,
-      constraints
-    );
-
-    for (const shift of preferredShifts) {
-      if (assignedCount >= neededAssignments) break;
-
-      if (this.canAssignEmployeeFlexible(employee, shift, assignments[shift.id], allEmployees, constraints)) {
-        assignments[shift.id].push(employee.id);
-        employeeWorkload.set(employee.id, (employeeWorkload.get(employee.id) || 0) + 1);
-        assignedCount++;
-        report.push(`   ✅ ${employee.name} zu Schicht ${shift.date} ${shift.timeSlotId} zugewiesen (${assignedCount}/${neededAssignments})`);
-      }
-    }
-
-    // 🔥 STRATEGY 2: If still need assignments, try Level 2 availability
-    if (assignedCount < neededAssignments) {
-      const availableShifts = scheduledShifts.filter(shift => {
-        const currentAssignments = assignments[shift.id] || [];
-        
-        const dayOfWeek = this.getDayOfWeek(shift.date);
-        const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
-        const preference = availabilityMap.get(employee.id)?.get(shiftKey);
-        
-        // 🔥 FALLBACK: Accept Level 2 availability if needed
-        return (preference === 1 || preference === 2) && 
-              this.canAssignEmployeeFlexible(employee, shift, currentAssignments, allEmployees, constraints);
-      });
-
-      for (const shift of availableShifts) {
-        if (assignedCount >= neededAssignments) break;
-
-        if (!assignments[shift.id].includes(employee.id)) {
-          assignments[shift.id].push(employee.id);
-          employeeWorkload.set(employee.id, (employeeWorkload.get(employee.id) || 0) + 1);
-          assignedCount++;
-          report.push(`   🔄 ${employee.name} zu verfügbarer Schicht ${shift.date} ${shift.timeSlotId} zugewiesen (${assignedCount}/${neededAssignments})`);
-        }
-      }
-    }
-
-    return assignedCount;
-  }
-
-  // 🔥 IMPROVED: Find optimal shifts with better availability checking
-  private static findOptimalShiftsForEmployeeFlexible(
-    employee: Employee,
-    scheduledShifts: ScheduledShift[],
-    assignments: { [shiftId: string]: string[] },
-    availabilityMap: Map<string, Map<string, number>>,
-    allEmployees: Employee[],
-    constraints: SchedulingConstraints
-  ): ScheduledShift[] {
-    
-    return scheduledShifts
-      .filter(shift => {
-        const currentAssignments = assignments[shift.id] || [];
-        
-        // 🔥 IMPROVED: Better availability checking
-        const dayOfWeek = this.getDayOfWeek(shift.date);
-        const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
-        const preference = availabilityMap.get(employee.id)?.get(shiftKey);
-        
-        // 🔥 ACCEPT BOTH Level 1 AND Level 2 availability
-        if (preference === 3 || preference === undefined) return false;
-
-        // Check if shift can benefit from this employee
-        const shiftNeedsEmployee = this.doesShiftNeedThisEmployee(shift, employee, currentAssignments, allEmployees);
-        if (!shiftNeedsEmployee) return false;
-
-        // Check if assignment is compatible with business rules
-        return this.canAssignEmployeeFlexible(employee, shift, currentAssignments, allEmployees, constraints);
-      })
-      .sort((a, b) => {
-        // 🔥 IMPROVED: Prioritize by availability level AND current assignments
-        const aCurrent = assignments[a.id]?.length || 0;
-        const bCurrent = assignments[b.id]?.length || 0;
-        
-        const aDay = this.getDayOfWeek(a.date);
-        const bDay = this.getDayOfWeek(b.date);
-        const aPref = availabilityMap.get(employee.id)?.get(`${aDay}-${a.timeSlotId}`) || 3;
-        const bPref = availabilityMap.get(employee.id)?.get(`${bDay}-${b.timeSlotId}`) || 3;
-
-        // 🔥 Level 1 availability first, then fewer current assignments
-        if (aPref !== bPref) return aPref - bPref; // Lower preference number = better
-        return aCurrent - bCurrent; // Fewer current assignments first
-      });
-  }
-
-  // 🔥 Check if a shift specifically needs this employee
-  private static doesShiftNeedThisEmployee(
-    shift: ScheduledShift,
-    employee: Employee,
-    currentAssignments: string[],
-    allEmployees: Employee[]
-  ): boolean {
-    const currentCount = currentAssignments.length;
-    
-    // If shift is empty, definitely needs this employee
-    if (currentCount === 0) return true;
-    
-    // If shift has one employee who cannot work alone, needs another
-    if (currentCount === 1) {
-      const currentEmployee = allEmployees.find(emp => emp.id === currentAssignments[0]);
-      if (currentEmployee && !currentEmployee.canWorkAlone) {
-        return true;
-      }
-    }
-    
-    // 🔥 ENHANCED: Check if shift can have more employees
-    const canHaveMore = this.canShiftHaveMoreEmployees(shift, currentAssignments, allEmployees);
-    if (!canHaveMore) return false;
-    
-    // 🔥 SPECIAL: If shift has manager, prefer experienced employees
-    const hasManager = currentAssignments.some(id => {
-      const emp = allEmployees.find(e => e.id === id);
-      return emp && emp.role === 'admin';
-    });
-    
-    if (hasManager && employee.employeeType === 'experienced') {
-      return true; // 🔥 Manager-Schicht braucht erfahrene Unterstützung
-    }
-    
-    // If shift already has 2 employees, only add if it brings special value
-    if (currentCount >= 2) {
-      return employee.canWorkAlone || employee.employeeType === 'experienced';
-    }
-    
-    return true;
-  }
-
-  // Find optimal shifts for employee - NON-NEGOTIABLE version (respects all limits strictly)
-  private static findOptimalShiftsForEmployeeNonNegotiable(
-    employee: Employee,
-    scheduledShifts: ScheduledShift[],
-    assignments: { [shiftId: string]: string[] },
-    availabilityMap: Map<string, Map<string, number>>,
-    allEmployees: Employee[],
-    constraints: SchedulingConstraints
-  ): ScheduledShift[] {
-    
-    return scheduledShifts
-      .filter(shift => {
-        // Check if shift needs more employees
-        const currentAssignments = assignments[shift.id] || [];
-        if (currentAssignments.length >= shift.requiredEmployees) return false;
-
-        // Check availability
-        const dayOfWeek = this.getDayOfWeek(shift.date);
-        const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
-        const preference = availabilityMap.get(employee.id)?.get(shiftKey);
-        if (preference === 3 || preference === undefined) return false;
-
-        // Check if assignment is compatible with business rules
-        return this.canAssignEmployee(employee, shift, currentAssignments, allEmployees, constraints);
-      })
-      .sort((a, b) => {
-        // Prioritize shifts where employee is most needed and most available
-        const aCurrent = assignments[a.id]?.length || 0;
-        const bCurrent = assignments[b.id]?.length || 0;
-        const aNeeded = a.requiredEmployees - aCurrent;
-        const bNeeded = b.requiredEmployees - bCurrent;
-
-        // Also consider availability preference
-        const aDay = this.getDayOfWeek(a.date);
-        const bDay = this.getDayOfWeek(b.date);
-        const aPref = availabilityMap.get(employee.id)?.get(`${aDay}-${a.timeSlotId}`) || 3;
-        const bPref = availabilityMap.get(employee.id)?.get(`${bDay}-${b.timeSlotId}`) || 3;
-
-        // Higher need and better preference first
-        if (aNeeded !== bNeeded) return bNeeded - aNeeded;
-        return aPref - bPref; // Lower preference number = better
-      });
-  }
-
-  // Fill remaining shifts WITHOUT violating contract limits
-  private static async fillRemainingShiftsNonNegotiable(
-    scheduledShifts: ScheduledShift[],
-    assignments: { [shiftId: string]: string[] },
-    employeeWorkload: Map<string, number>,
-    employeeTargetAssignments: Map<string, number>,
-    employees: Employee[],
-    availabilityMap: Map<string, Map<string, number>>,
-    constraints: SchedulingConstraints,
-    report: string[]
-  ): Promise<void> {
-    
-    const employeesWithCapacity = employees.filter(emp => {
-      const current = employeeWorkload.get(emp.id) || 0;
-      const target = employeeTargetAssignments.get(emp.id) || 0;
-      return current < target; // Only employees who haven't reached their exact target
-    });
-
-    report.push(`👥 ${employeesWithCapacity.length} Mitarbeiter haben noch Kapazität für Vertragserfüllung`);
-
-    // Fill shifts that are still understaffed
-    for (const shift of scheduledShifts) {
-      const currentAssignments = assignments[shift.id] || [];
-      const needed = shift.requiredEmployees - currentAssignments.length;
-
-      if (needed <= 0) continue;
-
-      const availableEmployees = this.findAvailableEmployeesForShiftNonNegotiable(
-        shift,
-        employeesWithCapacity,
-        availabilityMap,
-        employeeWorkload,
-        employeeTargetAssignments
-      );
-
-      const candidates = this.scoreCandidatesNonNegotiable(
-        availableEmployees,
-        shift,
-        availabilityMap,
-        employeeWorkload
-      );
-
-      for (let i = 0; i < Math.min(needed, candidates.length); i++) {
-        const candidate = candidates[i];
-        if (this.canAssignEmployee(candidate, shift, currentAssignments, employees, constraints)) {
-          assignments[shift.id].push(candidate.id);
-          employeeWorkload.set(candidate.id, (employeeWorkload.get(candidate.id) || 0) + 1);
-          report.push(`   🔄 ${candidate.name} zu unterbesetzter Schicht hinzugefügt`);
-        }
-      }
-    }
-  }
-
-  // Find available employees for shift - NON-NEGOTIABLE version
-  private static findAvailableEmployeesForShiftNonNegotiable(
-    shift: ScheduledShift,
-    employees: Employee[],
-    availabilityMap: Map<string, Map<string, number>>,
-    employeeWorkload: Map<string, number>,
-    employeeTargetAssignments: Map<string, number>
-  ): Employee[] {
-    
-    const dayOfWeek = this.getDayOfWeek(shift.date);
-    const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
-    
-    return employees.filter(employee => {
-      // Check availability
-      const preference = availabilityMap.get(employee.id)?.get(shiftKey);
-      if (preference === 3 || preference === undefined) return false;
-
-      // Check contract capacity (NON-NEGOTIABLE)
-      const current = employeeWorkload.get(employee.id) || 0;
-      const target = employeeTargetAssignments.get(employee.id) || 0;
-      if (current >= target) return false; // STRICT: No exceeding contract limits
-
-      return true;
-    });
-  }
-
-  // Score candidates - NON-NEGOTIABLE version
-  private static scoreCandidatesNonNegotiable(
-    employees: Employee[],
-    shift: ScheduledShift,
-    availabilityMap: Map<string, Map<string, number>>,
-    employeeWorkload: Map<string, number>
-  ): Employee[] {
-    
-    const dayOfWeek = this.getDayOfWeek(shift.date);
-    const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
-    
-    return employees
-      .map(employee => {
-        let score = 0;
-        
-        // Availability preference (Level 1 = +10, Level 2 = +5)
-        const preference = availabilityMap.get(employee.id)?.get(shiftKey) || 3;
-        if (preference === 1) score += 10;
-        if (preference === 2) score += 5;
-        
-        // Experience bonus
-        if (employee.employeeType === 'experienced') score += 3;
-        
-        // Workload distribution (favor those closer to their target)
-        const currentWorkload = employeeWorkload.get(employee.id) || 0;
-        const maxWorkload = this.getExactContractAssignments(employee);
-        const workloadRatio = currentWorkload / maxWorkload;
-        score += (1 - workloadRatio) * 5; // Higher score for underutilized
-        
-        return { employee, score };
-      })
-      .sort((a, b) => b.score - a.score)
-      .map(item => item.employee);
   }
 
   // PHASE C: Final Validation (NO adjustments allowed)
@@ -1968,329 +1002,747 @@ export class IntelligentShiftScheduler {
     }
   }
 
-  // 🔥 FLEXIBLE RULE 1: Does shift need more employees?
-  private static doesShiftNeedMoreEmployees(
-    shift: ScheduledShift,
-    currentAssignments: string[],
-    allEmployees: Employee[]
-  ): boolean {
-    const currentCount = currentAssignments.length;
+    // NEUE METHODE: Phase C mit Violation-Fixing
+  private static async phaseCViolationFixing(
+    assignments: { [shiftId: string]: string[] },
+    employees: Employee[],
+    availabilities: EmployeeAvailability[],
+    constraints: SchedulingConstraints,
+    report: string[],
+    violations: string[],
+    firstWeekShifts: ScheduledShift[]
+  ): Promise<{ [shiftId: string]: string[] }> {
     
-    // 🔥 RULE 1a: If no employees assigned, definitely needs at least one
-    if (currentCount === 0) return true;
+    let fixedAssignments = { ...assignments };
+    let iteration = 1;
+    const maxIterations = 10;
     
-    // 🔥 RULE 1b: If only one employee, check if they can work alone
-    if (currentCount === 1) {
-      const soloEmployee = allEmployees.find(emp => emp.id === currentAssignments[0]);
-      if (soloEmployee && !soloEmployee.canWorkAlone) {
-        return true; // Needs another employee if current one cannot work alone
+    report.push('🔧 PHASE C: Violation-Fixing mit Reparatur-Funktionen');
+    
+    while (iteration <= maxIterations) {
+      report.push(`\n🔄 Iteration ${iteration}/${maxIterations}:`);
+      
+      const currentViolations = this.detectAllViolations(
+        fixedAssignments, 
+        employees, 
+        availabilities, 
+        constraints, 
+        firstWeekShifts
+      );
+      
+      report.push(`📊 Aktuelle Violations: ${currentViolations.length}`);
+      currentViolations.forEach(v => report.push(`   - ${v}`));
+      
+      // Wenn keine Violations mehr, abbrechen
+      if (currentViolations.length === 0) {
+        report.push('✅ Alle Violations behoben!');
+        break;
       }
+      
+      // Wende Fix-Funktionen basierend auf Violation-Typ an
+      const fixesApplied = await this.applyViolationFixes(
+        fixedAssignments,
+        currentViolations,
+        employees,
+        availabilities,
+        constraints,
+        firstWeekShifts,
+        report
+      );
+      
+      if (fixesApplied === 0) {
+        report.push('⚠️ Keine weiteren Fixes möglich - breche ab');
+        break;
+      }
+      
+      iteration++;
     }
     
-    // 🔥 RULE 1c: Check if shift can have more employees based on manager/special cases
-    return this.canShiftHaveMoreEmployees(shift, currentAssignments, allEmployees);
+    // Finale Violation-Überprüfung
+    const finalViolations = this.detectAllViolations(
+      fixedAssignments, 
+      employees, 
+      availabilities, 
+      constraints, 
+      firstWeekShifts
+    );
+    
+    violations.push(...finalViolations);
+    
+    report.push(`\n🎯 Finale Violations: ${finalViolations.length}`);
+    finalViolations.forEach(v => report.push(`   - ${v}`));
+    
+    return fixedAssignments;
   }
 
-  // 🔥 FLEXIBLE RULE 2: Enhanced employee availability check
-  private static findAvailableEmployeesForShiftFlexible(
-    shift: ScheduledShift,
+  // NEUE METHODE: Erkenne alle Violations
+  private static detectAllViolations(
+    assignments: { [shiftId: string]: string[] },
     employees: Employee[],
-    availabilityMap: Map<string, Map<string, number>>,
-    employeeWorkload: Map<string, number>,
-    employeeTargetAssignments: Map<string, number>,
-    currentAssignments: string[]
-  ): Employee[] {
+    availabilities: EmployeeAvailability[],
+    constraints: SchedulingConstraints,
+    firstWeekShifts: ScheduledShift[]
+  ): string[] {
     
-    const dayOfWeek = this.getDayOfWeek(shift.date);
-    const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
-    
-    return employees.filter(employee => {
-      // Skip if already assigned to this shift
-      if (currentAssignments.includes(employee.id)) return false;
-      
-      // Check availability
-      const preference = availabilityMap.get(employee.id)?.get(shiftKey);
-      if (preference === 3 || preference === undefined) return false;
+    const violations: string[] = [];
+    const availabilityMap = this.buildAdvancedAvailabilityMap(availabilities);
+    const employeeMap = new Map(employees.map(emp => [emp.id, emp]));
 
-      // 🔥 STRICT CONTRACT LIMIT CHECK
-      const current = employeeWorkload.get(employee.id) || 0;
-      const target = employeeTargetAssignments.get(employee.id) || 0;
-      if (current >= target) return false; // 🔥 VERTRAGSLIMIT erreicht
-
-      return true;
-    });
-  }
-
-  // 🔥 FLEXIBLE RULE 3: Enhanced candidate scoring
-  private static scoreCandidatesFlexible(
-    employees: Employee[],
-    shift: ScheduledShift,
-    availabilityMap: Map<string, Map<string, number>>,
-    employeeWorkload: Map<string, number>,
-    currentAssignments: string[]
-  ): Employee[] {
-    
-    const dayOfWeek = this.getDayOfWeek(shift.date);
-    const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
-    const allEmployees = Array.from(employeeWorkload.keys()).map(id => 
-      employees.find(emp => emp.id === id)
-    ).filter(Boolean) as Employee[];
-    
-    return employees
-      .map(employee => {
-        let score = 0;
-        
-        // Availability preference (Level 1 = +20, Level 2 = +10)
-        const preference = availabilityMap.get(employee.id)?.get(shiftKey) || 3;
-        if (preference === 1) score += 20;
-        if (preference === 2) score += 10;
-        
-        // Experience bonus
-        if (employee.employeeType === 'experienced') score += 5;
-        
-        // Can work alone bonus
-        if (employee.canWorkAlone) score += 3;
-        
-        // Contract progress bonus
-        const currentWorkload = employeeWorkload.get(employee.id) || 0;
-        const maxWorkload = this.getExactContractAssignments(employee);
-        const workloadRatio = currentWorkload / Math.max(1, maxWorkload);
-        score += (1 - workloadRatio) * 8;
-        
-        // 🔥 ENHANCED: Team compatibility with current assignments
-        if (currentAssignments.length > 0) {
-          const compatibilityBonus = this.calculateTeamCompatibility(employee, currentAssignments, allEmployees);
-          score += compatibilityBonus;
-          
-          // 🔥 SPECIAL: Extra bonus for experienced with manager
-          const hasManager = currentAssignments.some(id => {
-            const emp = allEmployees.find(e => e.id === id);
-            return emp && emp.role === 'admin';
-          });
-          if (hasManager && employee.employeeType === 'experienced') {
-            score += 4; // 🔥 Erfahrener mit Manager = Sehr gut
-          }
+    // 1. TRAINEE ALONE Violation
+    firstWeekShifts.forEach(shift => {
+      const assignedEmployees = assignments[shift.id] || [];
+      if (assignedEmployees.length === 1) {
+        const employee = employeeMap.get(assignedEmployees[0]);
+        if (employee && employee.employeeType === 'trainee') {
+          violations.push(`${this.CRITICAL_VIOLATIONS.TRAINEE_ALONE}: ${employee.name} in ${shift.date} ${shift.timeSlotId}`);
         }
-        
-        return { employee, score };
-      })
-      .sort((a, b) => b.score - a.score)
-      .map(item => item.employee);
-  }
-
-  // 🔥 FLEXIBLE RULE 6: Team compatibility scoring
-  private static calculateTeamCompatibility(
-    candidate: Employee,
-    currentAssignments: string[],
-    allEmployees: Employee[]
-  ): number {
-    let compatibilityScore = 0;
-    
-    const currentEmployees = currentAssignments.map(id => 
-      allEmployees.find(emp => emp.id === id)
-    ).filter(Boolean) as Employee[];
-    
-    // 🔥 PRIMÄR: Hoher Bonus wenn Manager im Team ist und Kandidat Erfahrung hat
-    const hasManager = currentEmployees.some(emp => emp.role === 'admin');
-    if (hasManager && candidate.employeeType === 'experienced') {
-      compatibilityScore += 5; // 🔥 Manager + Erfahrener = Optimal
-    }
-    
-    // 🔥 Mix von Erfahrungsstufen
-    const hasExperienced = currentEmployees.some(emp => emp.employeeType === 'experienced');
-    const hasTrainee = currentEmployees.some(emp => emp.employeeType === 'trainee');
-    
-    if (candidate.employeeType === 'experienced' && hasTrainee) {
-      compatibilityScore += 3; // Erfahrener kann Trainee unterstützen
-    }
-    
-    if (candidate.employeeType === 'trainee' && hasExperienced) {
-      compatibilityScore += 2; // Trainee mit Erfahrenem ist gut
-    }
-    
-    // 🔥 Flexible Employees die alleine arbeiten können
-    if (candidate.canWorkAlone) {
-      compatibilityScore += 2;
-    }
-    
-    // 🔥 Vermeide zu viele Erfahrene in einer Schicht (Overstaffing)
-    const experiencedCount = currentEmployees.filter(emp => emp.employeeType === 'experienced').length;
-    if (candidate.employeeType === 'experienced' && experiencedCount >= 1 && !hasManager) {
-      compatibilityScore -= 2; // Zu viele Erfahrene ohne Manager
-    }
-    
-    return compatibilityScore;
-  }
-
-  // 🔥 FLEXIBLE RULE 4: Enhanced assignment checking with canWorkAlone
-  private static canAssignEmployeeFlexible(
-    employee: Employee,
-    shift: ScheduledShift,
-    currentAssignments: string[],
-    allEmployees: Employee[],
-    constraints: SchedulingConstraints
-  ): boolean {
-    
-    // 🔥 CRITICAL RULE: Employee can ONLY work alone if canWorkAlone is true
-    if (currentAssignments.length === 0 && !employee.canWorkAlone) {
-      return false; // Cannot assign as first employee if cannot work alone
-    }
-    
-    // Check if assignment would create trainee-alone situation
-    if (constraints.enforceNoTraineeAlone) {
-      if (employee.employeeType === 'trainee' && currentAssignments.length === 0) {
-        return false; // Can't assign trainee as first employee
       }
+    });
+
+    // 2. EMPTY SHIFT Violation
+    firstWeekShifts.forEach(shift => {
+      const assignedEmployees = assignments[shift.id] || [];
+      if (assignedEmployees.length === 0) {
+        violations.push(`${this.CRITICAL_VIOLATIONS.EMPTY_SHIFT}: ${shift.date} ${shift.timeSlotId}`);
+      }
+    });
+
+    // 3. CONTRACT LIMIT Violation
+    const contractViolations = this.detectContractViolations(assignments, employees, firstWeekShifts);
+    violations.push(...contractViolations);
+
+    // 4. UNAVAILABLE ASSIGNMENT Violation
+    firstWeekShifts.forEach(shift => {
+      const assignedEmployees = assignments[shift.id] || [];
+      assignedEmployees.forEach(employeeId => {
+        const dayOfWeek = this.getDayOfWeek(shift.date);
+        const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
+        const preference = availabilityMap.get(employeeId)?.get(shiftKey);
+
+        if (preference === 3) {
+          const employee = employeeMap.get(employeeId);
+          violations.push(`${this.CRITICAL_VIOLATIONS.UNAVAILABLE_ASSIGNMENT}: ${employee?.name || employeeId} in ${shift.date} ${shift.timeSlotId}`);
+        }
+      });
+    });
+
+    return violations;
+  }
+
+  // NEUE METHODE: Wende Violation-Fixes an
+  private static async applyViolationFixes(
+    assignments: { [shiftId: string]: string[] },
+    violations: string[],
+    employees: Employee[],
+    availabilities: EmployeeAvailability[],
+    constraints: SchedulingConstraints,
+    firstWeekShifts: ScheduledShift[],
+    report: string[]
+  ): Promise<number> {
+    
+    let fixesApplied = 0;
+    const availabilityMap = this.buildAdvancedAvailabilityMap(availabilities);
+
+    // 🔥 ALTERNATIVE: Extrahiere nur den Violation-Teil für den Vergleich
+    const traineeAloneViolations = violations.filter(v => {
+      const violationText = v.split(':')[0]; // Nur "❌ KRITISCH: Trainee arbeitet alleine"
+      return violationText.includes(this.CRITICAL_VIOLATIONS.TRAINEE_ALONE.split(':')[0]);
+    });
+    
+    const emptyShiftViolations = violations.filter(v => {
+      const violationText = v.split(':')[0];
+      return violationText.includes(this.CRITICAL_VIOLATIONS.EMPTY_SHIFT.split(':')[0]);
+    });
+    
+    const contractViolations = violations.filter(v => {
+      const violationText = v.split(':')[0];
+      return violationText.includes(this.CRITICAL_VIOLATIONS.CONTRACT_LIMIT_VIOLATION.split(':')[0]);
+    });
+    
+    const unavailableViolations = violations.filter(v => {
+      const violationText = v.split(':')[0];
+      return violationText.includes(this.CRITICAL_VIOLATIONS.UNAVAILABLE_ASSIGNMENT.split(':')[0]);
+    });
+
+    report.push(`🔧 Wende Fixes an: ${traineeAloneViolations.length} Trainee-Alone, ${emptyShiftViolations.length} Empty-Shift, ${contractViolations.length} Contract, ${unavailableViolations.length} Unavailable`);
+
+    // DEBUG: Zeige was tatsächlich gefiltert wurde
+    report.push(`🔍 Violation Constants:`);
+    report.push(`   TRAINEE_ALONE: "${this.CRITICAL_VIOLATIONS.TRAINEE_ALONE}"`);
+    report.push(`   EMPTY_SHIFT: "${this.CRITICAL_VIOLATIONS.EMPTY_SHIFT}"`);
+    report.push(`   CONTRACT_LIMIT: "${this.CRITICAL_VIOLATIONS.CONTRACT_LIMIT_VIOLATION}"`);
+    report.push(`   UNAVAILABLE: "${this.CRITICAL_VIOLATIONS.UNAVAILABLE_ASSIGNMENT}"`);
+
+    // 1. Fix TRAINEE ALONE Violations (höchste Priorität)
+    for (const violation of traineeAloneViolations) {
+      const fixed = await this.fixTraineeAloneViolation(
+        assignments,
+        violation,
+        employees,
+        availabilityMap,
+        constraints,
+        firstWeekShifts,
+        report
+      );
+      if (fixed) fixesApplied++;
+    }
+
+    // 2. Fix EMPTY SHIFT Violations
+    for (const violation of emptyShiftViolations) {
+      const fixed = await this.fixEmptyShiftViolation(
+        assignments,
+        violation,
+        employees,
+        availabilityMap,
+        constraints,
+        firstWeekShifts,
+        report
+      );
+      if (fixed) fixesApplied++;
+    }
+
+    // 3. Fix CONTRACT LIMIT Violations
+    if (contractViolations.length > 0) {
+      report.push(`🎯 Starte Contract Fixing für ${contractViolations.length} Violations`);
+      const fixed = await this.fixContractViolations(
+        assignments,
+        employees,
+        availabilityMap,
+        constraints,
+        firstWeekShifts,
+        report
+      );
+      fixesApplied += fixed;
+      report.push(`🎯 Contract Fixing abgeschlossen: ${fixed} Fixes angewendet`);
+    }
+
+    // 4. Fix UNAVAILABLE ASSIGNMENT Violations
+    for (const violation of unavailableViolations) {
+      const fixed = await this.fixUnavailableAssignmentViolation(
+        assignments,
+        violation,
+        employees,
+        availabilityMap,
+        constraints,
+        firstWeekShifts,
+        report
+      );
+      if (fixed) fixesApplied++;
+    }
+
+    report.push(`📈 Insgesamt ${fixesApplied} Fixes in dieser Iteration angewendet`);
+    
+    return fixesApplied;
+  }
+
+  // FIX 1: TRAINEE ALONE Violation
+  private static async fixTraineeAloneViolation(
+    assignments: { [shiftId: string]: string[] },
+    violation: string,
+    employees: Employee[],
+    availabilityMap: Map<string, Map<string, number>>,
+    constraints: SchedulingConstraints,
+    firstWeekShifts: ScheduledShift[],
+    report: string[]
+  ): Promise<boolean> {
+    
+    // Extrahiere Schicht-Information aus Violation
+    const match = violation.match(/in (\d{4}-\d{2}-\d{2}) ([^\)]+)/);
+    if (!match) return false;
+    
+    const [, date, timeSlotId] = match;
+    const shift = firstWeekShifts.find(s => s.date === date && s.timeSlotId === timeSlotId);
+    if (!shift) return false;
+    
+    const currentAssignments = assignments[shift.id] || [];
+    const traineeId = currentAssignments[0]; // Trainee ist alleine in der Schicht
+    
+    report.push(`🔧 Fix TRAINEE ALONE: ${date} ${timeSlotId}`);
+    
+    // STRATEGIE 1: Erfahrenen Mitarbeiter hinzufügen
+    const experiencedEmployees = employees.filter(emp => 
+      emp.employeeType === 'experienced' && 
+      emp.id !== traineeId
+    );
+    
+    const dayOfWeek = this.getDayOfWeek(shift.date);
+    const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
+    
+    const availableExperienced = experiencedEmployees.filter(exp => {
+      const preference = availabilityMap.get(exp.id)?.get(shiftKey);
+      return preference !== undefined && preference !== 3;
+    });
+    
+    if (availableExperienced.length > 0 && currentAssignments.length < shift.requiredEmployees) {
+      const bestCandidate = availableExperienced[0];
+      assignments[shift.id].push(bestCandidate.id);
+      report.push(`   ✅ ${bestCandidate.name} als Partner für Trainee hinzugefügt`);
+      return true;
+    }
+    
+    // STRATEGIE 2: Trainee in andere Schicht verschieben wo Partner vorhanden sind
+    const alternativeShifts = firstWeekShifts.filter(s => {
+      const altAssignments = assignments[s.id] || [];
+      const hasExperienced = altAssignments.some(id => {
+        const emp = employees.find(e => e.id === id);
+        return emp && emp.employeeType === 'experienced';
+      });
+      const dayOfWeek = this.getDayOfWeek(s.date);
+      const shiftKey = `${dayOfWeek}-${s.timeSlotId}`;
+      const preference = availabilityMap.get(traineeId)?.get(shiftKey);
       
-      if (employee.employeeType === 'trainee' && currentAssignments.length > 0) {
-        const currentEmployees = currentAssignments.map(id => 
-          allEmployees.find(emp => emp.id === id)
-        ).filter(Boolean) as Employee[];
-        
-        const hasExperienced = currentEmployees.some(emp => 
-          emp.employeeType === 'experienced' || emp.role === 'admin'
-        );
-        
-        if (!hasExperienced) return false;
+      return hasExperienced && 
+            preference !== undefined && preference !== 3 &&
+            altAssignments.length < s.requiredEmployees;
+    });
+    
+    if (alternativeShifts.length > 0) {
+      const bestAlternative = alternativeShifts[0];
+      // Entferne Trainee aus aktueller Schicht
+      assignments[shift.id] = assignments[shift.id].filter(id => id !== traineeId);
+      // Füge Trainee zu alternativer Schicht hinzu
+      assignments[bestAlternative.id].push(traineeId);
+      report.push(`   🔄 Trainee zu ${bestAlternative.date} ${bestAlternative.timeSlotId} verschoben (Partner vorhanden)`);
+      return true;
+    }
+    
+    report.push(`   ❌ Kein Fix möglich für TRAINEE ALONE`);
+    return false;
+  }
+
+  // FIX 2: EMPTY SHIFT Violation
+  private static async fixEmptyShiftViolation(
+    assignments: { [shiftId: string]: string[] },
+    violation: string,
+    employees: Employee[],
+    availabilityMap: Map<string, Map<string, number>>,
+    constraints: SchedulingConstraints,
+    firstWeekShifts: ScheduledShift[],
+    report: string[]
+  ): Promise<boolean> {
+    
+    const match = violation.match(/SHIFT: (\d{4}-\d{2}-\d{2}) ([^\)]+)/);
+    if (!match) return false;
+    
+    const [, date, timeSlotId] = match;
+    const shift = firstWeekShifts.find(s => s.date === date && s.timeSlotId === timeSlotId);
+    if (!shift) return false;
+    
+    report.push(`🔧 Fix EMPTY SHIFT: ${date} ${timeSlotId}`);
+    
+    const dayOfWeek = this.getDayOfWeek(shift.date);
+    const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
+    
+    // Finde verfügbare Mitarbeiter für diese Schicht
+    const availableEmployees = employees.filter(emp => {
+      const preference = availabilityMap.get(emp.id)?.get(shiftKey);
+      return preference !== undefined && preference !== 3;
+    });
+    
+    if (availableEmployees.length === 0) {
+      report.push(`   ❌ Keine verfügbaren Mitarbeiter für diese Schicht`);
+      return false;
+    }
+    
+    // Sortiere nach Vertragserfüllung (Mitarbeiter mit größtem Bedarf zuerst)
+    const prioritizedEmployees = availableEmployees
+      .map(emp => {
+        const currentWorkload = this.countEmployeeAssignments(emp.id, assignments, firstWeekShifts);
+        const targetWorkload = this.getExactContractAssignments(emp);
+        const needed = targetWorkload - currentWorkload;
+        return { emp, needed, currentWorkload };
+      })
+      .filter(item => item.needed > 0)
+      .sort((a, b) => b.needed - a.needed);
+    
+    if (prioritizedEmployees.length === 0) {
+      report.push(`   ❌ Keine Mitarbeiter mit Vertragsbedarf für diese Schicht`);
+      return false;
+    }
+    
+    // Weise bestmöglichen Mitarbeiter zu
+    const bestCandidate = prioritizedEmployees[0].emp;
+    assignments[shift.id].push(bestCandidate.id);
+    report.push(`   ✅ ${bestCandidate.name} zu leerer Schicht zugewiesen`);
+    
+    return true;
+  }
+
+  // FIX 3: CONTRACT LIMIT Violations
+  private static async fixContractViolations(
+    assignments: { [shiftId: string]: string[] },
+    employees: Employee[],
+    availabilityMap: Map<string, Map<string, number>>,
+    constraints: SchedulingConstraints,
+    firstWeekShifts: ScheduledShift[],
+    report: string[]
+  ): Promise<number> {
+    
+    let fixesApplied = 0;
+    const contractStatus = this.calculateContractStatus(assignments, employees, firstWeekShifts);
+    
+    const underAssigned = contractStatus.filter((status: ContractStatus) => status.deviation < 0);
+    const overAssigned = contractStatus.filter((status: ContractStatus) => status.deviation > 0);
+    
+    report.push(`🔧 Fix CONTRACT LIMITS: ${underAssigned.length} unterbesetzt, ${overAssigned.length} überbesetzt`);
+    
+    // DEBUG: Zeige detaillierte Contract Status
+    report.push(`📊 Contract Status Details:`);
+    contractStatus.forEach((status: ContractStatus) => {
+      if (status.deviation !== 0) {
+        report.push(`   - ${status.employeeName}: ${status.actual}/${status.target} (Abweichung: ${status.deviation})`);
       }
+    });
+
+    // 🔥 STRATEGIE: Zuerst Überbesetzung beheben (einfacher)
+    for (const over of overAssigned) {
+      report.push(`🎯 Behebe OVER-ASSIGNMENT für ${over.employeeName}: ${over.actual}/${over.target} (Überschuss: ${over.deviation})`);
+      
+      const fixed = await this.fixOverAssignment(
+        assignments,
+        over,
+        employees,
+        availabilityMap,
+        firstWeekShifts,
+        report
+      );
+      
+      if (fixed) {
+        fixesApplied++;
+        report.push(`✅ OVER-ASSIGNMENT für ${over.employeeName} behoben`);
+      } else {
+        report.push(`❌ OVER-ASSIGNMENT für ${over.employeeName} konnte nicht behoben werden`);
+      }
+    }
+    
+    // 🔥 STRATEGIE: Dann Unterbesetzung beheben
+    for (const under of underAssigned) {
+      report.push(`🎯 Behebe UNDER-ASSIGNMENT für ${under.employeeName}: ${under.actual}/${under.target} (Fehlend: ${-under.deviation})`);
+      
+      const fixed = await this.fixUnderAssignment(
+        assignments,
+        under,
+        employees,
+        availabilityMap,
+        constraints,
+        firstWeekShifts,
+        report
+      );
+      
+      if (fixed) {
+        fixesApplied++;
+        report.push(`✅ UNDER-ASSIGNMENT für ${under.employeeName} behoben`);
+      } else {
+        report.push(`❌ UNDER-ASSIGNMENT für ${under.employeeName} konnte nicht behoben werden`);
+      }
+    }
+    
+    return fixesApplied;
+  }
+
+  // FIX 4: UNAVAILABLE ASSIGNMENT Violation
+  private static async fixUnavailableAssignmentViolation(
+    assignments: { [shiftId: string]: string[] },
+    violation: string,
+    employees: Employee[],
+    availabilityMap: Map<string, Map<string, number>>,
+    constraints: SchedulingConstraints,
+    firstWeekShifts: ScheduledShift[],
+    report: string[]
+  ): Promise<boolean> {
+    
+    const match = violation.match(/ASSIGNMENT: ([^ ]+) in (\d{4}-\d{2}-\d{2}) ([^\)]+)/);
+    if (!match) return false;
+    
+    const [, employeeName, date, timeSlotId] = match;
+    const employee = employees.find(emp => emp.name === employeeName);
+    if (!employee) return false;
+    
+    const shift = firstWeekShifts.find(s => s.date === date && s.timeSlotId === timeSlotId);
+    if (!shift) return false;
+    
+    report.push(`🔧 Fix UNAVAILABLE ASSIGNMENT: ${employeeName} in ${date} ${timeSlotId}`);
+    
+    // STRATEGIE 1: Mitarbeiter aus Schicht entfernen
+    assignments[shift.id] = assignments[shift.id].filter(id => id !== employee.id);
+    report.push(`   ✅ ${employeeName} aus unverfügbarer Schicht entfernt`);
+    
+    // STRATEGIE 2: Ersatz-Mitarbeiter finden falls nötig
+    if (assignments[shift.id].length === 0) {
+      await this.fixEmptyShiftViolation(
+        assignments,
+        `${this.CRITICAL_VIOLATIONS.EMPTY_SHIFT}: ${date} ${timeSlotId}`,
+        employees,
+        availabilityMap,
+        constraints,
+        firstWeekShifts,
+        report
+      );
     }
     
     return true;
   }
 
-  // 🔥 FLEXIBLE RULE 5: Should we assign more employees to this shift?
-  private static shouldAssignMoreToShift(
-    shift: ScheduledShift,
-    currentAssignments: string[],
-    allEmployees: Employee[]
-  ): boolean {
-    const currentCount = currentAssignments.length;
+  private static async fixOverAssignment(
+    assignments: { [shiftId: string]: string[] },
+    over: ContractStatus,
+    employees: Employee[],
+    availabilityMap: Map<string, Map<string, number>>,
+    firstWeekShifts: ScheduledShift[],
+    report: string[]
+  ): Promise<boolean> {
     
-    // 🔥 Ideal: 2 employees per shift
-    if (currentCount >= 2) {
-      // 🔥 PRIMÄR: Nur bis zu 3 Employees wenn Manager dabei ist
-      const hasManager = currentAssignments.some(employeeId => {
-        const employee = allEmployees.find(emp => emp.id === employeeId);
-        return employee && employee.role === 'admin';
-      });
+    const employee = employees.find(emp => emp.id === over.employeeId);
+    if (!employee) return false;
+    
+    report.push(`   🔧 Fix OVER-ASSIGNMENT: ${employee.name} (${over.actual}/${over.target})`);
+    
+    // Finde ALLE Zuweisungen dieses Mitarbeiters
+    const employeeAssignments: { shiftId: string; shift: ScheduledShift; currentCount: number }[] = [];
+    
+    firstWeekShifts.forEach(shift => {
+      const currentAssignments = assignments[shift.id] || [];
+      if (currentAssignments.includes(employee.id)) {
+        employeeAssignments.push({ 
+          shiftId: shift.id, 
+          shift,
+          currentCount: currentAssignments.length 
+        });
+      }
+    });
+    
+    report.push(`   📋 ${employee.name} hat ${employeeAssignments.length} Zuweisungen`);
+    
+    // Sortiere nach Entfernungs-Priorität (am besten zu entfernende zuerst)
+    const removableAssignments = employeeAssignments.sort((a, b) => {
+      const aRequired = a.shift.requiredEmployees;
+      const bRequired = b.shift.requiredEmployees;
       
-      if (hasManager && currentCount < 3) {
-        return true; // 🔥 Manager ist dabei - kann bis zu 3 Employees haben
+      // 1. Überbesetzte Schichten zuerst
+      if (a.currentCount > aRequired && b.currentCount <= bRequired) return -1;
+      if (b.currentCount > bRequired && a.currentCount <= aRequired) return 1;
+      
+      // 2. Schichten mit vielen anderen Mitarbeitern zuerst (weniger kritisch)
+      if (a.currentCount !== b.currentCount) return b.currentCount - a.currentCount;
+      
+      // 3. Nach Datum sortieren (spätere Schichten zuerst)
+      return b.shift.date.localeCompare(a.shift.date);
+    });
+    
+    // Entferne überschüssige Zuweisungen
+    let removed = 0;
+    const toRemove = over.deviation; // Positive Zahl bei Over-Assignment
+    
+    report.push(`   🗑️  Muss ${toRemove} Zuweisungen entfernen`);
+    
+    for (const assignment of removableAssignments) {
+      if (removed >= toRemove) break;
+      
+      // Prüfe ob Entfernung sicher ist (nicht zu EMPTY_SHIFT führen würde)
+      const wouldBecomeEmpty = assignments[assignment.shiftId].length === 1;
+      if (wouldBecomeEmpty) {
+        report.push(`      ⚠️  Überspringe ${assignment.shift.date} ${assignment.shift.timeSlotId} - würde leere Schicht erzeugen`);
+        continue;
       }
       
-      // 🔥 SEKUNDÄR: Bis zu 3 Employees mit anderen Mitarbeitern nur in speziellen Fällen
-      const hasSpecialCase = this.hasSpecialCaseForThirdEmployee(shift, currentAssignments, allEmployees);
-      if (hasSpecialCase && currentCount < 3) {
-        return true; // 🔥 Spezialfall erlaubt dritten Employee
+      // Prüfe ob Entfernung TRAINEE_ALONE erzeugen würde
+      const remainingAssignments = assignments[assignment.shiftId].filter(id => id !== employee.id);
+      if (remainingAssignments.length === 1) {
+        const remainingEmployee = employees.find(emp => emp.id === remainingAssignments[0]);
+        if (remainingEmployee && remainingEmployee.employeeType === 'trainee') {
+          report.push(`      ⚠️  Überspringe ${assignment.shift.date} ${assignment.shift.timeSlotId} - würde TRAINEE_ALONE erzeugen`);
+          continue;
+        }
       }
       
-      return false; // Maximale Besetzung erreicht
+      // Sicher entfernen
+      assignments[assignment.shiftId] = assignments[assignment.shiftId].filter(id => id !== employee.id);
+      removed++;
+      report.push(`      🔄 ${employee.name} aus ${assignment.shift.date} ${assignment.shift.timeSlotId} entfernt (${assignment.currentCount - 1}/${assignment.shift.requiredEmployees} verbleibend)`);
     }
     
-    // 🔥 Minimum: At least one employee who can work alone, or two employees
-    if (currentCount === 1) {
-      const currentEmployee = allEmployees.find(emp => emp.id === currentAssignments[0]);
-      if (currentEmployee && currentEmployee.canWorkAlone) {
-        return false; // Shift is adequately staffed with one employee who can work alone
-      }
-    }
-    
-    return currentCount < 2; // Standard: Bis zu 2 Employees
-  }
-
-  // 🔥 Neue Methode: Kann Schicht mehr Employees haben?
-  private static canShiftHaveMoreEmployees(
-    shift: ScheduledShift,
-    currentAssignments: string[],
-    allEmployees: Employee[]
-  ): boolean {
-    const currentCount = currentAssignments.length;
-    
-    // Standard: Maximale Besetzung ist 2
-    if (currentCount >= 2) {
-      // 🔥 PRIMÄR: Bis zu 3 wenn Manager dabei
-      const hasManager = currentAssignments.some(employeeId => {
-        const employee = allEmployees.find(emp => emp.id === employeeId);
-        return employee && employee.role === 'admin';
-      });
-      
-      if (hasManager) {
-        return currentCount < allEmployees.length; // 🔥 Manager-Schicht: Bis zu 3 Employees
-      }
-      
-      // 🔥 SEKUNDÄR: Bis zu 3 in speziellen Fällen
-      const hasSpecialCase = this.hasSpecialCaseForThirdEmployee(shift, currentAssignments, allEmployees);
-      if (hasSpecialCase) {
-        return currentCount < 3; // 🔥 Spezialfall: Bis zu 3 Employees
-      }
-      
-      return false; // Maximale Besetzung erreicht
-    }
-    
-    return currentCount < 2; // Standard: Bis zu 2 Employees
-  }
-
-  // 🔥 FLEXIBLE RULE 6: Special cases for third employee (without manager)
-  private static hasSpecialCaseForThirdEmployee(
-    shift: ScheduledShift,
-    currentAssignments: string[],
-    allEmployees: Employee[]
-  ): boolean {
-    const currentEmployees = currentAssignments.map(id => 
-      allEmployees.find(emp => emp.id === id)
-    ).filter(Boolean) as Employee[];
-    
-    // 🔥 SEKUNDÄR: Dritter Employee nur in folgenden Fällen:
-    
-    // Fall 1: Shift hat viele Trainees die Unterstützung brauchen
-    const traineeCount = currentEmployees.filter(emp => emp.employeeType === 'trainee').length;
-    if (traineeCount >= 1) {
-      return true; // Braucht erfahrene Unterstützung
-    }
-    
-    // Fall 2: Besondere Schichtanforderungen (z.B. Wochenende, Feiertag)
-    const isSpecialShift = this.isSpecialShift(shift);
-    if (isSpecialShift) {
-      return true; // Besondere Schichten können mehr Personal brauchen
-    }
-    
-    // Fall 3: Mix von Erfahrungsstufen für besseres Training
-    const experienceMix = this.hasGoodExperienceMix(currentEmployees);
-    if (!experienceMix) {
-      return true; // Kann von zusätzlicher Erfahrung profitieren
-    }
-    
-    return false; // Kein Spezialfall für dritten Employee
-  }
-
-  // 🔥 Hilfsmethode: Besondere Schichten identifizieren
-  private static isSpecialShift(shift: ScheduledShift): boolean {
-    const date = new Date(shift.date);
-    const dayOfWeek = date.getDay();
-    
-    // Wochenende (Samstag = 6, Sonntag = 0)
-    if (dayOfWeek === 6 || dayOfWeek === 0) {
+    if (removed > 0) {
+      report.push(`   ✅ ${removed}/${toRemove} Zuweisungen entfernt`);
       return true;
+    } else {
+      report.push(`   ❌ Keine sicheren Zuweisungen zum Entfernen gefunden`);
+      return false;
     }
-    
-    // Spätschichten (nach 18 Uhr) - müsste an TimeSlot angepasst werden
-    // Hier als Beispiel für erweiterte Logik
-    const timeSlot = shift.timeSlotId; // Hier müsste man die tatsächliche Zeit aus dem TimeSlot holen
-    // Beispiel: if (timeSlot.includes('evening') || timeSlot.includes('late')) return true;
-    
-    return false;
   }
 
-  // 🔥 Hilfsmethode: Gute Erfahrungs-Mischung im Team
-  private static hasGoodExperienceMix(currentEmployees: Employee[]): boolean {
-    if (currentEmployees.length < 2) return false;
+  // HILFS-FUNKTION: Fix Under-Assignment
+  private static async fixUnderAssignment(
+    assignments: { [shiftId: string]: string[] },
+    under: ContractStatus,
+    employees: Employee[],
+    availabilityMap: Map<string, Map<string, number>>,
+    constraints: SchedulingConstraints,
+    firstWeekShifts: ScheduledShift[],
+    report: string[]
+  ): Promise<boolean> {
     
-    const hasExperienced = currentEmployees.some(emp => emp.employeeType === 'experienced');
-    const hasTrainee = currentEmployees.some(emp => emp.employeeType === 'trainee');
+    const employee = employees.find(emp => emp.id === under.employeeId);
+    if (!employee) return false;
     
-    // Gute Mischung: Mindestens ein Erfahrener und ein Trainee, oder zwei Erfahrene
-    return (hasExperienced && hasTrainee) || 
-          currentEmployees.filter(emp => emp.employeeType === 'experienced').length >= 2;
+    report.push(`   🔧 Fix UNDER-ASSIGNMENT: ${employee.name} (${under.actual}/${under.target})`);
+    
+    const needed = -under.deviation; // Negative Zahl bei Under-Assignment -> positiv machen
+    
+    report.push(`   ➕ Benötigt ${needed} zusätzliche Zuweisungen`);
+
+    // Finde verfügbare Schichten für diesen Mitarbeiter
+    const availableShifts = firstWeekShifts.filter(shift => {
+      const currentAssignments = assignments[shift.id] || [];
+      const dayOfWeek = this.getDayOfWeek(shift.date);
+      const shiftKey = `${dayOfWeek}-${shift.timeSlotId}`;
+      
+      // Prüfe Verfügbarkeit
+      const preference = availabilityMap.get(employee.id)?.get(shiftKey);
+      if (preference === 3 || preference === undefined) return false;
+      
+      // Prüfe ob Schicht voll ist
+      if (currentAssignments.length >= shift.requiredEmployees) return false;
+      
+      // Prüfe ob Mitarbeiter bereits in dieser Schicht ist
+      if (currentAssignments.includes(employee.id)) return false;
+      
+      // Prüfe Kompatibilität
+      return this.canAssignEmployee(employee, shift, currentAssignments, employees, constraints);
+    });
+
+    report.push(`   📅 ${availableShifts.length} verfügbare Schichten gefunden`);
+
+    // Sortiere verfügbare Schichten nach Priorität
+    const prioritizedShifts = availableShifts.sort((a, b) => {
+      const aAssignments = assignments[a.id]?.length || 0;
+      const bAssignments = assignments[b.id]?.length || 0;
+      
+      // Bevorzuge Schichten mit mehr freien Plätzen
+      const aFree = a.requiredEmployees - aAssignments;
+      const bFree = b.requiredEmployees - bAssignments;
+      
+      if (aFree !== bFree) return bFree - aFree;
+      
+      // Bevorzuge Schichten mit erfahrenen Kollegen für neue Mitarbeiter
+      if (employee.employeeType === 'trainee') {
+        const aHasExperienced = (assignments[a.id] || []).some(id => {
+          const emp = employees.find(e => e.id === id);
+          return emp && emp.employeeType === 'experienced';
+        });
+        const bHasExperienced = (assignments[b.id] || []).some(id => {
+          const emp = employees.find(e => e.id === id);
+          return emp && emp.employeeType === 'experienced';
+        });
+        
+        if (aHasExperienced && !bHasExperienced) return -1;
+        if (!aHasExperienced && bHasExperienced) return 1;
+      }
+      
+      return 0;
+    });
+
+    // Weise zu verfügbaren Schichten zu
+    let assigned = 0;
+    for (const shift of prioritizedShifts) {
+      if (assigned >= needed) break;
+      
+      assignments[shift.id].push(employee.id);
+      assigned++;
+      const newCount = assignments[shift.id].length;
+      report.push(`      ✅ ${employee.name} zu ${shift.date} ${shift.timeSlotId} zugewiesen (${newCount}/${shift.requiredEmployees})`);
+    }
+    
+    if (assigned > 0) {
+      report.push(`   ✅ ${assigned}/${needed} zusätzliche Zuweisungen hinzugefügt`);
+      return true;
+    } else {
+      report.push(`   ❌ Keine verfügbaren Schichten für zusätzliche Zuweisungen`);
+      return false;
+    }
+  }
+
+  // HILFS-FUNKTION: Zähle Mitarbeiter-Zuweisungen
+  private static countEmployeeAssignments(
+    employeeId: string,
+    assignments: { [shiftId: string]: string[] },
+    firstWeekShifts: ScheduledShift[]
+  ): number {
+    
+    let count = 0;
+    firstWeekShifts.forEach(shift => {
+      if (assignments[shift.id]?.includes(employeeId)) {
+        count++;
+      }
+    });
+    
+    return count;
+  }
+
+  // FEHLENDE METHODE: Detect Contract Violations
+  private static detectContractViolations(
+    assignments: { [shiftId: string]: string[] },
+    employees: Employee[],
+    firstWeekShifts: ScheduledShift[]
+  ): string[] {
+    
+    const violations: string[] = [];
+    const employeeWorkload = new Map<string, number>();
+    
+    // Zähle Zuweisungen für jeden Mitarbeiter (nur erste Woche)
+    firstWeekShifts.forEach(shift => {
+      const assignedEmployees = assignments[shift.id] || [];
+      assignedEmployees.forEach(employeeId => {
+        employeeWorkload.set(employeeId, (employeeWorkload.get(employeeId) || 0) + 1);
+      });
+    });
+
+    employees.forEach(employee => {
+      if (employee.role === 'admin') return; // Manager ausnehmen
+      
+      const actual = employeeWorkload.get(employee.id) || 0;
+      const target = this.getExactContractAssignments(employee);
+      
+      if (actual !== target) {
+        violations.push(`${this.CRITICAL_VIOLATIONS.CONTRACT_LIMIT_VIOLATION}: ${employee.name} (${actual}/${target})`);
+      }
+    });
+
+    return violations;
+  }
+
+  // FEHLENDE METHODE: Calculate Contract Status
+  private static calculateContractStatus(
+    assignments: { [shiftId: string]: string[] },
+    employees: Employee[],
+    firstWeekShifts: ScheduledShift[]
+  ): ContractStatus[] {
+    
+    const employeeWorkload = new Map<string, number>();
+    
+    // Zähle Zuweisungen für jeden Mitarbeiter (nur erste Woche)
+    firstWeekShifts.forEach(shift => {
+      const assignedEmployees = assignments[shift.id] || [];
+      assignedEmployees.forEach(employeeId => {
+        employeeWorkload.set(employeeId, (employeeWorkload.get(employeeId) || 0) + 1);
+      });
+    });
+
+    return employees.map(employee => {
+      const actual = employeeWorkload.get(employee.id) || 0;
+      const target = this.getExactContractAssignments(employee);
+      
+      // 🔥 MANAGERS: No deviation calculation (they have no limits)
+      const deviation = employee.role === 'admin' ? 0 : actual - target;
+
+      return {
+        employeeId: employee.id,
+        employeeName: employee.name,
+        actual,
+        target,
+        deviation,
+        isManager: employee.role === 'admin'
+      };
+    });
   }
 }
 
