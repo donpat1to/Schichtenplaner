@@ -335,48 +335,46 @@ export class ShiftAssignmentService {
     
     const assignments: { [shiftId: string]: string[] } = {};
     
-    // Group all shifts by week AND day-timeSlot combination
-    const shiftsByPatternKey = new Map<string, ScheduledShift[]>();
+    console.log('🔄 Applying weekly pattern to all shifts:', {
+      patternShifts: weeklyPattern.weekShifts.length,
+      allShifts: allShifts.length,
+      patternAssignments: Object.keys(weeklyPattern.assignments).length
+    });
+
+    // Group pattern shifts by day-timeSlot for easy lookup
+    const patternMap = new Map<string, string[]>();
     
+    weeklyPattern.weekShifts.forEach(patternShift => {
+      const dayOfWeek = this.getDayOfWeek(patternShift.date);
+      const patternKey = `${dayOfWeek}-${patternShift.timeSlotId}`;
+      
+      if (weeklyPattern.assignments[patternShift.id]) {
+        patternMap.set(patternKey, weeklyPattern.assignments[patternShift.id]);
+        console.log(`📋 Pattern mapping: ${patternKey} → ${weeklyPattern.assignments[patternShift.id].length} employees`);
+      }
+    });
+
+    // Apply pattern to all shifts
     allShifts.forEach(shift => {
       const dayOfWeek = this.getDayOfWeek(shift.date);
       const patternKey = `${dayOfWeek}-${shift.timeSlotId}`;
       
-      if (!shiftsByPatternKey.has(patternKey)) {
-        shiftsByPatternKey.set(patternKey, []);
-      }
-      shiftsByPatternKey.get(patternKey)!.push(shift);
-    });
-    
-    console.log('📊 Pattern application analysis:');
-    console.log('- Unique pattern keys:', shiftsByPatternKey.size);
-    console.log('- Pattern keys:', Array.from(shiftsByPatternKey.keys()));
-
-    // For each shift in all weeks, find the matching pattern shift
-    allShifts.forEach(shift => {
-      const dayOfWeek = this.getDayOfWeek(shift.date);
-      //const patternKey = `${dayOfWeek}-${shift.timeSlotId}`;
-      const patternKey = `${shift.timeSlotId}`;
-
-      // Find the pattern shift for this day-timeSlot combination
-      const patternShift = weeklyPattern.weekShifts.find(patternShift => {
-        const patternDayOfWeek = this.getDayOfWeek(patternShift.date);
-        return patternDayOfWeek === dayOfWeek && 
-              patternShift.timeSlotId === shift.timeSlotId;
-      });
+      const patternAssignment = patternMap.get(patternKey);
       
-      if (patternShift && weeklyPattern.assignments[patternShift.id]) {
-        assignments[shift.id] = [...weeklyPattern.assignments[patternShift.id]];
+      if (patternAssignment) {
+        assignments[shift.id] = [...patternAssignment];
       } else {
         assignments[shift.id] = [];
-        console.warn(`❌ No pattern found for shift: ${patternKey}`);
+        console.warn(`❌ No pattern assignment found for: ${patternKey} (Shift: ${shift.id})`);
       }
     });
-    
-    // DEBUG: Check assignment coverage
+
+    // Debug: Check assignment coverage
     const assignedShifts = Object.values(assignments).filter(a => a.length > 0).length;
-    console.log(`📊 Assignment coverage: ${assignedShifts}/${allShifts.length} shifts assigned`);
+    const totalShifts = allShifts.length;
     
+    console.log(`📊 Pattern application result: ${assignedShifts}/${totalShifts} shifts assigned (${Math.round((assignedShifts/totalShifts)*100)}%)`);
+
     return assignments;
   }
 
