@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { shiftPlanService } from '../../services/shiftPlanService';
 import { employeeService } from '../../services/employeeService';
 import { shiftAssignmentService, ShiftAssignmentService } from '../../services/shiftAssignmentService';
-import { IntelligentShiftScheduler, SchedulingResult, AssignmentResult } from '../../services/scheduling';
+import { IntelligentShiftScheduler, SchedulingResult, AssignmentResult } from '../../hooks/useScheduling';
 import { ShiftPlan, TimeSlot, ScheduledShift } from '../../models/ShiftPlan';
 import { Employee, EmployeeAvailability } from '../../models/Employee';
 import { useNotification } from '../../contexts/NotificationContext';
