@@ -32,11 +32,17 @@ export interface JWTPayload {
 }
 
 export interface RegisterRequest {
-  email: string;
+  // REMOVED: email - will be auto-generated
   password: string;
-  firstname: String;
-  lastname: String;
+  firstname: string;
+  lastname: string;
   role?: string;
+}
+
+function generateEmail(firstname: string, lastname: string): string {
+  const cleanFirstname = firstname.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cleanLastname = lastname.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return `${cleanFirstname}.${cleanLastname}@sp.de`;
 }
 
 export const login = async (req: Request, res: Response) => {
@@ -162,16 +168,19 @@ export const validateToken = async (req: Request, res: Response) => {
 
 export const register = async (req: Request, res: Response) => {
   try {
-    const { email, password, firstname, lastname, role = 'user' } = req.body as RegisterRequest;
+    const { password, firstname, lastname, role = 'user' } = req.body as RegisterRequest;
 
-    // Validate required fields
-    if (!email || !password || !firstname || !lastname) {
+    // Validate required fields - REMOVED email
+    if (!password || !firstname || !lastname) {
       return res.status(400).json({ 
-        error: 'E-Mail, Passwort und Name sind erforderlich' 
+        error: 'Password, firstname und lastname sind erforderlich' 
       });
     }
 
-    // Check if email already exists
+    // Generate email automatically
+    const email = generateEmail(firstname, lastname);
+
+    // Check if generated email already exists
     const existingUser = await db.get<Employee>(
       'SELECT id FROM employees WHERE email = ?',
       [email]
@@ -179,19 +188,19 @@ export const register = async (req: Request, res: Response) => {
 
     if (existingUser) {
       return res.status(400).json({ 
-        error: 'Ein Benutzer mit dieser E-Mail existiert bereits' 
+        error: `Ein Benutzer mit der E-Mail ${email} existiert bereits` 
       });
     }
 
-    // Hash password
+    // Hash password and create user
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Insert user
-  const result = await db.run(
-    `INSERT INTO employees (id, email, password, firstname, lastname, role, employee_type, contract_type, can_work_alone, is_active) 
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [uuidv4(), email, hashedPassword, firstname, lastname, role, 'experienced', 'small', false, 1]
-  );
+    // Insert user with generated email
+    const result = await db.run(
+      `INSERT INTO employees (id, email, password, firstname, lastname, role, employee_type, contract_type, can_work_alone, is_active) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [uuidv4(), email, hashedPassword, firstname, lastname, role, 'experienced', 'small', false, 1]
+    );
 
     if (!result.lastID) {
       throw new Error('Benutzer konnte nicht erstellt werden');
@@ -199,7 +208,7 @@ export const register = async (req: Request, res: Response) => {
 
     // Get created user
     const newUser = await db.get<Employee>(
-      'SELECT id, email, name, role FROM employees WHERE id = ?',
+      'SELECT id, email, firstname, lastname, role FROM employees WHERE id = ?',
       [result.lastID]
     );
 

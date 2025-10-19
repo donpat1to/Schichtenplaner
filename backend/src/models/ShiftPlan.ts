@@ -3,15 +3,15 @@ export interface ShiftPlan {
   id: string;
   name: string;
   description?: string;
-  startDate?: string; // Optional for templates
-  endDate?: string;   // Optional for templates
+  startDate?: string;
+  endDate?: string;
   isTemplate: boolean;
   status: 'draft' | 'published' | 'archived' | 'template';
   createdBy: string;
   createdAt: string;
   timeSlots: TimeSlot[];
   shifts: Shift[];
-  scheduledShifts?: ScheduledShift[]; // Only for non-template plans with dates
+  scheduledShifts?: ScheduledShift[];
 }
 
 export interface TimeSlot {
@@ -84,7 +84,6 @@ export interface AssignEmployeeRequest {
   employeeId: string;
   scheduledShiftId: string;
 }
-
 
 export interface UpdateRequiredEmployeesRequest {
   requiredEmployees: number;

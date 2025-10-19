@@ -5,6 +5,25 @@ import { v4 as uuidv4 } from 'uuid';
 import { randomUUID } from 'crypto';
 import { db } from '../services/databaseService.js';
 
+// Add the same email generation function
+function generateEmail(firstname: string, lastname: string): string {
+  // Convert German umlauts to their expanded forms
+  const convertUmlauts = (str: string): string => {
+    return str
+      .toLowerCase()
+      .replace(/ü/g, 'ue')
+      .replace(/ö/g, 'oe')
+      .replace(/ä/g, 'ae')
+      .replace(/ß/g, 'ss');
+  };
+
+  // Remove any remaining special characters and convert to lowercase
+  const cleanFirstname = convertUmlauts(firstname).replace(/[^a-z0-9]/g, '');
+  const cleanLastname = convertUmlauts(lastname).replace(/[^a-z0-9]/g, '');
+  
+  return `${cleanFirstname}.${cleanLastname}@sp.de`;
+}
+
 export const checkSetupStatus = async (req: Request, res: Response): Promise<void> => {
   try {
     const adminExists = await db.get<{ 'COUNT(*)': number }>(
@@ -43,12 +62,11 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    const { password, firstname, lastname } = req.body;
-    const email = 'admin@instandhaltung.de';
+    const { password, firstname, lastname } = req.body; // Changed from name to firstname/lastname
 
-    console.log('👤 Creating admin with data:', { name, email });
+    console.log('👤 Creating admin with data:', { firstname, lastname });
 
-    // Validation
+    // Validation - updated for firstname/lastname
     if (!password || !firstname || !lastname) {
       res.status(400).json({ error: 'Passwort, Vorname und Nachname sind erforderlich' });
       return;
@@ -60,6 +78,10 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
+    // Generate email automatically using the same pattern
+    const email = generateEmail(firstname, lastname);
+    console.log('📧 Generated admin email:', email);
+
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
     const adminId = randomUUID();
@@ -70,18 +92,14 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
     await db.run('BEGIN TRANSACTION');
 
     try {
-      // Create admin user
+      // Create admin user with generated email
       await db.run(
         `INSERT INTO employees (id, email, password, firstname, lastname, role, employee_type, contract_type, can_work_alone, is_active)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [adminId, email, hashedPassword, firstname, lastname, 'admin', 'manager', 'large', true, 1]
       );
 
-      console.log('✅ Admin user created successfully');
-
-      // Initialize default templates WITHOUT starting a new transaction
-      //console.log('🔄 Initialisiere Standard-Vorlagen...');
-      //await initializeDefaultTemplates(adminId, false);
+      console.log('✅ Admin user created successfully with email:', email);
 
       // Commit the entire setup transaction
       await db.run('COMMIT');
@@ -91,7 +109,9 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
       res.status(201).json({
         success: true,
         message: 'Admin erfolgreich erstellt',
-        email: email
+        email: email,
+        firstname: firstname,
+        lastname: lastname
       });
 
     } catch (dbError) {

@@ -6,6 +6,13 @@ import { db } from '../services/databaseService.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { CreateEmployeeRequest } from '../models/Employee.js';
 
+function generateEmail(firstname: string, lastname: string): string {
+  // Remove special characters and convert to lowercase
+  const cleanFirstname = firstname.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cleanLastname = lastname.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return `${cleanFirstname}.${cleanLastname}@sp.de`;
+}
+
 export const getEmployees = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     console.log('🔍 Fetching employees - User:', req.user);
@@ -76,41 +83,40 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
     });
 
     const { 
-      email, 
       password, 
-      firstname,
-      lastname,
+      firstname, 
+      lastname, 
       role, 
       employeeType, 
       contractType,
       canWorkAlone
     } = req.body as CreateEmployeeRequest;
 
-    // Validierung
-    if (!email || !password || !firstname || !lastname || !role || !employeeType || !contractType) {
+    // Validation - REMOVED email check
+    if (!password || !firstname || !lastname || !role || !employeeType || !contractType) {
       console.log('❌ Validation failed: Missing required fields');
       res.status(400).json({ 
-        error: 'Email, password, name, role, employeeType und contractType sind erforderlich' 
+        error: 'Password, firstname, lastname, role, employeeType und contractType sind erforderlich' 
       });
       return;
     }
 
-    if (password.length < 6) {
-      console.log('❌ Validation failed: Password too short');
-      res.status(400).json({ error: 'Password must be at least 6 characters long' });
-      return;
-    }
+    // Generate email automatically
+    const email = generateEmail(firstname, lastname);
+    console.log('📧 Generated email:', email);
 
-    // Check if email already exists
-    const existingActiveUser = await db.get<any>('SELECT id FROM employees WHERE email = ? AND is_active = 1', [email]);
+    // Check if generated email already exists
+    const existingUser = await db.get<any>('SELECT id FROM employees WHERE email = ? AND is_active = 1', [email]);
     
-    if (existingActiveUser) {
-      console.log('❌ Email exists for active user:', existingActiveUser);
-      res.status(409).json({ error: 'Email already exists' });
+    if (existingUser) {
+      console.log('❌ Generated email already exists:', email);
+      res.status(409).json({ 
+        error: `Employee with email ${email} already exists. Please use different firstname/lastname.` 
+      });
       return;
     }
 
-    // Hash password
+    // Hash password and create employee
     const hashedPassword = await bcrypt.hash(password, 10);
     const employeeId = uuidv4();
 
@@ -123,8 +129,8 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
         employeeId, 
         email, 
         hashedPassword, 
-        firstname,    // Changed from name
-        lastname,     // Added
+        firstname, 
+        lastname, 
         role, 
         employeeType, 
         contractType,
@@ -133,10 +139,10 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
       ]
     );
 
-    // Return created employee
+    // Return created employee with generated email
     const newEmployee = await db.get<any>(`
       SELECT 
-        id, email, name, role, is_active as isActive,
+        id, email, firstname, lastname, role, is_active as isActive,
         employee_type as employeeType, 
         contract_type as contractType,
         can_work_alone as canWorkAlone,
@@ -157,35 +163,58 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
   try {
     const { id } = req.params;
     const { firstname, lastname, role, isActive, employeeType, contractType, canWorkAlone } = req.body;
-    console.log('📝 Update Employee Request:', { id, name, role, isActive, employeeType, contractType, canWorkAlone });
 
-    // Check if employee exists
-    const existingEmployee = await db.get('SELECT * FROM employees WHERE id = ?', [id]);
+    console.log('📝 Update Employee Request:', { id, firstname, lastname, role, isActive, employeeType, contractType, canWorkAlone });
+
+    // Check if employee exists and get current data
+    const existingEmployee = await db.get<any>('SELECT * FROM employees WHERE id = ?', [id]);
     if (!existingEmployee) {
       res.status(404).json({ error: 'Employee not found' });
       return;
     }
 
-    // Update employee
+    // Generate new email if firstname or lastname changed
+    let email = existingEmployee.email;
+    if (firstname || lastname) {
+      const newFirstname = firstname || existingEmployee.firstname;
+      const newLastname = lastname || existingEmployee.lastname;
+      email = generateEmail(newFirstname, newLastname);
+      
+      // Check if new email already exists (for another employee)
+      const emailExists = await db.get<any>(
+        'SELECT id FROM employees WHERE email = ? AND id != ? AND is_active = 1', 
+        [email, id]
+      );
+      
+      if (emailExists) {
+        res.status(409).json({ 
+          error: `Cannot update name - email ${email} already exists for another employee` 
+        });
+        return;
+      }
+    }
+
+    // Update employee with potentially new email
     await db.run(
       `UPDATE employees 
-      SET firstname = COALESCE(?, firstname),
-          lastname = COALESCE(?, lastname),
-          role = COALESCE(?, role),
-          is_active = COALESCE(?, is_active),
-          employee_type = COALESCE(?, employee_type),
-          contract_type = COALESCE(?, contract_type),
-          can_work_alone = COALESCE(?, can_work_alone)
-      WHERE id = ?`,
-      [firstname, lastname, role, isActive, employeeType, contractType, canWorkAlone, id]
+       SET firstname = COALESCE(?, firstname),
+           lastname = COALESCE(?, lastname),
+           email = ?,
+           role = COALESCE(?, role),
+           is_active = COALESCE(?, is_active),
+           employee_type = COALESCE(?, employee_type),
+           contract_type = COALESCE(?, contract_type),
+           can_work_alone = COALESCE(?, can_work_alone)
+       WHERE id = ?`,
+      [firstname, lastname, email, role, isActive, employeeType, contractType, canWorkAlone, id]
     );
 
-    console.log('✅ Employee updated successfully');
+    console.log('✅ Employee updated successfully with email:', email);
 
     // Return updated employee
     const updatedEmployee = await db.get<any>(`
       SELECT 
-        id, email, name, role, is_active as isActive, 
+        id, email, firstname, lastname, role, is_active as isActive, 
         employee_type as employeeType, 
         contract_type as contractType,
         can_work_alone as canWorkAlone,

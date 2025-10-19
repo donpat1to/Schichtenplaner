@@ -14,7 +14,6 @@ export interface Employee {
 }
 
 export interface CreateEmployeeRequest {
-  email: string;
   password: string;
   firstname: string;
   lastname: string;

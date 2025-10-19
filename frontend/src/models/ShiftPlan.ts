@@ -3,14 +3,15 @@ export interface ShiftPlan {
   id: string;
   name: string;
   description?: string;
-  startDate?: string; // Optional for templates
-  endDate?: string;   // Optional for templates
+  startDate?: string;
+  endDate?: string;
   isTemplate: boolean;
   status: 'draft' | 'published' | 'archived' | 'template';
   createdBy: string;
   createdAt: string;
   timeSlots: TimeSlot[];
   shifts: Shift[];
+  scheduledShifts?: ScheduledShift[];
 }
 
 export interface TimeSlot {
@@ -49,16 +50,6 @@ export interface ShiftAssignment {
   assignedBy: string;
 }
 
-export interface EmployeeAvailability {
-  id: string;
-  employeeId: string;
-  planId: string;
-  dayOfWeek: number;
-  timeSlotId: string;
-  preferenceLevel: 1 | 2 | 3; // 1:preferred, 2:available, 3:unavailable
-  notes?: string;
-}
-
 // Request/Response DTOs
 export interface CreateShiftPlanRequest {
   name: string;
@@ -68,7 +59,6 @@ export interface CreateShiftPlanRequest {
   isTemplate: boolean;
   timeSlots: Omit<TimeSlot, 'id' | 'planId'>[];
   shifts: Omit<Shift, 'id' | 'planId'>[];
-  templateId?: string;
 }
 
 export interface UpdateShiftPlanRequest {
@@ -95,10 +85,6 @@ export interface AssignEmployeeRequest {
   scheduledShiftId: string;
 }
 
-export interface UpdateAvailabilityRequest {
-  planId: string;
-  availabilities: Omit<EmployeeAvailability, 'id' | 'employeeId'>[];
-}
 
 export interface UpdateRequiredEmployeesRequest {
   requiredEmployees: number;
