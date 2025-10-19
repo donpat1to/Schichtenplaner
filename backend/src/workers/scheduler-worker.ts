@@ -3,7 +3,7 @@ import { parentPort, workerData } from 'worker_threads';
 import { CPModel, CPSolver } from './cp-sat-wrapper.js';
 import { ShiftPlan, Shift } from '../models/ShiftPlan.js';
 import { Employee, EmployeeAvailability } from '../models/Employee.js';
-import { Availability, Constraint } from '../models/scheduling.js';
+import { Availability, Constraint, Violation, SolverOptions, Solution, Assignment } from '../models/scheduling.js';
 
 interface WorkerData {
   shiftPlan: ShiftPlan;
@@ -12,6 +12,7 @@ interface WorkerData {
   constraints: Constraint[];
   shifts: Shift[];
 }
+
 
 function buildSchedulingModel(model: CPModel, data: WorkerData): void {
   const { employees, shifts, availabilities, constraints } = data;
@@ -93,26 +94,36 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
     });
   });
   
-  // 6. Contract Hours Constraints
+  // 6. Employee cant workalone  
   employees.forEach((employee: any) => {
-    const contractHours = employee.contractType === 'small' ? 20 : 40;
-    const shiftHoursVars: string[] = [];
+    if (employee.employeeType === 'experienced' && employee.canWorkAlone) {
+      shifts.forEach((shift: any) => {
+        const varName = `assign_${employee.id}_${shift.id}`;
+        // Allow this employee to work alone (no additional constraint needed)
+        // This is more about not preventing single assignments
+      });
+    }
+  });
+
+  // 7. Contract Type Shifts Constraint
+  employees.forEach((employee: any) => {
+    const exactShiftsPerWeek = employee.contractType === 'small' ? 5 : 10; // Example: exactly 5 shifts for small, 10 for large
+    const shiftVars: string[] = [];
     
     shifts.forEach((shift: any) => {
-      const shiftHours = 8; // Assuming 8 hours per shift
       const varName = `assign_${employee.id}_${shift.id}`;
-      shiftHoursVars.push(`${shiftHours} * ${varName}`);
+      shiftVars.push(varName);
     });
     
-    if (shiftHoursVars.length > 0) {
+    if (shiftVars.length > 0) {
       model.addConstraint(
-        `${shiftHoursVars.join(' + ')} <= ${contractHours}`,
-        `Contract hours limit for ${employee.name}`
+        `${shiftVars.join(' + ')} == ${exactShiftsPerWeek}`,
+        `Exact shifts per week for ${employee.name} (${employee.contractType} contract)`
       );
     }
   });
   
-  // 7. Ziel: Verfügbarkeits-Score maximieren
+  // 8. Ziel: Verfügbarkeits-Score maximieren
   let objectiveExpression = '';
   employees.forEach((employee: any) => {
     shifts.forEach((shift: any) => {

@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "npx tsx src/server.ts",
+    "dev": "npm run build && npx tsx src/server.ts",
     "build": "tsc", 
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "prestart": "npm run build"
   },
   "dependencies": {
     "@types/bcrypt": "^6.0.0",
@@ -25,6 +26,7 @@
     "@types/jsonwebtoken": "^9.0.2",
     "@types/uuid": "^9.0.2",
     "ts-node": "^10.9.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "tsx": "^4.0.0"
   }
 }

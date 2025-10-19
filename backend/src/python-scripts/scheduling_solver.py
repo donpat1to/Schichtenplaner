@@ -153,6 +153,54 @@ class ScheduleOptimizer:
                 # If any trainee is assigned, at least one experienced must be assigned
                 for trainee_var in trainee_vars:
                     self.model.Add(sum(experienced_vars) >= 1).OnlyEnforceIf(trainee_var)
+
+        # Prevent shifts with only one worker unless that worker can work alone
+        for shift in shifts:
+            shift_id = shift['id']
+            
+            # Create a variable for "this shift has exactly one worker"
+            shift_has_one_worker = self.model.NewBoolVar(f'shift_{shift_id}_one_worker')
+            shift_assignment_count = sum(assignments[emp['id']].get(shift_id, 0) 
+                                    for emp in all_employees 
+                                    if shift_id in assignments.get(emp['id'], {}))
+            
+            # Link the count to the boolean variable
+            self.model.Add(shift_assignment_count == 1).OnlyEnforceIf(shift_has_one_worker)
+            self.model.Add(shift_assignment_count != 1).OnlyEnforceIf(shift_has_one_worker.Not())
+            
+            # Create a variable for "this shift has someone who cannot work alone"
+            has_cannot_work_alone = self.model.NewBoolVar(f'shift_{shift_id}_cannot_work_alone')
+            cannot_work_alone_vars = []
+            for employee in all_employees:
+                employee_id = employee['id']
+                if shift_id in assignments.get(employee_id, {}):
+                    is_experienced = employee.get('employeeType') == 'experienced'
+                    can_work_alone = employee.get('canWorkAlone', False)
+                    if not (is_experienced and can_work_alone):
+                        cannot_work_alone_vars.append(assignments[employee_id][shift_id])
+            
+            if cannot_work_alone_vars:
+                self.model.Add(sum(cannot_work_alone_vars) >= 1).OnlyEnforceIf(has_cannot_work_alone)
+                self.model.Add(sum(cannot_work_alone_vars) == 0).OnlyEnforceIf(has_cannot_work_alone.Not())
+                
+                # Constraint: If shift has one worker, it cannot have someone who cannot work alone
+                self.model.AddImplication(shift_has_one_worker, has_cannot_work_alone.Not())
+
+        # Exact shifts per contract type
+        for employee in all_employees:
+            employee_id = employee['id']
+            contract_type = employee.get('contractType', 'large')
+            exact_shifts = 5 if contract_type == 'small' else 10
+            
+            shift_vars = []
+            for shift in shifts:
+                shift_id = shift['id']
+                if shift_id in assignments.get(employee_id, {}):
+                    shift_vars.append(assignments[employee_id][shift_id])
+            
+            if shift_vars:
+                self.model.Add(sum(shift_vars) == exact_shifts)
+                self.resolution_report.append(f"📋 Employee {employee_id}: {exact_shifts} shifts ({contract_type} contract)")
         
         # Constraint: Contract hours limits
         for employee in all_employees:
@@ -184,7 +232,7 @@ class ScheduleOptimizer:
                         objective_terms.append(assignments[employee_id][shift_id] * 5)
                     # Penalize unavailable assignments (shouldn't happen due to constraints)
                     else:
-                        objective_terms.append(assignments[employee_id][shift_id] * -100)
+                        objective_terms.append(assignments[employee_id][shift_id] * -1000)
         
         self.model.Maximize(sum(objective_terms))
         
@@ -204,6 +252,40 @@ class ScheduleOptimizer:
         else:
             return {}
 
+    def groupShiftsByDay(self, shifts):
+        """Group shifts by date"""
+        shifts_by_day = defaultdict(list)
+        for shift in shifts:
+            date = shift.get('date', 'unknown')
+            shifts_by_day[date].append(shift)
+        return shifts_by_day
+
+    def getAvailability(self, employee_id, shift_id, availabilities):
+        """Get availability level for employee and shift"""
+        for avail in availabilities:
+            if avail.get('employeeId') == employee_id and avail.get('shiftId') == shift_id:
+                return avail.get('availability', 2)  # Default to available
+        return 2  # Default to available if no preference specified
+
+    def extractAssignments(self, assignments, employees, shifts):
+        """Extract assignments from solution"""
+        result_assignments = {}
+        
+        # Initialize with empty lists
+        for shift in shifts:
+            result_assignments[shift['id']] = []
+        
+        # Fill with assigned employees
+        for employee in employees:
+            employee_id = employee['id']
+            for shift in shifts:
+                shift_id = shift['id']
+                if (shift_id in assignments.get(employee_id, {}) and 
+                    self.solver.Value(assignments[employee_id][shift_id]) == 1):
+                    result_assignments[shift_id].append(employee_id)
+        
+        return result_assignments
+
     def formatAssignments(self, assignments):
         """Format assignments for frontend consumption"""
         formatted = {}
@@ -217,8 +299,102 @@ class ScheduleOptimizer:
             return shiftPlan['shifts']
         return []
 
-    # ... (keep the other helper methods from your original code)
-    # detectAllViolations, fixViolations, createTraineePartners, etc.
+    def filterEmployees(self, employees, condition):
+        """Filter employees based on condition"""
+        if callable(condition):
+            return [emp for emp in employees if condition(emp)]
+        elif isinstance(condition, str):
+            return [emp for emp in employees if emp.get('employeeType') == condition]
+        return []
+
+    def getFirstWeekShifts(self, shifts):
+        """Get shifts for the first week (simplified)"""
+        # For simplicity, return all shifts or implement week filtering logic
+        return shifts
+
+    def createTraineePartners(self, workers, availabilities):
+        """Create trainee-experienced partnerships based on availability"""
+        # Simplified implementation - return empty dict for now
+        return {}
+
+    def detectAllViolations(self, assignments, employees, availabilities, constraints, shifts):
+        """Detect all constraint violations"""
+        violations = []
+        employee_map = {emp['id']: emp for emp in employees}
+        
+        # Check for understaffed shifts
+        for shift in shifts:
+            shift_id = shift['id']
+            assigned_count = len(assignments.get(shift_id, []))
+            min_required = shift.get('minWorkers', 1)
+            
+            if assigned_count < min_required:
+                violations.append(f"UNDERSTAFFED: Shift {shift_id} has {assigned_count} employees but requires {min_required}")
+        
+        # Check for trainee supervision
+        for shift in shifts:
+            shift_id = shift['id']
+            assigned_employees = assignments.get(shift_id, [])
+            has_trainee = any(employee_map.get(emp_id, {}).get('employeeType') == 'trainee' for emp_id in assigned_employees)
+            has_experienced = any(employee_map.get(emp_id, {}).get('employeeType') == 'experienced' for emp_id in assigned_employees)
+            
+            if has_trainee and not has_experienced:
+                violations.append(f"TRAINEE_UNSUPERVISED: Shift {shift_id} has trainee but no experienced employee")
+        
+        # Check for multiple shifts per day
+        shifts_by_day = self.groupShiftsByDay(shifts)
+        for employee in employees:
+            employee_id = employee['id']
+            for date, day_shifts in shifts_by_day.items():
+                shifts_assigned = 0
+                for shift in day_shifts:
+                    if employee_id in assignments.get(shift['id'], []):
+                        shifts_assigned += 1
+                
+                if shifts_assigned > 1:
+                    violations.append(f"MULTIPLE_SHIFTS: {employee.get('name', employee_id)} has {shifts_assigned} shifts on {date}")
+        
+        # Check contract type constraints
+        for employee in employees:
+            employee_id = employee['id']
+            contract_type = employee.get('contractType', 'large')
+            expected_shifts = 5 if contract_type == 'small' else 10
+            
+            total_shifts = 0
+            for shift_assignments in assignments.values():
+                if employee_id in shift_assignments:
+                    total_shifts += 1
+            
+            if total_shifts != expected_shifts:
+                violations.append(f"CONTRACT_VIOLATION: {employee.get('name', employee_id)} has {total_shifts} shifts but should have exactly {expected_shifts} ({contract_type} contract)")
+        
+        return violations
+
+    def fixViolations(self, assignments, employees, availabilities, constraints, shifts, maxIterations=20):
+        """Fix violations in assignments"""
+        # Simplified implementation - return original assignments
+        # In a real implementation, this would iteratively fix violations
+        return assignments
+
+    def assignManagersToPriority(self, managers, assignments, availabilities, shifts):
+        """Assign managers to priority shifts"""
+        # Simplified implementation - return original assignments
+        return assignments
+
+    def countCriticalViolations(self, violations):
+        """Count critical violations"""
+        critical_keywords = ['UNDERSTAFFED', 'TRAINEE_UNSUPERVISED', 'CONTRACT_VIOLATION']
+        return sum(1 for violation in violations if any(keyword in violation for keyword in critical_keywords))
+
+    def errorResult(self, error):
+        """Return error result"""
+        return {
+            'assignments': {},
+            'violations': [f'Error: {str(error)}'],
+            'success': False,
+            'resolution_report': [f'Critical error: {str(error)}'],
+            'error': str(error)
+        }
 
 # Main execution for Python script
 if __name__ == "__main__":

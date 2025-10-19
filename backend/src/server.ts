@@ -26,10 +26,6 @@ app.use('/api/shift-plans', shiftPlanRoutes);
 app.use('/api/scheduled-shifts', scheduledShifts);
 app.use('/api/scheduling', schedulingRoutes);
 
-app.listen(PORT, () => {
-  console.log(`Scheduling server running on port ${PORT}`);
-});
-
 // Error handling middleware should come after routes
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Unhandled error:', err);

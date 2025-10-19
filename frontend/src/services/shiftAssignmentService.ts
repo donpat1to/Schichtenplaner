@@ -2,10 +2,9 @@
 import { ShiftPlan, ScheduledShift } from '../models/ShiftPlan';
 import { Employee, EmployeeAvailability } from '../models/Employee';
 import { authService } from './authService';
-//import { IntelligentShiftScheduler, AssignmentResult, WeeklyPattern } from './scheduling/useScheduling';
-import { AssignmentResult } from '../models/scheduling';
+import { AssignmentResult, ScheduleRequest } from '../models/scheduling';
 
-const API_BASE_URL = 'http://localhost:3002/api/scheduled-shifts';
+const API_BASE_URL = 'http://localhost:3002/api';
 
 
 
@@ -23,7 +22,7 @@ export class ShiftAssignmentService {
     try {
       //console.log('🔄 Updating scheduled shift via API:', { id, updates });
       
-      const response = await fetch(`${API_BASE_URL}/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/scheduled-shifts/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -72,7 +71,7 @@ export class ShiftAssignmentService {
 
   async getScheduledShift(id: string): Promise<any> {
     try {
-      const response = await fetch(`${API_BASE_URL}/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/scheduled-shifts/${id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -103,7 +102,7 @@ export class ShiftAssignmentService {
   // New method to get all scheduled shifts for a plan
   async getScheduledShiftsForPlan(planId: string): Promise<ScheduledShift[]> {
     try {
-      const response = await fetch(`${API_BASE_URL}/plan/${planId}`, {
+      const response = await fetch(`${API_BASE_URL}/scheduled-shifts/plan/${planId}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -134,23 +133,43 @@ export class ShiftAssignmentService {
     }
   }
 
+  private async callSchedulingAPI(request: ScheduleRequest): Promise<AssignmentResult> {
+    const response = await fetch(`${API_BASE_URL}/scheduling/generate-schedule`, {
+      method: 'POST',
+      headers: {
+          'Content-Type': 'application/json',
+          ...authService.getAuthHeaders()
+        },
+      body: JSON.stringify(request)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Scheduling failed');
+    }
+
+    return response.json();
+  }
+
   async assignShifts(
     shiftPlan: ShiftPlan,
     employees: Employee[],
     availabilities: EmployeeAvailability[],
     constraints: any = {}
   ): Promise<AssignmentResult> {
+    console.log('🧠 Starting scheduling optimization...');
 
-    console.log('🧠 Starting intelligent scheduling for FIRST WEEK ONLY...');
-
-
-
-    return {
-      assignments: , 
-      violations: ,
-      success: ,
-      resolutionReport: ,
+    const scheduleRequest: ScheduleRequest = {
+      shiftPlan,
+      employees,
+      availabilities: availabilities.map(avail => ({
+        ...avail,
+        preferenceLevel: avail.preferenceLevel as 1 | 2 | 3
+      })),
+      constraints: Array.isArray(constraints) ? constraints : []
     };
+
+    return await this.callSchedulingAPI(scheduleRequest);
   }
 }
 
