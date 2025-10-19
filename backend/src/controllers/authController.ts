@@ -34,9 +34,8 @@ export interface JWTPayload {
 export interface RegisterRequest {
   email: string;
   password: string;
-  name: string;
-  //employee_type?: string;
-  //is_sufficiently_independent?: string;
+  firstname: String;
+  lastname: String;
   role?: string;
 }
 
@@ -53,7 +52,7 @@ export const login = async (req: Request, res: Response) => {
 
     // Get user from database
     const user = await db.get<EmployeeWithPassword>(
-      'SELECT id, email, password, name, role, employee_type as employeeType, contract_type as contractType, can_work_alone as canWorkAlone, is_active as isActive FROM employees WHERE email = ? AND is_active = 1',
+      'SELECT id, email, password, firstname, lastname, role, employee_type as employeeType, contract_type as contractType, can_work_alone as canWorkAlone, is_active as isActive FROM employees WHERE email = ? AND is_active = 1',
       [email]
     );
 
@@ -117,7 +116,7 @@ export const getCurrentUser = async (req: Request, res: Response) => {
     }
 
     const user = await db.get<Employee>(
-      'SELECT id, email, name, role, employee_type as employeeType, contract_type as contractType, can_work_alone as canWorkAlone, is_active as isActive FROM employees WHERE id = ? AND is_active = 1',
+      'SELECT id, email, firstname, lastname, role, employee_type as employeeType, contract_type as contractType, can_work_alone as canWorkAlone, is_active as isActive FROM employees WHERE id = ? AND is_active = 1',
       [jwtUser.userId]
     );
 
@@ -163,10 +162,10 @@ export const validateToken = async (req: Request, res: Response) => {
 
 export const register = async (req: Request, res: Response) => {
   try {
-    const { email, password, name, role = 'user' } = req.body as RegisterRequest;
+    const { email, password, firstname, lastname, role = 'user' } = req.body as RegisterRequest;
 
     // Validate required fields
-    if (!email || !password || !name) {
+    if (!email || !password || !firstname || !lastname) {
       return res.status(400).json({ 
         error: 'E-Mail, Passwort und Name sind erforderlich' 
       });
@@ -188,11 +187,11 @@ export const register = async (req: Request, res: Response) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Insert user
-    const result = await db.run(
-      `INSERT INTO employees (id, email, password, name, role, employee_type, contract_type, can_work_alone, is_active) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [uuidv4(), email, hashedPassword, name, role, 'experienced', 'small', false, 1]
-    );
+  const result = await db.run(
+    `INSERT INTO employees (id, email, password, firstname, lastname, role, employee_type, contract_type, can_work_alone, is_active) 
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [uuidv4(), email, hashedPassword, firstname, lastname, role, 'experienced', 'small', false, 1]
+  );
 
     if (!result.lastID) {
       throw new Error('Benutzer konnte nicht erstellt werden');

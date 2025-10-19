@@ -12,7 +12,7 @@ import { createPlanFromPreset, TEMPLATE_PRESETS } from '../models/defaults/shift
 
 async function getPlanWithDetails(planId: string) {
   const plan = await db.get<any>(`
-    SELECT sp.*, e.name as created_by_name 
+    SELECT sp.*, e.firstname || ' ' || e.lastname as created_by_name 
     FROM shift_plans sp
     LEFT JOIN employees e ON sp.created_by = e.id
     WHERE sp.id = ?
@@ -69,7 +69,7 @@ async function getPlanWithDetails(planId: string) {
 export const getShiftPlans = async (req: Request, res: Response): Promise<void> => {
   try {
     const plans = await db.all<any>(`
-      SELECT sp.*, e.name as created_by_name 
+      SELECT sp.*, e.firstname || ' ' || e.lastname as created_by_name 
       FROM shift_plans sp
       LEFT JOIN employees e ON sp.created_by = e.id
       ORDER BY sp.created_at DESC
@@ -94,7 +94,7 @@ export const getShiftPlan = async (req: Request, res: Response): Promise<void> =
     const { id } = req.params;
 
     const plan = await db.get<any>(`
-      SELECT sp.*, e.name as created_by_name 
+      SELECT sp.*, e.firstname || ' ' || e.lastname as created_by_name 
       FROM shift_plans sp
       LEFT JOIN employees e ON sp.created_by = e.id
       WHERE sp.id = ?
@@ -555,7 +555,7 @@ export const deleteShiftPlan = async (req: Request, res: Response): Promise<void
 // Helper function to get plan by ID
 async function getShiftPlanById(planId: string): Promise<any> {
   const plan = await db.get<any>(`
-    SELECT sp.*, e.name as created_by_name 
+    SELECT sp.*, e.firstname || ' ' || e.lastname as created_by_name 
     FROM shift_plans sp
     LEFT JOIN employees e ON sp.created_by = e.id
     WHERE sp.id = ?

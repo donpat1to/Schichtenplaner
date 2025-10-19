@@ -3,14 +3,26 @@ CREATE TABLE IF NOT EXISTS employees (
   id TEXT PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
   password TEXT NOT NULL,
-  name TEXT NOT NULL,
-  role TEXT CHECK(role IN ('admin', 'user', 'maintenance')) NOT NULL,
+  firstname TEXT NOT NULL,
+  lastname TEXT NOT NULL,
   employee_type TEXT CHECK(employee_type IN ('manager', 'trainee', 'experienced')) NOT NULL,
   contract_type TEXT CHECK(contract_type IN ('small', 'large')) NOT NULL,
   can_work_alone BOOLEAN DEFAULT FALSE,
   is_active BOOLEAN DEFAULT TRUE,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   last_login TEXT DEFAULT NULL
+);
+
+-- Roles lookup table
+CREATE TABLE IF NOT EXISTS roles (
+  role TEXT PRIMARY KEY CHECK(role IN ('admin', 'user', 'maintenance'))
+);
+
+-- Junction table: many-to-many relationship
+CREATE TABLE IF NOT EXISTS employee_roles (
+  employee_id TEXT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  role TEXT NOT NULL REFERENCES roles(role),
+  PRIMARY KEY (employee_id, role)
 );
 
 -- Shift plans table
@@ -83,14 +95,13 @@ CREATE TABLE IF NOT EXISTS employee_availability (
   id TEXT PRIMARY KEY,
   employee_id TEXT NOT NULL,
   plan_id TEXT NOT NULL,
-  day_of_week INTEGER NOT NULL CHECK (day_of_week >= 1 AND day_of_week <= 7),
-  time_slot_id TEXT NOT NULL,
+  shift_id TEXT NOT NULL,
   preference_level INTEGER CHECK(preference_level IN (1, 2, 3)) NOT NULL,
   notes TEXT,
   FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
   FOREIGN KEY (plan_id) REFERENCES shift_plans(id) ON DELETE CASCADE,
-  FOREIGN KEY (time_slot_id) REFERENCES time_slots(id) ON DELETE CASCADE,
-  UNIQUE(employee_id, plan_id, day_of_week, time_slot_id)
+  FOREIGN KEY (shift_id) REFERENCES shifts(id) ON DELETE CASCADE,
+  UNIQUE(employee_id, plan_id, shift_id)
 );
 
 -- Performance indexes

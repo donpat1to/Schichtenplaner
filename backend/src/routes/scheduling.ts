@@ -39,7 +39,7 @@ router.post('/generate-schedule', async (req, res) => {
       assignments: Object.keys(result.assignments).length,
       violations: result.violations.length
     });
-    
+
     res.json(result);
   } catch (error) {
     console.error('Scheduling failed:', error);

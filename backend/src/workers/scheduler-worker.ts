@@ -18,15 +18,16 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
   const { employees, shifts, availabilities, constraints } = data;
   
   // Filter employees to only include active ones
+  const nonManagerEmployees = employees.filter(emp => emp.isActive && emp.employeeType !== 'manager');
   const activeEmployees = employees.filter(emp => emp.isActive);
-  const trainees = activeEmployees.filter(emp => emp.employeeType === 'trainee');
-  const experienced = activeEmployees.filter(emp => emp.employeeType === 'experienced');
+  const trainees = nonManagerEmployees.filter(emp => emp.employeeType === 'trainee');
+  const experienced = nonManagerEmployees.filter(emp => emp.employeeType === 'experienced');
   
-  console.log(`Building model with ${activeEmployees.length} employees, ${shifts.length} shifts`);
+  console.log(`Building model with ${nonManagerEmployees.length} employees, ${shifts.length} shifts`);
   console.log(`Available shifts per week: ${shifts.length}`);
 
   // 1. Create assignment variables for all possible assignments
-  activeEmployees.forEach((employee: any) => {
+  nonManagerEmployees.forEach((employee: any) => {
     shifts.forEach((shift: any) => {
       const varName = `assign_${employee.id}_${shift.id}`;
       model.addVariable(varName, 'bool');
@@ -34,7 +35,7 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
   });
 
   // 2. Availability constraints
-  activeEmployees.forEach((employee: any) => {
+  nonManagerEmployees.forEach((employee: any) => {
     shifts.forEach((shift: any) => {
       const availability = availabilities.find(
         (a: any) => a.employeeId === employee.id && a.shiftId === shift.id
@@ -53,7 +54,7 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
 
   // 3. Max 1 shift per day per employee
   const shiftsByDate = groupShiftsByDate(shifts);
-  activeEmployees.forEach((employee: any) => {
+  nonManagerEmployees.forEach((employee: any) => {
     Object.entries(shiftsByDate).forEach(([date, dayShifts]) => {
       const dayAssignmentVars = (dayShifts as any[]).map(
         (shift: any) => `assign_${employee.id}_${shift.id}`
@@ -70,7 +71,7 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
 
   // 4. Shift staffing constraints
   shifts.forEach((shift: any) => {
-    const assignmentVars = activeEmployees.map(
+    const assignmentVars = nonManagerEmployees.map(
       (emp: any) => `assign_${emp.id}_${shift.id}`
     );
     
@@ -115,11 +116,42 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
     });
   });
 
-  // 6. Contract type constraints
+  // 6. Employees who cannot work alone constraint
+  const employeesWhoCantWorkAlone = nonManagerEmployees.filter(emp => !emp.canWorkAlone);
+  console.log(`Found ${employeesWhoCantWorkAlone.length} employees who cannot work alone`);
+
+  employeesWhoCantWorkAlone.forEach((employee: any) => {
+    shifts.forEach((shift: any) => {
+      const employeeVar = `assign_${employee.id}_${shift.id}`;
+      const otherEmployees = nonManagerEmployees.filter(emp => 
+        emp.id !== employee.id && emp.isActive
+      );
+      
+      if (otherEmployees.length === 0) {
+        // No other employees available, this employee cannot work this shift
+        model.addConstraint(
+          `${employeeVar} == 0`,
+          `No other employees available for ${employee.name} in shift ${shift.id}`
+        );
+      } else {
+        const otherEmployeeVars = otherEmployees.map(emp => 
+          `assign_${emp.id}_${shift.id}`
+        );
+        
+        // Constraint: if this employee works, at least one other must work
+        model.addConstraint(
+          `${employeeVar} <= ${otherEmployeeVars.join(' + ')}`,
+          `${employee.name} cannot work alone in ${shift.id}`
+        );
+      }
+    });
+  });
+
+  // 7. Contract type constraints
   const totalShifts = shifts.length;
   console.log(`Total available shifts: ${totalShifts}`);
 
-  activeEmployees.forEach((employee: any) => {
+  nonManagerEmployees.forEach((employee: any) => {
     const contractType = employee.contractType || 'large';
     
     // EXACT SHIFTS PER WEEK
@@ -146,11 +178,11 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
     }
   });
 
-  // 7. Objective: Maximize preferred assignments with soft constraints
+  // 8. Objective: Maximize preferred assignments with soft constraints
   let objectiveExpression = '';
   let softConstraintPenalty = '';
   
-  activeEmployees.forEach((employee: any) => {
+  nonManagerEmployees.forEach((employee: any) => {
     shifts.forEach((shift: any) => {
       const varName = `assign_${employee.id}_${shift.id}`;
       const availability = availabilities.find(
@@ -192,23 +224,13 @@ function groupShiftsByDate(shifts: any[]): Record<string, any[]> {
 
 function extractAssignmentsFromSolution(solution: any, employees: any[], shifts: any[]): any {
   const assignments: any = {};
-  const employeeAssignments: any = {};
   
-  console.log('=== SOLUTION DEBUG INFO ===');
-  console.log('Solution success:', solution.success);
-  console.log('Raw assignments from Python:', solution.assignments?.length || 0);
-  console.log('Variables in solution:', Object.keys(solution.variables || {}).length);
-  
-  // Initialize assignments object
-  shifts.forEach((shift: any) => {
-    assignments[shift.id] = [];
-  });
-  
-  employees.forEach((employee: any) => {
-    employeeAssignments[employee.id] = 0;
+  console.log('🔍 DEBUG: Available shifts with new ID pattern:');
+  shifts.forEach(shift => {
+    console.log(`   - ${shift.id} (Day: ${shift.id.split('-')[0]}, TimeSlot: ${shift.id.split('-')[1]})`);
   });
 
-  //  Python-parsed assignments
+  // Your existing assignment extraction logic...
   if (solution.assignments && solution.assignments.length > 0) {
     console.log('Using Python-parsed assignments (cleaner)');
     
@@ -216,31 +238,27 @@ function extractAssignmentsFromSolution(solution: any, employees: any[], shifts:
       const shiftId = assignment.shiftId;
       const employeeId = assignment.employeeId;
       
-      if (shiftId && employeeId && assignments[shiftId]) {
+      if (shiftId && employeeId) {
+        if (!assignments[shiftId]) {
+          assignments[shiftId] = [];
+        }
         // Check if this assignment already exists to avoid duplicates
         if (!assignments[shiftId].includes(employeeId)) {
           assignments[shiftId].push(employeeId);
-          employeeAssignments[employeeId]++;
         }
       }
     });
-  } 
+  }
 
-  // Log results
-  console.log('=== ASSIGNMENT RESULTS ===');
-  employees.forEach((employee: any) => {
-    console.log(`  ${employee.name}: ${employeeAssignments[employee.id]} shifts`);
+  // 🆕 ADD: Enhanced logging with employee names
+  console.log('🎯 FINAL ASSIGNMENTS WITH EMPLOYEE :');
+  Object.entries(assignments).forEach(([shiftId, employeeIds]) => {
+    const employeeNames = (employeeIds as string[]).map(empId => {
+      const employee = employees.find(emp => emp.id === empId);
+      return employee ? employee.id : 'Unknown';
+    });
+    console.log(`   📅 ${shiftId}: ${employeeNames.join(', ')}`);
   });
-  
-  let totalAssignments = 0;
-  shifts.forEach((shift: any) => {
-    const count = assignments[shift.id]?.length || 0;
-    totalAssignments += count;
-    console.log(`  Shift ${shift.id}: ${count} employees`);
-  });
-  
-  console.log(`Total assignments: ${totalAssignments}`);
-  console.log('==========================');
   
   return assignments;
 }
@@ -277,6 +295,20 @@ function detectViolations(assignments: any, employees: any[], shifts: any[]): st
     }
   });
   
+  // Check for employees working alone who shouldn't
+  shifts.forEach((shift: any) => {
+    const assignedEmployees = assignments[shift.id] || [];
+    
+    if (assignedEmployees.length === 1) {
+      const singleEmployeeId = assignedEmployees[0];
+      const singleEmployee = employeeMap.get(singleEmployeeId);
+      
+      if (singleEmployee && !singleEmployee.canWorkAlone) {
+        violations.push(`EMPLOYEE_ALONE: ${singleEmployee.name} is working alone in shift ${shift.id} but cannot work alone`);
+      }
+    }
+  });
+
   // Check for multiple shifts per day per employee
   const shiftsByDate = groupShiftsByDate(shifts);
   employees.forEach((employee: any) => {
@@ -297,6 +329,35 @@ function detectViolations(assignments: any, employees: any[], shifts: any[]): st
   return violations;
 }
 
+function assignManagersToShifts(assignments: any, managers: any[], shifts: any[], availabilities: any[]): any {
+  const managersToAssign = managers.filter(emp => emp.isActive && emp.employeeType === 'manager');
+  
+  console.log(`Assigning ${managersToAssign.length} managers to shifts based on availability=1`);
+  
+  managersToAssign.forEach((manager: any) => {
+    shifts.forEach((shift: any) => {
+      const availability = availabilities.find(
+        (a: any) => a.employeeId === manager.id && a.shiftId === shift.id
+      );
+      
+      // Assign manager if they have availability=1 (preferred)
+      if (availability?.preferenceLevel === 1) {
+        if (!assignments[shift.id]) {
+          assignments[shift.id] = [];
+        }
+        
+        // Check if manager is already assigned (avoid duplicates)
+        if (!assignments[shift.id].includes(manager.id)) {
+          assignments[shift.id].push(manager.id);
+          console.log(`✅ Assigned manager ${manager.name} to shift ${shift.id} (availability=1)`);
+        }
+      }
+    });
+  });
+  
+  return assignments;
+}
+
 async function runScheduling() {
   const data: WorkerData = workerData;
   const startTime = Date.now();
@@ -313,6 +374,8 @@ async function runScheduling() {
     }
     
     console.log(`Optimizing ${data.shifts.length} shifts for ${data.employees.length} employees`);
+
+    const nonManagerEmployees = data.employees.filter(emp => emp.isActive && emp.employeeType !== 'manager');
     
     const model = new CPModel();
     buildSchedulingModel(model, data);
@@ -340,26 +403,38 @@ async function runScheduling() {
     ];
     
     if (solution.success) {
-      // Extract assignments from solution
-      assignments = extractAssignmentsFromSolution(solution, data.employees, data.shifts);
+      // Extract assignments from solution (non-managers only)
+      assignments = extractAssignmentsFromSolution(solution, nonManagerEmployees, data.shifts);
       
-      // Only detect violations if we actually have assignments
+      // 🆕 ADD THIS: Assign managers to shifts where they have availability=1
+      assignments = assignManagersToShifts(assignments, data.employees, data.shifts, data.availabilities);
+      
+      // Only detect violations for non-manager assignments
       if (Object.keys(assignments).length > 0) {
-        violations = detectViolations(assignments, data.employees, data.shifts);
+        violations = detectViolations(assignments, nonManagerEmployees, data.shifts);
       } else {
         violations.push('NO_ASSIGNMENTS: Solver reported success but produced no assignments');
-        console.warn('Solver reported success but produced no assignments. Solution:', solution);
       }
       
-      // Add assignment statistics
+      // Update resolution report
+      if (violations.length === 0) {
+        resolutionReport.push('✅ No constraint violations detected for non-manager employees');
+      } else {
+        resolutionReport.push(`⚠️ Found ${violations.length} violations for non-manager employees:`);
+        violations.forEach(violation => {
+          resolutionReport.push(`   - ${violation}`);
+        });
+      }
+      
+      // Add assignment statistics (including managers)
       const totalAssignments = Object.values(assignments).reduce((sum: number, shiftAssignments: any) => 
         sum + shiftAssignments.length, 0
       );
-      resolutionReport.push(`📊 Total assignments: ${totalAssignments}`);
+      resolutionReport.push(`📊 Total assignments: ${totalAssignments} (including managers)`);
       
     } else {
-      violations.push('SCHEDULING_FAILED: No feasible solution found');
-      resolutionReport.push('❌ No feasible solution could be found');
+      violations.push('SCHEDULING_FAILED: No feasible solution found for non-manager employees');
+      resolutionReport.push('❌ No feasible solution could be found for non-manager employees');
     }
     
     parentPort?.postMessage({

@@ -12,9 +12,11 @@ interface AvailabilityManagerProps {
 }
 
 // Local interface extensions
-interface ExtendedTimeSlot extends TimeSlot {
+interface ExtendedShift extends Shift {
+  timeSlotName?: string;
+  startTime?: string;
+  endTime?: string;
   displayName?: string;
-  source?: string;
 }
 
 interface Availability extends EmployeeAvailability {
@@ -68,20 +70,42 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
     return time.substring(0, 5);
   };
 
-  // Create a data structure that maps days to their actual time slots
+  // Create a data structure that maps days to their shifts with time slot info
   const getTimetableData = () => {
     if (!selectedPlan || !selectedPlan.shifts || !selectedPlan.timeSlots) {
-      return { days: [], timeSlotsByDay: {} };
+      return { days: [], shiftsByDay: {} };
     }
 
-    // Group shifts by day
+    // Create a map for quick time slot lookups
+    const timeSlotMap = new Map(selectedPlan.timeSlots.map(ts => [ts.id, ts]));
+
+    // Group shifts by day and enhance with time slot info
     const shiftsByDay = selectedPlan.shifts.reduce((acc, shift) => {
       if (!acc[shift.dayOfWeek]) {
         acc[shift.dayOfWeek] = [];
       }
-      acc[shift.dayOfWeek].push(shift);
+      
+      const timeSlot = timeSlotMap.get(shift.timeSlotId);
+      const enhancedShift: ExtendedShift = {
+        ...shift,
+        timeSlotName: timeSlot?.name,
+        startTime: timeSlot?.startTime,
+        endTime: timeSlot?.endTime,
+        displayName: timeSlot ? `${timeSlot.name} (${formatTime(timeSlot.startTime)}-${formatTime(timeSlot.endTime)})` : shift.id
+      };
+      
+      acc[shift.dayOfWeek].push(enhancedShift);
       return acc;
-    }, {} as Record<number, typeof selectedPlan.shifts>);
+    }, {} as Record<number, ExtendedShift[]>);
+
+    // Sort shifts within each day by start time
+    Object.keys(shiftsByDay).forEach(day => {
+      shiftsByDay[parseInt(day)].sort((a, b) => {
+        const timeA = a.startTime || '';
+        const timeB = b.startTime || '';
+        return timeA.localeCompare(timeB);
+      });
+    });
 
     // Get unique days that have shifts
     const days = Array.from(new Set(selectedPlan.shifts.map(shift => shift.dayOfWeek)))
@@ -90,24 +114,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         return daysOfWeek.find(day => day.id === dayId) || { id: dayId, name: `Tag ${dayId}` };
       });
 
-    // For each day, get the time slots that actually have shifts
-    const timeSlotsByDay: Record<number, ExtendedTimeSlot[]> = {};
-    
-    days.forEach(day => {
-      const shiftsForDay = shiftsByDay[day.id] || [];
-      const timeSlotIdsForDay = new Set(shiftsForDay.map(shift => shift.timeSlotId));
-      
-      timeSlotsByDay[day.id] = selectedPlan.timeSlots
-        .filter(timeSlot => timeSlotIdsForDay.has(timeSlot.id))
-        .map(timeSlot => ({
-          ...timeSlot,
-          displayName: `${timeSlot.name} (${formatTime(timeSlot.startTime)}-${formatTime(timeSlot.endTime)})`,
-          source: `Plan: ${selectedPlan.name}`
-        }))
-        .sort((a, b) => a.startTime.localeCompare(b.startTime));
-    });
-
-    return { days, timeSlotsByDay };
+    return { days, shiftsByDay };
   };
 
   const loadData = async () => {
@@ -137,7 +144,6 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
 
       // 3. Select first plan with actual shifts if available
       if (plans.length > 0) {
-        // Find a plan that actually has shifts and time slots
         const planWithShifts = plans.find(plan => 
           plan.shifts && plan.shifts.length > 0 && 
           plan.timeSlots && plan.timeSlots.length > 0
@@ -146,7 +152,6 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         setSelectedPlanId(planWithShifts.id);
         console.log('✅ SCHICHTPLAN AUSGEWÄHLT:', planWithShifts.name);
         
-        // Load the selected plan to get its actual used time slots and days
         await loadSelectedPlan();
       }
 
@@ -170,8 +175,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         name: plan.name,
         timeSlotsCount: plan.timeSlots?.length || 0,
         shiftsCount: plan.shifts?.length || 0,
-        usedDays: Array.from(new Set(plan.shifts?.map(s => s.dayOfWeek) || [])).sort(),
-        usedTimeSlots: Array.from(new Set(plan.shifts?.map(s => s.timeSlotId) || [])).length
+        usedDays: Array.from(new Set(plan.shifts?.map(s => s.dayOfWeek) || [])).sort()
       });
     } catch (err: any) {
       console.error('❌ FEHLER BEIM LADEN DES SCHICHTPLANS:', err);
@@ -179,14 +183,11 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
     }
   };
 
-  const handleAvailabilityLevelChange = (dayId: number, timeSlotId: string, level: AvailabilityLevel) => {
-    console.log(`🔄 ÄNDERE VERFÜGBARKEIT: Tag ${dayId}, Slot ${timeSlotId}, Level ${level}`);
+  const handleAvailabilityLevelChange = (shiftId: string, level: AvailabilityLevel) => {
+    console.log(`🔄 ÄNDERE VERFÜGBARKEIT: Shift ${shiftId}, Level ${level}`);
     
     setAvailabilities(prev => {
-      const existingIndex = prev.findIndex(avail => 
-        avail.dayOfWeek === dayId && 
-        avail.timeSlotId === timeSlotId
-      );
+      const existingIndex = prev.findIndex(avail => avail.shiftId === shiftId);
 
       if (existingIndex >= 0) {
         // Update existing availability
@@ -198,13 +199,20 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         };
         return updated;
       } else {
-        // Create new availability
+        // Create new availability using shiftId directly
+        const shift = selectedPlan?.shifts?.find(s => s.id === shiftId);
+        if (!shift) {
+          console.error('❌ Shift nicht gefunden:', shiftId);
+          return prev;
+        }
+
         const newAvailability: Availability = {
-          id: `temp-${dayId}-${timeSlotId}-${Date.now()}`,
+          id: `temp-${shiftId}-${Date.now()}`,
           employeeId: employee.id,
-          planId: selectedPlanId || '',
-          dayOfWeek: dayId,
-          timeSlotId: timeSlotId,
+          planId: selectedPlanId,
+          shiftId: shiftId, // Use shiftId directly
+          dayOfWeek: shift.dayOfWeek, // Keep for backward compatibility if needed
+          timeSlotId: shift.timeSlotId, // Keep for backward compatibility if needed
           preferenceLevel: level,
           isAvailable: level !== 3
         };
@@ -213,21 +221,16 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
     });
   };
 
-  const getAvailabilityForDayAndSlot = (dayId: number, timeSlotId: string): AvailabilityLevel => {
-    const availability = availabilities.find(avail => 
-      avail.dayOfWeek === dayId && 
-      avail.timeSlotId === timeSlotId
-    );
-
-    const result = availability?.preferenceLevel || 3;
-    return result;
+  const getAvailabilityForShift = (shiftId: string): AvailabilityLevel => {
+    const availability = availabilities.find(avail => avail.shiftId === shiftId);
+    return availability?.preferenceLevel || 3;
   };
 
-  // Update the timetable rendering to use the new data structure
+  // Update the timetable rendering to use shifts directly
   const renderTimetable = () => {
-    const { days, timeSlotsByDay } = getTimetableData();
+    const { days, shiftsByDay } = getTimetableData();
 
-    if (days.length === 0 || Object.keys(timeSlotsByDay).length === 0) {
+    if (days.length === 0 || Object.keys(shiftsByDay).length === 0) {
       return (
         <div style={{
           padding: '40px',
@@ -244,23 +247,25 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       );
     }
 
-    // Get all unique time slots across all days for row headers
-    const allTimeSlotIds = new Set<string>();
+    // Get all unique shifts across all days for row headers
+    const allShifts: ExtendedShift[] = [];
+    const shiftIds = new Set<string>();
+    
     days.forEach(day => {
-      timeSlotsByDay[day.id]?.forEach(timeSlot => {
-        allTimeSlotIds.add(timeSlot.id);
+      shiftsByDay[day.id]?.forEach(shift => {
+        if (!shiftIds.has(shift.id)) {
+          shiftIds.add(shift.id);
+          allShifts.push(shift);
+        }
       });
     });
 
-    const allTimeSlots = Array.from(allTimeSlotIds)
-      .map(id => selectedPlan?.timeSlots?.find(ts => ts.id === id))
-      .filter(Boolean)
-      .map(timeSlot => ({
-        ...timeSlot!,
-        displayName: `${timeSlot!.name} (${formatTime(timeSlot!.startTime)}-${formatTime(timeSlot!.endTime)})`,
-        source: `Plan: ${selectedPlan!.name}`
-      }))
-      .sort((a, b) => a.startTime.localeCompare(b.startTime));
+    // Sort shifts by time slot start time
+    allShifts.sort((a, b) => {
+      const timeA = a.startTime || '';
+      const timeB = b.startTime || '';
+      return timeA.localeCompare(timeB);
+    });
 
     return (
       <div style={{
@@ -277,7 +282,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         }}>
           Verfügbarkeit definieren
           <div style={{ fontSize: '14px', fontWeight: 'normal', marginTop: '5px' }}>
-            {allTimeSlots.length} Schichttypen • {days.length} Tage • Nur tatsächlich im Plan verwendete Schichten
+            {allShifts.length} Schichten • {days.length} Tage • Direkte Shift-ID Zuordnung
           </div>
         </div>
 
@@ -294,7 +299,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                   textAlign: 'left',
                   border: '1px solid #dee2e6',
                   fontWeight: 'bold',
-                  minWidth: '100px'
+                  minWidth: '150px'
                 }}>
                   Schicht (Zeit)
                 </th>
@@ -312,9 +317,9 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
               </tr>
             </thead>
             <tbody>
-              {allTimeSlots.map((timeSlot, timeIndex) => (
-                <tr key={timeSlot.id} style={{
-                  backgroundColor: timeIndex % 2 === 0 ? 'white' : '#f8f9fa'
+              {allShifts.map((shift, shiftIndex) => (
+                <tr key={shift.id} style={{
+                  backgroundColor: shiftIndex % 2 === 0 ? 'white' : '#f8f9fa'
                 }}>
                   <td style={{
                     padding: '12px 16px',
@@ -322,16 +327,16 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                     fontWeight: '500',
                     backgroundColor: '#f8f9fa'
                   }}>
-                    {timeSlot.displayName}
+                    {shift.displayName}
                     <div style={{ fontSize: '11px', color: '#666', marginTop: '4px' }}>
-                      {timeSlot.source}
+                      Shift-ID: {shift.id.substring(0, 8)}...
                     </div>
                   </td>
                   {days.map(weekday => {
-                    // Check if this time slot exists for this day
-                    const timeSlotForDay = timeSlotsByDay[weekday.id]?.find(ts => ts.id === timeSlot.id);
+                    // Check if this shift exists for this day
+                    const shiftForDay = shiftsByDay[weekday.id]?.find(s => s.id === shift.id);
                     
-                    if (!timeSlotForDay) {
+                    if (!shiftForDay) {
                       return (
                         <td key={weekday.id} style={{
                           padding: '12px 16px',
@@ -346,7 +351,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                       );
                     }
 
-                    const currentLevel = getAvailabilityForDayAndSlot(weekday.id, timeSlot.id);
+                    const currentLevel = getAvailabilityForShift(shift.id);
                     const levelConfig = availabilityLevels.find(l => l.level === currentLevel);
                     
                     return (
@@ -360,7 +365,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                           value={currentLevel}
                           onChange={(e) => {
                             const newLevel = parseInt(e.target.value) as AvailabilityLevel;
-                            handleAvailabilityLevelChange(weekday.id, timeSlot.id, newLevel);
+                            handleAvailabilityLevelChange(shift.id, newLevel);
                           }}
                           style={{
                             padding: '8px 12px',
@@ -410,12 +415,12 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         return;
       }
 
-      const { days, timeSlotsByDay } = getTimetableData();
+      const { days, shiftsByDay } = getTimetableData();
       
       // Filter availabilities to only include those with actual shifts
       const validAvailabilities = availabilities.filter(avail => {
-        const timeSlotsForDay = timeSlotsByDay[avail.dayOfWeek] || [];
-        return timeSlotsForDay.some(slot => slot.id === avail.timeSlotId);
+        // Check if this shiftId exists in the current plan
+        return selectedPlan?.shifts?.some(shift => shift.id === avail.shiftId);
       });
 
       if (validAvailabilities.length === 0) {
@@ -423,13 +428,14 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         return;
       }
 
-      // Convert to the format expected by the API
+      // Convert to the format expected by the API - using shiftId directly
       const requestData = {
         planId: selectedPlanId,
         availabilities: validAvailabilities.map(avail => ({
           planId: selectedPlanId,
-          dayOfWeek: avail.dayOfWeek,
-          timeSlotId: avail.timeSlotId,
+          shiftId: avail.shiftId, // Use shiftId directly
+          dayOfWeek: avail.dayOfWeek, // Keep for backward compatibility
+          timeSlotId: avail.timeSlotId, // Keep for backward compatibility
           preferenceLevel: avail.preferenceLevel,
           notes: avail.notes
         }))
@@ -457,14 +463,14 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
     );
   }
 
-  const { days, timeSlotsByDay } = getTimetableData();
-  const allTimeSlotIds = new Set<string>();
+  const { days, shiftsByDay } = getTimetableData();
+  const allShiftIds = new Set<string>();
   days.forEach(day => {
-    timeSlotsByDay[day.id]?.forEach(timeSlot => {
-      allTimeSlotIds.add(timeSlot.id);
+    shiftsByDay[day.id]?.forEach(shift => {
+      allShiftIds.add(shift.id);
     });
   });
-  const timeSlotsCount = allTimeSlotIds.size;
+  const shiftsCount = allShiftIds.size;
 
   return (
     <div style={{
@@ -482,40 +488,30 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         borderBottom: '2px solid #f0f0f0',
         paddingBottom: '15px'
       }}>
-        📅 Verfügbarkeit verwalten
+        📅 Verfügbarkeit verwalten (Shift-ID basiert)
       </h2>
 
       {/* Debug-Info */}
       <div style={{
-        backgroundColor: timeSlotsCount === 0 ? '#f8d7da' : '#d1ecf1',
-        border: `1px solid ${timeSlotsCount === 0 ? '#f5c6cb' : '#bee5eb'}`,
+        backgroundColor: shiftsCount === 0 ? '#f8d7da' : '#d1ecf1',
+        border: `1px solid ${shiftsCount === 0 ? '#f5c6cb' : '#bee5eb'}`,
         borderRadius: '6px',
         padding: '15px',
         marginBottom: '20px'
       }}>
         <h4 style={{ 
           margin: '0 0 10px 0', 
-          color: timeSlotsCount === 0 ? '#721c24' : '#0c5460' 
+          color: shiftsCount === 0 ? '#721c24' : '#0c5460' 
         }}>
-          {timeSlotsCount === 0 ? '❌ PROBLEM: Keine Zeit-Slots gefunden' : '✅ Plan-Daten geladen'}
+          {shiftsCount === 0 ? '❌ PROBLEM: Keine Shifts gefunden' : '✅ Plan-Daten geladen'}
         </h4>
         <div style={{ fontSize: '12px', fontFamily: 'monospace' }}>
           <div><strong>Ausgewählter Plan:</strong> {selectedPlan?.name || 'Keiner'}</div>
-          <div><strong>Verwendete Zeit-Slots:</strong> {timeSlotsCount}</div>
+          <div><strong>Einzigartige Shifts:</strong> {shiftsCount}</div>
           <div><strong>Verwendete Tage:</strong> {days.length} ({days.map(d => d.name).join(', ')})</div>
           <div><strong>Gesamte Shifts im Plan:</strong> {selectedPlan?.shifts?.length || 0}</div>
+          <div><strong>Methode:</strong> Direkte Shift-ID Zuordnung</div>
         </div>
-        
-        {selectedPlan && selectedPlan.shifts && (
-          <div style={{ marginTop: '10px' }}>
-            <strong>Shifts im Plan:</strong>
-            {selectedPlan.shifts.map((shift, index) => (
-              <div key={index} style={{ fontSize: '11px', marginLeft: '10px' }}>
-                • Tag {shift.dayOfWeek}: {shift.timeSlotId} ({shift.requiredEmployees} Personen)
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Employee Info */}
@@ -524,7 +520,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
           {employee.name}
         </h3>
         <p style={{ margin: 0, color: '#7f8c8d' }}>
-          Legen Sie die Verfügbarkeit für {employee.name} fest.
+          Legen Sie die Verfügbarkeit für {employee.name} fest (basierend auf Shift-IDs).
         </p>
       </div>
 
@@ -608,7 +604,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
               <option value="">Bitte auswählen...</option>
               {shiftPlans.map(plan => (
                 <option key={plan.id} value={plan.id}>
-                  {plan.name} {plan.timeSlots && `(${plan.timeSlots.length} Zeit-Slots)`}
+                  {plan.name} {plan.shifts && `(${plan.shifts.length} Shifts)`}
                 </option>
               ))}
             </select>
@@ -617,7 +613,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
           {selectedPlan && (
             <div style={{ fontSize: '14px', color: '#666' }}>
               <div><strong>Plan:</strong> {selectedPlan.name}</div>
-              <div><strong>Zeit-Slots:</strong> {selectedPlan.timeSlots?.length || 0}</div>
+              <div><strong>Shifts:</strong> {selectedPlan.shifts?.length || 0}</div>
               <div><strong>Status:</strong> {selectedPlan.status}</div>
             </div>
           )}
@@ -651,14 +647,14 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         
         <button
           onClick={handleSave}
-          disabled={saving || timeSlotsCount === 0 || !selectedPlanId}
+          disabled={saving || shiftsCount === 0 || !selectedPlanId}
           style={{
             padding: '12px 24px',
-            backgroundColor: saving ? '#bdc3c7' : (timeSlotsCount === 0 || !selectedPlanId ? '#95a5a6' : '#3498db'),
+            backgroundColor: saving ? '#bdc3c7' : (shiftsCount === 0 || !selectedPlanId ? '#95a5a6' : '#3498db'),
             color: 'white',
             border: 'none',
             borderRadius: '6px',
-            cursor: (saving || timeSlotsCount === 0 || !selectedPlanId) ? 'not-allowed' : 'pointer',
+            cursor: (saving || shiftsCount === 0 || !selectedPlanId) ? 'not-allowed' : 'pointer',
             fontWeight: 'bold'
           }}
         >

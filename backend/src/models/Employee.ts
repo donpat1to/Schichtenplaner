@@ -2,7 +2,8 @@
 export interface Employee {
   id: string;
   email: string;
-  name: string;
+  firstname: string;
+  lastname: string;
   role: 'admin' | 'maintenance' | 'user';
   employeeType: 'manager' | 'trainee' | 'experienced';
   contractType: 'small' | 'large';
@@ -15,7 +16,8 @@ export interface Employee {
 export interface CreateEmployeeRequest {
   email: string;
   password: string;
-  name: string;
+  firstname: string;
+  lastname: string;
   role: 'admin' | 'maintenance' | 'user';
   employeeType: 'manager' | 'trainee' | 'experienced';
   contractType: 'small' | 'large';
@@ -23,7 +25,8 @@ export interface CreateEmployeeRequest {
 }
 
 export interface UpdateEmployeeRequest {
-  name?: string;
+  firstname?: string;
+  lastname?: string;
   role?: 'admin' | 'maintenance' | 'user';
   employeeType?: 'manager' | 'trainee' | 'experienced';
   contractType?: 'small' | 'large';
@@ -39,8 +42,7 @@ export interface EmployeeAvailability {
   id: string;
   employeeId: string;
   planId: string;
-  dayOfWeek: number; // 1=Monday, 7=Sunday
-  timeSlotId: string;
+  shiftId: string; // Now references shift_id instead of time_slot_id + day_of_week
   preferenceLevel: 1 | 2 | 3; // 1:preferred, 2:available, 3:unavailable
   notes?: string;
 }
@@ -72,4 +74,14 @@ export interface ManagerSelfAssignmentRequest {
 
 export interface EmployeeWithAvailabilities extends Employee {
   availabilities: EmployeeAvailability[];
+}
+
+// Additional types for the new roles system
+export interface Role {
+  role: 'admin' | 'user' | 'maintenance';
+}
+
+export interface EmployeeRole {
+  employeeId: string;
+  role: 'admin' | 'user' | 'maintenance';
 }

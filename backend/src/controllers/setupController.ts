@@ -4,7 +4,6 @@ import bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { randomUUID } from 'crypto';
 import { db } from '../services/databaseService.js';
-//import { initializeDefaultTemplates } from './shiftPlanController.js';
 
 export const checkSetupStatus = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -44,14 +43,14 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    const { password, name } = req.body;
+    const { password, firstname, lastname } = req.body;
     const email = 'admin@instandhaltung.de';
 
     console.log('👤 Creating admin with data:', { name, email });
 
     // Validation
-    if (!password || !name) {
-      res.status(400).json({ error: 'Passwort und Name sind erforderlich' });
+    if (!password || !firstname || !lastname) {
+      res.status(400).json({ error: 'Passwort, Vorname und Nachname sind erforderlich' });
       return;
     }
 
@@ -73,9 +72,9 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
     try {
       // Create admin user
       await db.run(
-        `INSERT INTO employees (id, email, password, name, role, is_active, employee_type, contract_type)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [adminId, email, hashedPassword, name, 'admin', 1, 'manager', 'large']
+        `INSERT INTO employees (id, email, password, firstname, lastname, role, employee_type, contract_type, can_work_alone, is_active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [adminId, email, hashedPassword, firstname, lastname, 'admin', 'manager', 'large', true, 1]
       );
 
       console.log('✅ Admin user created successfully');

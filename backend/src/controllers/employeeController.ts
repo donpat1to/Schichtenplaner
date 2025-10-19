@@ -15,7 +15,7 @@ export const getEmployees = async (req: AuthRequest, res: Response): Promise<voi
     
     let query = `
       SELECT 
-        id, email, name, role, is_active as isActive, 
+        id, email, firstname, lastname, role, is_active as isActive, 
         employee_type as employeeType, 
         contract_type as contractType,
         can_work_alone as canWorkAlone,
@@ -46,7 +46,7 @@ export const getEmployee = async (req: AuthRequest, res: Response): Promise<void
 
     const employee = await db.get<any>(`
       SELECT 
-        id, email, name, role, is_active as isActive, 
+        id, email, firstname, lastname, role, is_active as isActive, 
         employee_type as employeeType, 
         contract_type as contractType,
         can_work_alone as canWorkAlone,
@@ -78,15 +78,16 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
     const { 
       email, 
       password, 
-      name, 
+      firstname,
+      lastname,
       role, 
       employeeType, 
       contractType,
-      canWorkAlone // Statt isSufficientlyIndependent
+      canWorkAlone
     } = req.body as CreateEmployeeRequest;
 
     // Validierung
-    if (!email || !password || !name || !role || !employeeType || !contractType) {
+    if (!email || !password || !firstname || !lastname || !role || !employeeType || !contractType) {
       console.log('❌ Validation failed: Missing required fields');
       res.status(400).json({ 
         error: 'Email, password, name, role, employeeType und contractType sind erforderlich' 
@@ -115,18 +116,19 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
 
     await db.run(
       `INSERT INTO employees (
-        id, email, password, name, role, employee_type, contract_type, can_work_alone, 
+        id, email, password, firstname, lastname, role, employee_type, contract_type, can_work_alone, 
         is_active
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         employeeId, 
         email, 
         hashedPassword, 
-        name, 
+        firstname,    // Changed from name
+        lastname,     // Added
         role, 
         employeeType, 
         contractType,
-        canWorkAlone ? 1 : 0, // Statt isSufficientlyIndependent
+        canWorkAlone ? 1 : 0,
         1
       ]
     );
@@ -154,8 +156,7 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
 export const updateEmployee = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, role, isActive, employeeType, contractType, canWorkAlone } = req.body; // Statt isSufficientlyIndependent
-
+    const { firstname, lastname, role, isActive, employeeType, contractType, canWorkAlone } = req.body;
     console.log('📝 Update Employee Request:', { id, name, role, isActive, employeeType, contractType, canWorkAlone });
 
     // Check if employee exists
@@ -168,14 +169,15 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
     // Update employee
     await db.run(
       `UPDATE employees 
-       SET name = COALESCE(?, name),
-           role = COALESCE(?, role),
-           is_active = COALESCE(?, is_active),
-           employee_type = COALESCE(?, employee_type),
-           contract_type = COALESCE(?, contract_type),
-           can_work_alone = COALESCE(?, can_work_alone)
-       WHERE id = ?`,
-      [name, role, isActive, employeeType, contractType, canWorkAlone, id]
+      SET firstname = COALESCE(?, firstname),
+          lastname = COALESCE(?, lastname),
+          role = COALESCE(?, role),
+          is_active = COALESCE(?, is_active),
+          employee_type = COALESCE(?, employee_type),
+          contract_type = COALESCE(?, contract_type),
+          can_work_alone = COALESCE(?, can_work_alone)
+      WHERE id = ?`,
+      [firstname, lastname, role, isActive, employeeType, contractType, canWorkAlone, id]
     );
 
     console.log('✅ Employee updated successfully');
@@ -290,9 +292,11 @@ export const getAvailabilities = async (req: AuthRequest, res: Response): Promis
     }
 
     const availabilities = await db.all<any>(`
-      SELECT * FROM employee_availability 
-      WHERE employee_id = ? 
-      ORDER BY day_of_week, time_slot_id
+      SELECT ea.*, s.day_of_week, s.time_slot_id 
+      FROM employee_availability ea
+      JOIN shifts s ON ea.shift_id = s.id
+      WHERE ea.employee_id = ? 
+      ORDER BY s.day_of_week, s.time_slot_id
     `, [employeeId]);
 
     //console.log('✅ Successfully got availabilities from employee:', availabilities);
@@ -334,14 +338,13 @@ export const updateAvailabilities = async (req: AuthRequest, res: Response): Pro
       for (const availability of availabilities) {
         const availabilityId = uuidv4();
         await db.run(
-          `INSERT INTO employee_availability (id, employee_id, plan_id, day_of_week, time_slot_id, preference_level, notes) 
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO employee_availability (id, employee_id, plan_id, shift_id, preference_level, notes) 
+          VALUES (?, ?, ?, ?, ?, ?)`,
           [
             availabilityId,
             employeeId,
             planId,
-            availability.dayOfWeek,
-            availability.timeSlotId,
+            availability.shiftId,
             availability.preferenceLevel,
             availability.notes || null
           ]

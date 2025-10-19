@@ -84,38 +84,42 @@ export class SchedulingService {
   }
 
   private generateScheduledShiftsFromTemplate(shiftPlan: ShiftPlan): any[] {
-      const shifts: any[] = [];
-      
-      if (!shiftPlan.startDate || !shiftPlan.shifts) {
-        return shifts;
-      }
-
-      const startDate = new Date(shiftPlan.startDate);
-      
-      // Generate shifts for one week (Monday to Sunday)
-      for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
-          const currentDate = new Date(startDate);
-          currentDate.setDate(startDate.getDate() + dayOffset);
-          
-          const dayOfWeek = currentDate.getDay() === 0 ? 7 : currentDate.getDay(); // Convert Sunday from 0 to 7
-          const dayShifts = shiftPlan.shifts.filter(shift => shift.dayOfWeek === dayOfWeek);
-          
-          dayShifts.forEach(shift => {
-              shifts.push({
-                  id: `generated_${currentDate.toISOString().split('T')[0]}_${shift.timeSlotId}`,
-                  date: currentDate.toISOString().split('T')[0],
-                  timeSlotId: shift.timeSlotId,
-                  requiredEmployees: shift.requiredEmployees,
-                  minWorkers: 1,
-                  maxWorkers: 2,
-                  isPriority: false
-              });
-          });
-      }
-
-      console.log("Created shifts for one week. Amount: ", shifts.length);
-      
+    const shifts: any[] = [];
+    
+    if (!shiftPlan || !shiftPlan.startDate) {
       return shifts;
+    }
+
+    const startDate = new Date(shiftPlan.startDate);
+    
+    // Generate shifts for one week (Monday to Sunday)
+    for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+      const currentDate = new Date(startDate);
+      currentDate.setDate(startDate.getDate() + dayOffset);
+      
+      const dayOfWeek = currentDate.getDay() === 0 ? 7 : currentDate.getDay(); // Convert Sunday from 0 to 7
+      const dayShifts = shiftPlan.shifts.filter(shift => shift.dayOfWeek === dayOfWeek);
+      
+      dayShifts.forEach(shift => {
+        // ✅ Use day-of-week pattern instead of date-based pattern
+        const shiftId = `${shift.id}`;
+        
+        shifts.push({
+          id: shiftId, // This matches what frontend expects
+          date: currentDate.toISOString().split('T')[0],
+          timeSlotId: shift.timeSlotId,
+          requiredEmployees: shift.requiredEmployees,
+          minWorkers: 1,
+          maxWorkers: 2,
+          isPriority: false
+        });
+
+        console.log(`✅ Generated shift: ${shiftId} for day ${dayOfWeek}, timeSlot ${shift.timeSlotId}`);
+      });
+    }
+
+    console.log("Created shifts for one week. Amount: ", shifts.length);
+    return shifts;
   }
 
   private prepareAvailabilities(availabilities: Availability[], shiftPlan: ShiftPlan): any[] {
