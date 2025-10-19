@@ -68,7 +68,7 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
     });
   });
 
-  // 4. Shift staffing constraints (RELAXED)
+  // 4. Shift staffing constraints
   shifts.forEach((shift: any) => {
     const assignmentVars = activeEmployees.map(
       (emp: any) => `assign_${emp.id}_${shift.id}`
@@ -83,7 +83,7 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
       );
       
       // Maximum workers
-      const maxWorkers = shift.maxWorkers || 3;
+      const maxWorkers = shift.maxWorkers || 2;
       model.addConstraint(
         `${assignmentVars.join(' + ')} <= ${maxWorkers}`,
         `Max workers for shift ${shift.id}`
@@ -118,21 +118,17 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
   // 6. Contract type constraints
   const totalShifts = shifts.length;
   console.log(`Total available shifts: ${totalShifts}`);
-  
+
   activeEmployees.forEach((employee: any) => {
     const contractType = employee.contractType || 'large';
     
-    // ADJUSTMENT: Make contract constraints feasible with available shifts
-    let minShifts, maxShifts;
+    // EXACT SHIFTS PER WEEK
+    let exactShifts;
     
     if (contractType === 'small') {
-      // Small contract: 1 shifts
-      minShifts = 1;
-      maxShifts = Math.min(1, totalShifts);
+      exactShifts = 1;  // Exactly 1 shift for small contract
     } else {
-      // Large contract: 2 shifts (2) 
-      minShifts = 2;
-      maxShifts = Math.min(2, totalShifts);
+      exactShifts = 2;  // Exactly 2 shifts for large contract
     }
     
     const shiftVars = shifts.map(
@@ -140,18 +136,13 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
     );
     
     if (shiftVars.length > 0) {
-      // Use range instead of exact number
+      // Use EXACT constraint (== instead of range)
       model.addConstraint(
-        `${shiftVars.join(' + ')} == ${minShifts}`,
-        `Expected shifts for ${employee.name} (${contractType} contract)`
+        `${shiftVars.join(' + ')} == ${exactShifts}`,
+        `Exact shifts for ${employee.name} (${contractType} contract)`
       );
       
-      model.addConstraint(
-        `${shiftVars.join(' + ')} <= ${maxShifts}`,
-        `Max shifts for ${employee.name} (${contractType} contract)`
-      );
-      
-      console.log(`Employee ${employee.name}: ${minShifts}-${maxShifts} shifts (${contractType})`);
+      console.log(`Employee ${employee.name}: ${exactShifts} shifts (${contractType})`);
     }
   });
 
@@ -217,61 +208,23 @@ function extractAssignmentsFromSolution(solution: any, employees: any[], shifts:
     employeeAssignments[employee.id] = 0;
   });
 
-  // METHOD 1: Try to use raw variables from solution
-  if (solution.variables) {
-    console.log('Using variable-based assignment extraction');
-    
-    Object.entries(solution.variables).forEach(([varName, value]) => {
-      if (varName.startsWith('assign_') && value === 1) {
-        const parts = varName.split('_');
-        if (parts.length >= 3) {
-          const employeeId = parts[1];
-          const shiftId = parts.slice(2).join('_');
-          
-          // Find the actual shift ID (handle generated IDs)
-          const actualShift = shifts.find(s => 
-            s.id === shiftId || 
-            `assign_${employeeId}_${s.id}` === varName
-          );
-          
-          if (actualShift) {
-            if (!assignments[actualShift.id]) {
-              assignments[actualShift.id] = [];
-            }
-            assignments[actualShift.id].push(employeeId);
-            employeeAssignments[employeeId]++;
-          }
-        }
-      }
-    });
-  }
-  
-  // METHOD 2: Fallback to parsed assignments from Python
+  //  Python-parsed assignments
   if (solution.assignments && solution.assignments.length > 0) {
-    console.log('Using Python-parsed assignments');
+    console.log('Using Python-parsed assignments (cleaner)');
     
     solution.assignments.forEach((assignment: any) => {
       const shiftId = assignment.shiftId;
       const employeeId = assignment.employeeId;
       
-      if (shiftId && employeeId) {
-        if (!assignments[shiftId]) {
-          assignments[shiftId] = [];
+      if (shiftId && employeeId && assignments[shiftId]) {
+        // Check if this assignment already exists to avoid duplicates
+        if (!assignments[shiftId].includes(employeeId)) {
+          assignments[shiftId].push(employeeId);
+          employeeAssignments[employeeId]++;
         }
-        assignments[shiftId].push(employeeId);
-        employeeAssignments[employeeId]++;
       }
     });
-  }
-
-  // METHOD 3: Debug - log all variables to see what's available
-  if (Object.keys(assignments).length === 0 && solution.variables) {
-    console.log('Debug: First 10 variables from solution:');
-    const varNames = Object.keys(solution.variables).slice(0, 10);
-    varNames.forEach(varName => {
-      console.log(`  ${varName} = ${solution.variables[varName]}`);
-    });
-  }
+  } 
 
   // Log results
   console.log('=== ASSIGNMENT RESULTS ===');
