@@ -75,6 +75,7 @@ export interface Solution {
     variablesCreated: number;
     optimal: boolean;
   };
+  variables?: { [key: string]: number };
 }
 
 // Additional helper types for the scheduling system

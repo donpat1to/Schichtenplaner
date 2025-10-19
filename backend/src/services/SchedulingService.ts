@@ -12,7 +12,10 @@ const __dirname = path.dirname(__filename);
 export class SchedulingService {
   async generateOptimalSchedule(request: ScheduleRequest): Promise<ScheduleResult> {
     return new Promise((resolve, reject) => {
-      const workerPath = path.resolve(__dirname, '../workers/scheduler-worker.js');
+      // Use the built JavaScript file
+      const workerPath = path.resolve(__dirname, '../../dist/workers/scheduler-worker.js');
+      
+      console.log('Looking for worker at:', workerPath);
       
       const worker = new Worker(workerPath, {
         workerData: this.prepareWorkerData(request)
@@ -46,10 +49,7 @@ export class SchedulingService {
   private prepareWorkerData(request: ScheduleRequest): any {
     const { shiftPlan, employees, availabilities, constraints } = request;
     
-    // Convert scheduled shifts to a format the worker can use
     const shifts = this.prepareShifts(shiftPlan);
-    
-    // Prepare availabilities in worker-friendly format
     const workerAvailabilities = this.prepareAvailabilities(availabilities, shiftPlan);
     
     return {
@@ -68,8 +68,7 @@ export class SchedulingService {
   }
 
   private prepareShifts(shiftPlan: ShiftPlan): any[] {
-    if (!shiftPlan.scheduledShifts || shiftPlan.scheduledShifts.length === 0) {
-      // Generate scheduled shifts from template
+    if (!shiftPlan.isTemplate || !shiftPlan.scheduledShifts) {
       return this.generateScheduledShiftsFromTemplate(shiftPlan);
     }
     
@@ -79,49 +78,51 @@ export class SchedulingService {
       timeSlotId: shift.timeSlotId,
       requiredEmployees: shift.requiredEmployees,
       minWorkers: 1,
-      maxWorkers: 3,
+      maxWorkers: 2,
       isPriority: false
     }));
   }
 
   private generateScheduledShiftsFromTemplate(shiftPlan: ShiftPlan): any[] {
-    const shifts: any[] = [];
-    
-    if (!shiftPlan.startDate || !shiftPlan.endDate || !shiftPlan.shifts) {
-      return shifts;
-    }
+      const shifts: any[] = [];
+      
+      if (!shiftPlan.startDate || !shiftPlan.shifts) {
+        return shifts;
+      }
 
-    const startDate = new Date(shiftPlan.startDate);
-    const endDate = new Date(shiftPlan.endDate);
-    
-    // Generate shifts for each day in the date range
-    for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
-      const dayOfWeek = date.getDay() === 0 ? 7 : date.getDay(); // Convert to 1-7 (Mon-Sun)
+      const startDate = new Date(shiftPlan.startDate);
       
-      const dayShifts = shiftPlan.shifts.filter(shift => shift.dayOfWeek === dayOfWeek);
+      // Generate shifts for one week (Monday to Sunday)
+      for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+          const currentDate = new Date(startDate);
+          currentDate.setDate(startDate.getDate() + dayOffset);
+          
+          const dayOfWeek = currentDate.getDay() === 0 ? 7 : currentDate.getDay(); // Convert Sunday from 0 to 7
+          const dayShifts = shiftPlan.shifts.filter(shift => shift.dayOfWeek === dayOfWeek);
+          
+          dayShifts.forEach(shift => {
+              shifts.push({
+                  id: `generated_${currentDate.toISOString().split('T')[0]}_${shift.timeSlotId}`,
+                  date: currentDate.toISOString().split('T')[0],
+                  timeSlotId: shift.timeSlotId,
+                  requiredEmployees: shift.requiredEmployees,
+                  minWorkers: 1,
+                  maxWorkers: 2,
+                  isPriority: false
+              });
+          });
+      }
+
+      console.log("Created shifts for one week. Amount: ", shifts.length);
       
-      dayShifts.forEach(shift => {
-        shifts.push({
-          id: `generated_${date.toISOString().split('T')[0]}_${shift.timeSlotId}`,
-          date: date.toISOString().split('T')[0],
-          timeSlotId: shift.timeSlotId,
-          requiredEmployees: shift.requiredEmployees,
-          minWorkers: 1,
-          maxWorkers: 3,
-          isPriority: false
-        });
-      });
-    }
-    
-    return shifts;
+      return shifts;
   }
 
   private prepareAvailabilities(availabilities: Availability[], shiftPlan: ShiftPlan): any[] {
-    // Convert availability format to worker-friendly format
     return availabilities.map(avail => ({
       employeeId: avail.employeeId,
       shiftId: this.findShiftIdForAvailability(avail, shiftPlan),
-      availability: avail.preferenceLevel // 1, 2, 3
+      availability: avail.preferenceLevel
     }));
   }
 
@@ -151,7 +152,7 @@ export class SchedulingService {
     const defaultConstraints = {
       maxShiftsPerDay: 1,
       minEmployeesPerShift: 1,
-      maxEmployeesPerShift: 3,
+      maxEmployeesPerShift: 2,
       enforceTraineeSupervision: true,
       contractHoursLimits: true
     };
