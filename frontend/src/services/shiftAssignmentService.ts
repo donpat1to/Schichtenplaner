@@ -3,7 +3,7 @@ import { ShiftPlan, ScheduledShift } from '../models/ShiftPlan';
 import { Employee, EmployeeAvailability } from '../models/Employee';
 import { authService } from './authService';
 //import { IntelligentShiftScheduler, AssignmentResult, WeeklyPattern } from './scheduling/useScheduling';
-import { isScheduledShift } from '../models/helpers';
+import { AssignmentResult } from '../models/scheduling';
 
 const API_BASE_URL = 'http://localhost:3002/api/scheduled-shifts';
 
@@ -134,7 +134,7 @@ export class ShiftAssignmentService {
     }
   }
 
-  static async assignShifts(
+  async assignShifts(
     shiftPlan: ShiftPlan,
     employees: Employee[],
     availabilities: EmployeeAvailability[],
@@ -143,65 +143,13 @@ export class ShiftAssignmentService {
 
     console.log('🧠 Starting intelligent scheduling for FIRST WEEK ONLY...');
 
-    // Load all scheduled shifts
-    const scheduledShifts = await shiftAssignmentService.getScheduledShiftsForPlan(shiftPlan.id);
-    
-    if (scheduledShifts.length === 0) {
-      return {
-        assignments: {},
-        violations: ['❌ KRITISCH: Keine Schichten verfügbar für die Zuordnung'],
-        success: false,
-        resolutionReport: ['🚨 ABBRUCH: Keine Schichten im Plan verfügbar']
-      };
-    }
 
-    // Set cache for scheduler
-    IntelligentShiftScheduler.scheduledShiftsCache.set(shiftPlan.id, { 
-      shifts: scheduledShifts, 
-      timestamp: Date.now() 
-    });
-
-    // 🔥 RUN SCHEDULING FOR FIRST WEEK ONLY
-    const schedulingResult = await IntelligentShiftScheduler.generateOptimalSchedule(
-      shiftPlan,
-      employees.filter(emp => emp.isActive),
-      availabilities,
-      constraints
-    );
-
-    // Get first week shifts for pattern
-    const firstWeekShifts = this.getFirstWeekShifts(scheduledShifts);
-    
-    console.log('🔄 Creating weekly pattern from FIRST WEEK:', {
-      firstWeekShifts: firstWeekShifts.length,
-      allShifts: scheduledShifts.length,
-      patternAssignments: Object.keys(schedulingResult.assignments).length
-    });
-
-    const weeklyPattern: WeeklyPattern = {
-      weekShifts: firstWeekShifts,
-      assignments: schedulingResult.assignments, // 🔥 Diese enthalten nur erste Woche
-      weekNumber: 1
-    };
-
-    // 🔥 APPLY PATTERN TO ALL WEEKS
-    const allAssignments = this.applyWeeklyPattern(scheduledShifts, weeklyPattern);
-
-    console.log('✅ Pattern applied to all weeks:', {
-      firstWeekAssignments: Object.keys(schedulingResult.assignments).length,
-      allWeeksAssignments: Object.keys(allAssignments).length
-    });
-
-    // Clean cache
-    IntelligentShiftScheduler.scheduledShiftsCache.delete(shiftPlan.id);
 
     return {
-      assignments: allAssignments, // 🔥 Diese enthalten alle Wochen
-      violations: schedulingResult.violations,
-      success: schedulingResult.success,
-      pattern: weeklyPattern,
-      resolutionReport: schedulingResult.resolutionReport,
-      qualityMetrics: schedulingResult.qualityMetrics
+      assignments: , 
+      violations: ,
+      success: ,
+      resolutionReport: ,
     };
   }
 
@@ -381,20 +329,6 @@ export class ShiftAssignmentService {
     return assignments;
   }
 
-  private static groupShiftsByWeek(shifts: ScheduledShift[]): { [weekNumber: string]: ScheduledShift[] } {
-    const weeks: { [weekNumber: string]: ScheduledShift[] } = {};
-    
-    shifts.forEach(shift => {
-      const weekNumber = this.getWeekNumber(shift.date);
-      if (!weeks[weekNumber]) {
-        weeks[weekNumber] = [];
-      }
-      weeks[weekNumber].push(shift);
-    });
-    
-    return weeks;
-  }
-
   private static getFirstWeekShifts(shifts: ScheduledShift[]): ScheduledShift[] {
     if (shifts.length === 0) return [];
     
@@ -408,26 +342,6 @@ export class ShiftAssignmentService {
       const shiftDate = new Date(shift.date);
       return shiftDate >= firstDate && shiftDate <= firstWeekEnd;
     });
-  }
-
-  private static findMatchingPatternShift(
-    shift: ScheduledShift,
-    patternShifts: ScheduledShift[]
-  ): ScheduledShift | null {
-    const shiftDayOfWeek = this.getDayOfWeek(shift.date);
-    const shiftTimeSlot = shift.timeSlotId;
-    
-    return patternShifts.find(patternShift => 
-      this.getDayOfWeek(patternShift.date) === shiftDayOfWeek &&
-      patternShift.timeSlotId === shiftTimeSlot
-    ) || null;
-  }
-
-  private static getWeekNumber(dateString: string): number {
-    const date = new Date(dateString);
-    const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
-    const pastDaysOfYear = (date.getTime() - firstDayOfYear.getTime()) / 86400000;
-    return Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
   }
 
   // ========== EXISTING HELPER METHODS ==========
@@ -531,36 +445,6 @@ export class ShiftAssignmentService {
       case 'large': return 2;
       default: return 999;
     }
-  }
-
-  private static findViolations(
-    assignments: { [shiftId: string]: string[] },
-    employees: Employee[],
-    definedShifts: ScheduledShift[],
-    enforceNoTraineeAlone: boolean
-  ): string[] {
-    const violations: string[] = [];
-    const employeeMap = new Map(employees.map(emp => [emp.id, emp]));
-
-    definedShifts.forEach(scheduledShift => {
-      const assignedEmployeeIds = assignments[scheduledShift.id] || [];
-      
-      if (assignedEmployeeIds.length === 0) {
-        violations.push(`Shift has no assigned employees`);
-        return;
-      }
-
-      const assignedEmployees = assignedEmployeeIds.map(id => employeeMap.get(id)).filter(Boolean) as Employee[];
-
-      if (enforceNoTraineeAlone && assignedEmployees.length === 1) {
-        const soloEmployee = assignedEmployees[0];
-        if (soloEmployee.employeeType === 'trainee') {
-          violations.push(`Trainee ${soloEmployee.name} is working alone`);
-        }
-      }
-    });
-
-    return violations;
   }
 
   private static getDayOfWeek(dateString: string): number {

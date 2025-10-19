@@ -4,8 +4,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { shiftPlanService } from '../../services/shiftPlanService';
 import { employeeService } from '../../services/employeeService';
-import { shiftAssignmentService, ShiftAssignmentService } from '../../services/shiftAssignmentService';
-import { IntelligentShiftScheduler, SchedulingResult, AssignmentResult } from '../../services/scheduling/useScheduling';
+import { shiftAssignmentService } from '../../services/shiftAssignmentService';
+import { AssignmentResult } from '../../models/scheduling';
 import { ShiftPlan, TimeSlot, ScheduledShift } from '../../models/ShiftPlan';
 import { Employee, EmployeeAvailability } from '../../models/Employee';
 import { useNotification } from '../../contexts/NotificationContext';
@@ -421,11 +421,11 @@ const ShiftPlanView: React.FC = () => {
       };
 
       // Use the freshly loaded data, not the state
-      const result = await ShiftAssignmentService.assignShifts(
+      const result = await shiftAssignmentService.assignShifts(
         shiftPlan,
-        refreshedEmployees, // Use fresh array, not state
-        refreshedAvailabilities, // Use fresh array, not state
-        constraints // Now this variable is defined
+        refreshedEmployees,
+        refreshedAvailabilities,
+        constraints
       );
 
       setAssignmentResult(result);

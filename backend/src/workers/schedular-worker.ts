@@ -1,7 +1,7 @@
 // backend/src/workers/scheduler-worker.ts
 import { parentPort, workerData } from 'worker_threads';
 import { CPModel, CPSolver } from './cp-sat-wrapper.js';
-import { ShiftPlan } from '../models/ShiftPlan.js';
+import { ShiftPlan, Shift } from '../models/ShiftPlan.js';
 import { Employee, EmployeeAvailability } from '../models/Employee.js';
 import { Availability, Constraint } from '../models/scheduling.js';
 
@@ -10,7 +10,7 @@ interface WorkerData {
   employees: Employee[];
   availabilities: Availability[];
   constraints: Constraint[];
-  shifts: any[];
+  shifts: Shift[];
 }
 
 function buildSchedulingModel(model: CPModel, data: WorkerData): void {
@@ -123,7 +123,7 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
       if (availability) {
         const score = availability.preferenceLevel === 1 ? 10 : 
                      availability.preferenceLevel === 2 ? 5 : 
-                     -100; // Heavy penalty for assigning unavailable shifts
+                     -1000; // Heavy penalty for assigning unavailable shifts
         
         const varName = `assign_${employee.id}_${shift.id}`;
         if (objectiveExpression) {
