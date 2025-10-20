@@ -4,20 +4,20 @@ export interface Employee {
   email: string;
   firstname: string;
   lastname: string;
-  role: 'admin' | 'maintenance' | 'user';
   employeeType: 'manager' | 'trainee' | 'experienced';
   contractType: 'small' | 'large';
   canWorkAlone: boolean;
   isActive: boolean;
   createdAt: string;
   lastLogin?: string | null;
+  roles?: string[];
 }
 
 export interface CreateEmployeeRequest {
   password: string;
   firstname: string;
   lastname: string;
-  role: 'admin' | 'maintenance' | 'user';
+  roles?: string[];
   employeeType: 'manager' | 'trainee' | 'experienced';
   contractType: 'small' | 'large';
   canWorkAlone: boolean;
@@ -26,7 +26,7 @@ export interface CreateEmployeeRequest {
 export interface UpdateEmployeeRequest {
   firstname?: string;
   lastname?: string;
-  role?: 'admin' | 'maintenance' | 'user';
+  roles?: string[];
   employeeType?: 'manager' | 'trainee' | 'experienced';
   contractType?: 'small' | 'large';
   canWorkAlone?: boolean;

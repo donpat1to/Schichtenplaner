@@ -84,16 +84,26 @@ const EmployeeManagement: React.FC = () => {
     });
   };
 
+  // Helper function to get full name
+  const getFullName = (employee: Employee): string => {
+    return `${employee.firstname} ${employee.lastname}`;
+  };
+
   // Verbesserte Lösch-Funktion mit Bestätigungs-Dialog
   const handleDeleteEmployee = async (employee: Employee) => {
     try {
+      const fullName = getFullName(employee);
+      
       // Bestätigungs-Dialog basierend auf Rolle
-      let confirmMessage = `Möchten Sie den Mitarbeiter "${employee.name}" wirklich PERMANENT LÖSCHEN?\n\nDie Daten des Mitarbeiters werden unwiderruflich gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.`;
+      let confirmMessage = `Möchten Sie den Mitarbeiter "${fullName}" (${employee.email}) wirklich PERMANENT LÖSCHEN?\n\nDie Daten des Mitarbeiters werden unwiderruflich gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.`;
       let confirmTitle = 'Mitarbeiter löschen';
       
-      if (employee.role === 'admin') {
+      // Check if employee has admin role (now in roles array)
+      const isAdmin = employee.roles?.includes('admin') || false;
+      
+      if (isAdmin) {
         const adminCount = employees.filter(emp => 
-          emp.role === 'admin' && emp.isActive
+          (emp.roles?.includes('admin') || false) && emp.isActive
         ).length;
         
         if (adminCount <= 1) {
@@ -106,7 +116,7 @@ const EmployeeManagement: React.FC = () => {
         }
         
         confirmTitle = 'Administrator löschen';
-        confirmMessage = `Möchten Sie den Administrator "${employee.name}" wirklich PERMANENT LÖSCHEN?\n\nAchtung: Diese Aktion ist permanent und kann nicht rückgängig gemacht werden.`;
+        confirmMessage = `Möchten Sie den Administrator "${fullName}" (${employee.email}) wirklich PERMANENT LÖSCHEN?\n\nAchtung: Diese Aktion ist permanent und kann nicht rückgängig gemacht werden.`;
       }
 
       const confirmed = await confirmDialog({
@@ -119,7 +129,7 @@ const EmployeeManagement: React.FC = () => {
 
       if (!confirmed) return;
 
-      console.log('Starting deletion process for employee:', employee.name);
+      console.log('Starting deletion process for employee:', fullName);
       await employeeService.deleteEmployee(employee.id);
       console.log('Employee deleted, reloading list');
       
@@ -130,7 +140,7 @@ const EmployeeManagement: React.FC = () => {
       showNotification({
         type: 'success',
         title: 'Erfolg',
-        message: `Mitarbeiter "${employee.name}" wurde erfolgreich gelöscht`
+        message: `Mitarbeiter "${fullName}" wurde erfolgreich gelöscht`
       });
 
     } catch (err: any) {
@@ -218,7 +228,7 @@ const EmployeeManagement: React.FC = () => {
         <EmployeeList
           employees={employees}
           onEdit={handleEditEmployee}
-          onDelete={handleDeleteEmployee} // Jetzt mit Employee-Objekt
+          onDelete={handleDeleteEmployee}
           onManageAvailability={handleManageAvailability}
         />
       )}

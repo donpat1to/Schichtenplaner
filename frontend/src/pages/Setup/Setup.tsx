@@ -1,4 +1,4 @@
-// frontend/src/pages/Setup/Setup.tsx - KORRIGIERT
+// frontend/src/pages/Setup/Setup.tsx - UPDATED
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -7,7 +7,8 @@ const Setup: React.FC = () => {
   const [formData, setFormData] = useState({
     password: '',
     confirmPassword: '',
-    name: ''
+    firstname: '',
+    lastname: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -34,8 +35,12 @@ const Setup: React.FC = () => {
   };
 
   const validateStep2 = () => {
-    if (!formData.name.trim()) {
-      setError('Bitte geben Sie einen Namen ein.');
+    if (!formData.firstname.trim()) {
+      setError('Bitte geben Sie einen Vornamen ein.');
+      return false;
+    }
+    if (!formData.lastname.trim()) {
+      setError('Bitte geben Sie einen Nachnamen ein.');
       return false;
     }
     return true;
@@ -62,10 +67,11 @@ const Setup: React.FC = () => {
 
       const payload = {
         password: formData.password,
-        name: formData.name
+        firstname: formData.firstname,
+        lastname: formData.lastname
       };
 
-      console.log('🚀 Sending setup request...');
+      console.log('🚀 Sending setup request...', payload);
 
       const response = await fetch('http://localhost:3002/api/setup/admin', {
         method: 'POST',
@@ -92,6 +98,17 @@ const Setup: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Helper to display generated email preview
+  const getEmailPreview = () => {
+    if (!formData.firstname.trim() || !formData.lastname.trim()) {
+      return 'vorname.nachname@sp.de';
+    }
+    
+    const cleanFirstname = formData.firstname.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanLastname = formData.lastname.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return `${cleanFirstname}.${cleanLastname}@sp.de`;
   };
 
   return (
@@ -144,34 +161,6 @@ const Setup: React.FC = () => {
 
         {step === 1 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <div>
-              <label style={{ 
-                display: 'block', 
-                marginBottom: '0.5rem', 
-                fontWeight: '600',
-                color: '#495057'
-              }}>
-                Administrator E-Mail
-              </label>
-              <div style={{ 
-                padding: '0.75rem', 
-                backgroundColor: '#e9ecef', 
-                border: '1px solid #ced4da',
-                borderRadius: '6px',
-                color: '#495057',
-                fontWeight: '500'
-              }}>
-                admin@instandhaltung.de
-              </div>
-              <div style={{ 
-                fontSize: '0.875rem', 
-                color: '#6c757d',
-                marginTop: '0.25rem'
-              }}>
-                Diese E-Mail wird für den Administrator-Account verwendet
-              </div>
-            </div>
-            
             <div>
               <label style={{ 
                 display: 'block', 
@@ -237,12 +226,12 @@ const Setup: React.FC = () => {
                 fontWeight: '600',
                 color: '#495057'
               }}>
-                Vollständiger Name
+                Vorname
               </label>
               <input
                 type="text"
-                name="name"
-                value={formData.name}
+                name="firstname"
+                value={formData.firstname}
                 onChange={handleInputChange}
                 style={{
                   width: '100%',
@@ -251,9 +240,64 @@ const Setup: React.FC = () => {
                   borderRadius: '6px',
                   fontSize: '1rem'
                 }}
-                placeholder="Max Mustermann"
+                placeholder="Max"
                 required
               />
+            </div>
+
+            <div>
+              <label style={{ 
+                display: 'block', 
+                marginBottom: '0.5rem', 
+                fontWeight: '600',
+                color: '#495057'
+              }}>
+                Nachname
+              </label>
+              <input
+                type="text"
+                name="lastname"
+                value={formData.lastname}
+                onChange={handleInputChange}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '1px solid #ced4da',
+                  borderRadius: '6px',
+                  fontSize: '1rem'
+                }}
+                placeholder="Mustermann"
+                required
+              />
+            </div>
+
+            <div>
+              <label style={{ 
+                display: 'block', 
+                marginBottom: '0.5rem', 
+                fontWeight: '600',
+                color: '#495057'
+              }}>
+                Automatisch generierte E-Mail
+              </label>
+              <div style={{ 
+                padding: '0.75rem', 
+                backgroundColor: '#e9ecef', 
+                border: '1px solid #ced4da',
+                borderRadius: '6px',
+                color: '#495057',
+                fontWeight: '500',
+                fontFamily: 'monospace'
+              }}>
+                {getEmailPreview()}
+              </div>
+              <div style={{ 
+                fontSize: '0.875rem', 
+                color: '#6c757d',
+                marginTop: '0.25rem'
+              }}>
+                Die E-Mail wird automatisch aus Vor- und Nachname generiert
+              </div>
             </div>
           </div>
         )}
@@ -315,7 +359,7 @@ const Setup: React.FC = () => {
             border: '1px solid #b6d7e8'
           }}>
             💡 Nach dem erfolgreichen Setup werden Sie zur Anmeldeseite weitergeleitet, 
-            wo Sie sich mit Ihren Zugangsdaten anmelden können.
+            wo Sie sich mit Ihrer automatisch generierten E-Mail anmelden können.
           </div>
         )}
       </div>

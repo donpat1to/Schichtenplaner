@@ -57,7 +57,13 @@ export const isExperienced = (employee: Employee): boolean =>
   employee.employeeType === 'experienced';
 
 export const isAdmin = (employee: Employee): boolean => 
-  employee.role === 'admin';
+  employee.roles?.includes('admin') || false;
+
+export const isMaintenance = (employee: Employee): boolean => 
+  employee.roles?.includes('maintenance') || false;
+
+export const isUser = (employee: Employee): boolean => 
+  employee.roles?.includes('user') || false;
 
 export const canEmployeeWorkAlone = (employee: Employee): boolean => 
   employee.canWorkAlone && isExperienced(employee);

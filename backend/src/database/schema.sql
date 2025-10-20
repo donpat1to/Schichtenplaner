@@ -25,6 +25,11 @@ CREATE TABLE IF NOT EXISTS employee_roles (
   PRIMARY KEY (employee_id, role)
 );
 
+-- Insert default roles if they don't exist
+INSERT OR IGNORE INTO roles (role) VALUES ('admin');
+INSERT OR IGNORE INTO roles (role) VALUES ('user');
+INSERT OR IGNORE INTO roles (role) VALUES ('maintenance');
+
 -- Shift plans table
 CREATE TABLE IF NOT EXISTS shift_plans (
   id TEXT PRIMARY KEY,

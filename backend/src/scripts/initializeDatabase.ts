@@ -14,10 +14,12 @@ export async function initializeDatabase(): Promise<void> {
   try {
     console.log('Starting database initialization...');
     
-    // Check if users table exists and has data
     try {
       const existingAdmin = await db.get<{ count: number }>(
-        "SELECT COUNT(*) as count FROM employees WHERE role = 'admin'"
+        `SELECT COUNT(*) as count 
+         FROM employees e
+         JOIN employee_roles er ON e.id = er.employee_id
+         WHERE er.role = 'admin' AND e.is_active = 1`
       );
       
       if (existingAdmin && existingAdmin.count > 0) {
@@ -40,22 +42,28 @@ export async function initializeDatabase(): Promise<void> {
       
       console.log('Existing tables found:', existingTables.map(t => t.name).join(', ') || 'none');
       
-      // Drop existing tables in reverse order of dependencies if they exist
+      // UPDATED: Drop tables in correct dependency order
       const tablesToDrop = [
-        'employees', 
-        'time_slots', 
-        'shifts', 
-        'scheduled_shifts', 
+        'employee_availability',
         'shift_assignments', 
-        'employee_availability', 
-        'applied_migrations', 
-        'shift_plans'
+        'scheduled_shifts',
+        'shifts',
+        'time_slots',
+        'employee_roles',
+        'shift_plans',
+        'roles',
+        'employees',
+        'applied_migrations'
       ];
       
       for (const table of tablesToDrop) {
         if (existingTables.some(t => t.name === table)) {
           console.log(`Dropping table: ${table}`);
-          await db.run(`DROP TABLE IF EXISTS ${table}`);
+          try {
+            await db.run(`DROP TABLE IF EXISTS ${table}`);
+          } catch (error) {
+            console.warn(`Could not drop table ${table}:`, error);
+          }
         }
       }
     } catch (error) {
@@ -90,6 +98,19 @@ export async function initializeDatabase(): Promise<void> {
         await db.run('ROLLBACK');
         throw error;
       }
+    }
+    
+    // UPDATED: Insert default roles after creating the tables
+    try {
+      console.log('Inserting default roles...');
+      await db.run(`INSERT OR IGNORE INTO roles (role) VALUES ('admin')`);
+      await db.run(`INSERT OR IGNORE INTO roles (role) VALUES ('user')`);
+      await db.run(`INSERT OR IGNORE INTO roles (role) VALUES ('maintenance')`);
+      console.log('✅ Default roles inserted');
+    } catch (error) {
+      console.error('Error inserting default roles:', error);
+      await db.run('ROLLBACK');
+      throw error;
     }
     
     await db.run('COMMIT');

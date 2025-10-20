@@ -1,4 +1,3 @@
-// frontend/src/pages/Employees/components/AvailabilityManager.tsx
 import React, { useState, useEffect } from 'react';
 import { employeeService } from '../../../services/employeeService';
 import { shiftPlanService } from '../../../services/shiftPlanService';
@@ -200,19 +199,11 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         return updated;
       } else {
         // Create new availability using shiftId directly
-        const shift = selectedPlan?.shifts?.find(s => s.id === shiftId);
-        if (!shift) {
-          console.error('❌ Shift nicht gefunden:', shiftId);
-          return prev;
-        }
-
         const newAvailability: Availability = {
           id: `temp-${shiftId}-${Date.now()}`,
           employeeId: employee.id,
           planId: selectedPlanId,
-          shiftId: shiftId, // Use shiftId directly
-          dayOfWeek: shift.dayOfWeek, // Keep for backward compatibility if needed
-          timeSlotId: shift.timeSlotId, // Keep for backward compatibility if needed
+          shiftId: shiftId,
           preferenceLevel: level,
           isAvailable: level !== 3
         };
@@ -433,9 +424,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         planId: selectedPlanId,
         availabilities: validAvailabilities.map(avail => ({
           planId: selectedPlanId,
-          shiftId: avail.shiftId, // Use shiftId directly
-          dayOfWeek: avail.dayOfWeek, // Keep for backward compatibility
-          timeSlotId: avail.timeSlotId, // Keep for backward compatibility
+          shiftId: avail.shiftId,
           preferenceLevel: avail.preferenceLevel,
           notes: avail.notes
         }))
@@ -471,6 +460,9 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
     });
   });
   const shiftsCount = allShiftIds.size;
+
+  // Get full name for display
+  const employeeFullName = `${employee.firstname} ${employee.lastname}`;
 
   return (
     <div style={{
@@ -517,10 +509,13 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       {/* Employee Info */}
       <div style={{ marginBottom: '20px' }}>
         <h3 style={{ margin: '0 0 10px 0', color: '#34495e' }}>
-          {employee.name}
+          {employeeFullName}
         </h3>
         <p style={{ margin: 0, color: '#7f8c8d' }}>
-          Legen Sie die Verfügbarkeit für {employee.name} fest (basierend auf Shift-IDs).
+          <strong>Email:</strong> {employee.email}
+        </p>
+        <p style={{ margin: '5px 0 0 0', color: '#7f8c8d' }}>
+          Legen Sie die Verfügbarkeit für {employeeFullName} fest (basierend auf Shift-IDs).
         </p>
       </div>
 

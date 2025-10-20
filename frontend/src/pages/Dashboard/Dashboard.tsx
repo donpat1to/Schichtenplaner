@@ -352,7 +352,7 @@ const Dashboard: React.FC = () => {
       }}>
         <div>
           <h1 style={{ margin: '0 0 10px 0', color: '#2c3e50' }}>
-            Willkommen zurück, {user?.name}! 👋
+            Willkommen zurück, {user?.firstname} {user?.lastname} ! 👋
           </h1>
           <p style={{ margin: 0, color: '#546e7a', fontSize: '16px' }}>
             {new Date().toLocaleDateString('de-DE', { 

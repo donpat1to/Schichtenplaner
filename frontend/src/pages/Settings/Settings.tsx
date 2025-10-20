@@ -319,7 +319,7 @@ const Settings: React.FC = () => {
                       </label>
                       <input
                         type="text"
-                        value={currentUser.role}
+                        value={currentUser.roles}
                         disabled
                         style={styles.fieldInputDisabled}
                       />

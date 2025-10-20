@@ -24,7 +24,7 @@ export interface LoginRequest {
 }
 
 export interface JWTPayload {
-  id: string; // ← VON number ZU string ÄNDERN
+  id: string;
   email: string;
   role: string;
   iat?: number;
@@ -32,16 +32,26 @@ export interface JWTPayload {
 }
 
 export interface RegisterRequest {
-  // REMOVED: email - will be auto-generated
   password: string;
   firstname: string;
   lastname: string;
-  role?: string;
+  roles?: string[];
 }
 
 function generateEmail(firstname: string, lastname: string): string {
-  const cleanFirstname = firstname.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const cleanLastname = lastname.toLowerCase().replace(/[^a-z0-9]/g, '');
+  // Convert German umlauts to their expanded forms
+  const convertUmlauts = (str: string): string => {
+    return str
+      .toLowerCase()
+      .replace(/ü/g, 'ue')
+      .replace(/ö/g, 'oe')
+      .replace(/ä/g, 'ae')
+      .replace(/ß/g, 'ss');
+  };
+
+  // Remove any remaining special characters and convert to lowercase
+  const cleanFirstname = convertUmlauts(firstname).replace(/[^a-z0-9]/g, '');
+  const cleanLastname = convertUmlauts(lastname).replace(/[^a-z0-9]/g, '');
   return `${cleanFirstname}.${cleanLastname}@sp.de`;
 }
 
@@ -56,9 +66,17 @@ export const login = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'E-Mail und Passwort sind erforderlich' });
     }
 
-    // Get user from database
-    const user = await db.get<EmployeeWithPassword>(
-      'SELECT id, email, password, firstname, lastname, role, employee_type as employeeType, contract_type as contractType, can_work_alone as canWorkAlone, is_active as isActive FROM employees WHERE email = ? AND is_active = 1',
+    // UPDATED: Get user from database with role from employee_roles table
+    const user = await db.get<any>(
+      `SELECT 
+        e.id, e.email, e.password, e.firstname, e.lastname, 
+        e.employee_type as employeeType, e.contract_type as contractType, 
+        e.can_work_alone as canWorkAlone, e.is_active as isActive,
+        er.role
+       FROM employees e
+       LEFT JOIN employee_roles er ON e.id = er.employee_id
+       WHERE e.email = ? AND e.is_active = 1
+       LIMIT 1`,
       [email]
     );
 
@@ -78,11 +96,11 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Ungültige Anmeldedaten' });
     }
 
-    // Create token payload - KORREKT: id field verwenden
+    // Create token payload
     const tokenPayload = {
-      id: user.id.toString(), // ← WICHTIG: Dies wird als 'id' im JWT gespeichert
+      id: user.id.toString(),
       email: user.email,
-      role: user.role
+      role: user.role || 'user' // Fallback to 'user' if no role found
     };
 
     console.log('🎫 Creating JWT with payload:', tokenPayload);
@@ -94,13 +112,17 @@ export const login = async (req: Request, res: Response) => {
       { expiresIn: '24h' }
     );
 
-    // Remove password from user object
+    // Remove password from user object and format response
     const { password: _, ...userWithoutPassword } = user;
+    const userResponse = {
+      ...userWithoutPassword,
+      roles: user.role ? [user.role] : ['user'] // Convert single role to array for frontend compatibility
+    };
 
     console.log('✅ Login successful for:', user.email);
 
     res.json({
-      user: userWithoutPassword,
+      user: userResponse,
       token
     });
   } catch (error) {
@@ -121,8 +143,17 @@ export const getCurrentUser = async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Nicht authentifiziert' });
     }
 
-    const user = await db.get<Employee>(
-      'SELECT id, email, firstname, lastname, role, employee_type as employeeType, contract_type as contractType, can_work_alone as canWorkAlone, is_active as isActive FROM employees WHERE id = ? AND is_active = 1',
+    // UPDATED: Get user with role from employee_roles table
+    const user = await db.get<any>(
+      `SELECT 
+        e.id, e.email, e.firstname, e.lastname,
+        e.employee_type as employeeType, e.contract_type as contractType, 
+        e.can_work_alone as canWorkAlone, e.is_active as isActive,
+        er.role
+       FROM employees e
+       LEFT JOIN employee_roles er ON e.id = er.employee_id
+       WHERE e.id = ? AND e.is_active = 1
+       LIMIT 1`,
       [jwtUser.userId]
     );
 
@@ -133,8 +164,14 @@ export const getCurrentUser = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Benutzer nicht gefunden' });
     }
 
+    // Format user response with roles array
+    const userResponse = {
+      ...user,
+      roles: user.role ? [user.role] : ['user']
+    };
+
     console.log('✅ Returning user:', user.email);
-    res.json({ user });
+    res.json({ user: userResponse });
   } catch (error) {
     console.error('Get current user error:', error);
     res.status(500).json({ error: 'Ein Fehler ist beim Abrufen des Benutzers aufgetreten' });
@@ -168,9 +205,9 @@ export const validateToken = async (req: Request, res: Response) => {
 
 export const register = async (req: Request, res: Response) => {
   try {
-    const { password, firstname, lastname, role = 'user' } = req.body as RegisterRequest;
+    const { password, firstname, lastname, roles = ['user'] } = req.body as RegisterRequest;
 
-    // Validate required fields - REMOVED email
+    // Validate required fields
     if (!password || !firstname || !lastname) {
       return res.status(400).json({ 
         error: 'Password, firstname und lastname sind erforderlich' 
@@ -192,27 +229,60 @@ export const register = async (req: Request, res: Response) => {
       });
     }
 
-    // Hash password and create user
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
+    const employeeId = uuidv4();
 
-    // Insert user with generated email
-    const result = await db.run(
-      `INSERT INTO employees (id, email, password, firstname, lastname, role, employee_type, contract_type, can_work_alone, is_active) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [uuidv4(), email, hashedPassword, firstname, lastname, role, 'experienced', 'small', false, 1]
-    );
+    // Start transaction for registration
+    await db.run('BEGIN TRANSACTION');
 
-    if (!result.lastID) {
-      throw new Error('Benutzer konnte nicht erstellt werden');
+    try {
+      // Insert user without role (role is now in employee_roles table)
+      const result = await db.run(
+        `INSERT INTO employees (id, email, password, firstname, lastname, employee_type, contract_type, can_work_alone, is_active) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [employeeId, email, hashedPassword, firstname, lastname, 'experienced', 'small', false, 1]
+      );
+
+      if (!result.lastID) {
+        throw new Error('Benutzer konnte nicht erstellt werden');
+      }
+
+      // UPDATED: Insert roles into employee_roles table
+      for (const role of roles) {
+        await db.run(
+          `INSERT INTO employee_roles (employee_id, role) VALUES (?, ?)`,
+          [employeeId, role]
+        );
+      }
+
+      await db.run('COMMIT');
+
+      // Get created user with role
+      const newUser = await db.get<any>(
+        `SELECT 
+          e.id, e.email, e.firstname, e.lastname,
+          er.role
+         FROM employees e
+         LEFT JOIN employee_roles er ON e.id = er.employee_id
+         WHERE e.id = ?
+         LIMIT 1`,
+        [employeeId]
+      );
+
+      // Format response with roles array
+      const userResponse = {
+        ...newUser,
+        roles: newUser.role ? [newUser.role] : ['user']
+      };
+
+      res.status(201).json({ user: userResponse });
+
+    } catch (error) {
+      await db.run('ROLLBACK');
+      throw error;
     }
 
-    // Get created user
-    const newUser = await db.get<Employee>(
-      'SELECT id, email, firstname, lastname, role FROM employees WHERE id = ?',
-      [result.lastID]
-    );
-
-    res.status(201).json({ user: newUser });
   } catch (error) {
     console.error('Registration error:', error);
     res.status(500).json({ 

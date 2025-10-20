@@ -27,7 +27,10 @@ function generateEmail(firstname: string, lastname: string): string {
 export const checkSetupStatus = async (req: Request, res: Response): Promise<void> => {
   try {
     const adminExists = await db.get<{ 'COUNT(*)': number }>(
-      'SELECT COUNT(*) FROM employees WHERE role = ? AND is_active = 1',
+      `SELECT COUNT(*) 
+       FROM employees e
+       JOIN employee_roles er ON e.id = er.employee_id
+       WHERE er.role = ? AND e.is_active = 1`,
       ['admin']
     );
 
@@ -50,7 +53,10 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
   try {
     // Check if admin already exists
     const adminExists = await db.get<{ 'COUNT(*)': number }>(
-      'SELECT COUNT(*) FROM employees WHERE role = ? AND is_active = 1',
+      `SELECT COUNT(*) 
+       FROM employees e
+       JOIN employee_roles er ON e.id = er.employee_id
+       WHERE er.role = ? AND e.is_active = 1`,
       ['admin']
     );
 
@@ -62,11 +68,11 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    const { password, firstname, lastname } = req.body; // Changed from name to firstname/lastname
+    const { password, firstname, lastname } = req.body;
 
     console.log('👤 Creating admin with data:', { firstname, lastname });
 
-    // Validation - updated for firstname/lastname
+    // Validation
     if (!password || !firstname || !lastname) {
       res.status(400).json({ error: 'Passwort, Vorname und Nachname sind erforderlich' });
       return;
@@ -78,7 +84,7 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    // Generate email automatically using the same pattern
+    // Generate email automatically
     const email = generateEmail(firstname, lastname);
     console.log('📧 Generated admin email:', email);
 
@@ -92,11 +98,17 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
     await db.run('BEGIN TRANSACTION');
 
     try {
-      // Create admin user with generated email
+      // Create admin user in employees table
       await db.run(
-        `INSERT INTO employees (id, email, password, firstname, lastname, role, employee_type, contract_type, can_work_alone, is_active)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [adminId, email, hashedPassword, firstname, lastname, 'admin', 'manager', 'large', true, 1]
+        `INSERT INTO employees (id, email, password, firstname, lastname, employee_type, contract_type, can_work_alone, is_active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [adminId, email, hashedPassword, firstname, lastname, 'manager', 'large', true, 1]
+      );
+
+      // UPDATED: Assign admin role in employee_roles table
+      await db.run(
+        `INSERT INTO employee_roles (employee_id, role) VALUES (?, ?)`,
+        [adminId, 'admin']
       );
 
       console.log('✅ Admin user created successfully with email:', email);

@@ -1,4 +1,3 @@
-// frontend/src/pages/Employees/components/EmployeeList.tsx
 import React, { useState } from 'react';
 import { ROLE_CONFIG, EMPLOYEE_TYPE_CONFIG } from '../../../models/defaults/employeeDefaults';
 import { Employee } from '../../../models/Employee';
@@ -33,11 +32,12 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
     
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
+      const fullName = `${employee.firstname} ${employee.lastname}`.toLowerCase();
       return (
-        employee.name.toLowerCase().includes(term) ||
+        fullName.includes(term) ||
         employee.email.toLowerCase().includes(term) ||
         employee.employeeType.toLowerCase().includes(term) ||
-        employee.role.toLowerCase().includes(term)
+        (employee.roles && employee.roles.some(role => role.toLowerCase().includes(term)))
       );
     }
     
@@ -51,8 +51,8 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
 
     switch (sortField) {
       case 'name':
-        aValue = a.name.toLowerCase();
-        bValue = b.name.toLowerCase();
+        aValue = `${a.firstname} ${a.lastname}`.toLowerCase();
+        bValue = `${b.firstname} ${b.lastname}`.toLowerCase();
         break;
       case 'employeeType':
         aValue = a.employeeType;
@@ -63,8 +63,9 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
         bValue = b.canWorkAlone;
         break;
       case 'role':
-        aValue = a.role;
-        bValue = b.role;
+        // Use the highest role for sorting
+        aValue = getHighestRole(a.roles || []);
+        bValue = getHighestRole(b.roles || []);
         break;
       case 'lastLogin':
         // Handle null values for lastLogin (put them at the end)
@@ -81,6 +82,13 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
       return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
     }
   });
+
+  // Helper to get highest role for sorting
+  const getHighestRole = (roles: string[]): string => {
+    if (roles.includes('admin')) return 'admin';
+    if (roles.includes('maintenance')) return 'maintenance';
+    return 'user';
+  };
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -102,23 +110,23 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
   const canDeleteEmployee = (employee: Employee): boolean => {
     if (!hasRole(['admin'])) return false;
     if (employee.id === currentUser?.id) return false;
-    if (employee.role === 'admin' && !hasRole(['admin'])) return false;
+    if (employee.roles?.includes('admin') && !hasRole(['admin'])) return false;
     return true;
   };
 
   const canEditEmployee = (employee: Employee): boolean => {
     if (hasRole(['admin'])) return true;
     if (hasRole(['maintenance'])) {
-      return employee.role === 'user' || employee.id === currentUser?.id;
+      return !employee.roles?.includes('admin') || employee.id === currentUser?.id;
     }
     return false;
   };
 
   // Using shared configuration for consistent styling
-  type EmployeeType = typeof EMPLOYEE_TYPE_CONFIG[number]['value'];
+  type EmployeeType = 'manager' | 'trainee' | 'experienced';
 
   const getEmployeeTypeBadge = (type: EmployeeType) => {
-    const config = EMPLOYEE_TYPE_CONFIG.find(t => t.value === type)!;
+    const config = EMPLOYEE_TYPE_CONFIG[type];
 
     const bgColor =
       type === 'manager'
@@ -142,19 +150,27 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
       : { text: 'Betreuung', color: '#e74c3c', bgColor: '#fadbd8' };
   };
 
-  type Role = typeof ROLE_CONFIG[number]['value'];
+  type Role = 'admin' | 'maintenance' | 'user';
 
-  const getRoleBadge = (role: Role) => {
-    const { label, color } = ROLE_CONFIG.find(r => r.value === role)!;
+  const getRoleBadge = (roles: string[] = []) => {
+    const highestRole = getHighestRole(roles);
+    const { label, color } = ROLE_CONFIG.find(r => r.value === highestRole)!;
 
     const bgColor =
-      role === 'user'
+      highestRole === 'user'
         ? '#d5f4e6'
-        : role === 'maintenance'
+        : highestRole === 'maintenance'
         ? '#d6eaf8'
         : '#fadbd8'; // admin
 
-    return { text: label, color, bgColor };
+    return { text: label, color, bgColor, roles };
+  };
+
+  const formatRoleDisplay = (roles: string[] = []) => {
+    if (roles.length === 0) return 'MITARBEITER';
+    if (roles.includes('admin')) return 'ADMIN';
+    if (roles.includes('maintenance')) return 'INSTANDHALTER';
+    return 'MITARBEITER';
   };
 
   if (employees.length === 0) {
@@ -282,7 +298,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
         {sortedEmployees.map(employee => {
           const employeeType = getEmployeeTypeBadge(employee.employeeType);
           const independence = getIndependenceBadge(employee.canWorkAlone);
-          const roleColor = getRoleBadge(employee.role);
+          const roleInfo = getRoleBadge(employee.roles);
           const status = getStatusBadge(employee.isActive);
           const canEdit = canEditEmployee(employee);
           const canDelete = canDeleteEmployee(employee);
@@ -302,7 +318,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
               {/* Name & E-Mail */}
               <div>
                 <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
-                  {employee.name}
+                  {employee.firstname} {employee.lastname}
                   {employee.id === currentUser?.id && (
                     <span style={{ 
                       marginLeft: '8px',
@@ -357,8 +373,8 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
               <div style={{ textAlign: 'center' }}>
                 <span
                   style={{
-                    backgroundColor: roleColor.bgColor,
-                    color: roleColor.color,
+                    backgroundColor: roleInfo.bgColor,
+                    color: roleInfo.color,
                     padding: '6px 12px',
                     borderRadius: '15px',
                     fontSize: '12px',
@@ -366,9 +382,9 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
                     display: 'inline-block',
                     minWidth: '80px'
                   }}
+                  title={employee.roles?.join(', ') || 'user'}
                 >
-                  {employee.role === 'admin' ? 'ADMIN' : 
-                   employee.role === 'maintenance' ? 'INSTANDHALTER' : 'MITARBEITER'}
+                  {formatRoleDisplay(employee.roles)}
                 </span>
               </div>
 
@@ -406,25 +422,23 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
                 flexWrap: 'wrap'
               }}>
                 {/* Verfügbarkeit Button */}
-                {(employee.role === 'admin' || employee.role === 'maintenance' || employee.role === 'user') && (
-                  <button
-                    onClick={() => onManageAvailability(employee)}
-                    style={{
-                      padding: '6px 8px',
-                      backgroundColor: '#3498db',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '12px',
-                      minWidth: '32px',
-                      height: '32px'
-                    }}
-                    title="Verfügbarkeit verwalten"
-                  >
-                    📅
-                  </button>
-                )}
+                <button
+                  onClick={() => onManageAvailability(employee)}
+                  style={{
+                    padding: '6px 8px',
+                    backgroundColor: '#3498db',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    minWidth: '32px',
+                    height: '32px'
+                  }}
+                  title="Verfügbarkeit verwalten"
+                >
+                  📅
+                </button>
 
                 {/* Bearbeiten Button */}
                 {canEdit && (
@@ -469,7 +483,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
                 )}
 
                 {/* Platzhalter für Symmetrie */}
-                {!canEdit && !canDelete && (employee.role !== 'admin' && employee.role !== 'maintenance') && (
+                {!canEdit && !canDelete && (
                   <div style={{ width: '32px', height: '32px' }}></div>
                 )}
               </div>

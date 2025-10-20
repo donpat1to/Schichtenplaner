@@ -1,4 +1,3 @@
-// frontend/src/pages/Employees/components/EmployeeForm.tsx
 import React, { useState, useEffect } from 'react';
 import { Employee, CreateEmployeeRequest, UpdateEmployeeRequest } from '../../../models/Employee';
 import { ROLE_CONFIG, EMPLOYEE_TYPE_CONFIG } from '../../../models/defaults/employeeDefaults';
@@ -19,10 +18,11 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
   onCancel
 }) => {
   const [formData, setFormData] = useState({
-    name: '',
-    email: '',
+    firstname: '',
+    lastname: '',
+    email: '', // Will be auto-generated and display only
     password: '',
-    role: 'user' as 'admin' | 'maintenance' | 'user',
+    roles: ['user'] as string[], // Changed from single role to array
     employeeType: 'trainee' as 'manager' | 'trainee' | 'experienced',
     contractType: 'small' as 'small' | 'large',
     canWorkAlone: false,
@@ -37,13 +37,33 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
   const [error, setError] = useState('');
   const { hasRole } = useAuth();
 
+  // Generate email preview
+  const generateEmailPreview = (firstname: string, lastname: string): string => {
+    const convertUmlauts = (str: string): string => {
+      return str
+        .toLowerCase()
+        .replace(/ü/g, 'ue')
+        .replace(/ö/g, 'oe')
+        .replace(/ä/g, 'ae')
+        .replace(/ß/g, 'ss');
+    };
+
+    const cleanFirstname = convertUmlauts(firstname).replace(/[^a-z0-9]/g, '');
+    const cleanLastname = convertUmlauts(lastname).replace(/[^a-z0-9]/g, '');
+    
+    return `${cleanFirstname}.${cleanLastname}@sp.de`;
+  };
+
+  const emailPreview = generateEmailPreview(formData.firstname, formData.lastname);
+
   useEffect(() => {
     if (mode === 'edit' && employee) {
       setFormData({
-        name: employee.name,
+        firstname: employee.firstname,
+        lastname: employee.lastname,
         email: employee.email,
-        password: '', // Passwort wird beim Bearbeiten nicht angezeigt
-        role: employee.role,
+        password: '', // Password wird beim Bearbeiten nicht angezeigt
+        roles: employee.roles || ['user'], // Use roles array
         employeeType: employee.employeeType,
         contractType: employee.contractType,
         canWorkAlone: employee.canWorkAlone,
@@ -67,6 +87,24 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
       ...prev,
       [name]: value
     }));
+  };
+
+  const handleRoleChange = (role: string, checked: boolean) => {
+    setFormData(prev => {
+      if (checked) {
+        // Add role if checked
+        return {
+          ...prev,
+          roles: [...prev.roles, role]
+        };
+      } else {
+        // Remove role if unchecked
+        return {
+          ...prev,
+          roles: prev.roles.filter(r => r !== role)
+        };
+      }
+    });
   };
 
   const handleEmployeeTypeChange = (employeeType: 'manager' | 'trainee' | 'experienced') => {
@@ -95,10 +133,10 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
     try {
       if (mode === 'create') {
         const createData: CreateEmployeeRequest = {
-          name: formData.name.trim(),
-          email: formData.email.trim(),
+          firstname: formData.firstname.trim(),
+          lastname: formData.lastname.trim(),
           password: formData.password,
-          role: formData.role,
+          roles: formData.roles, // Use roles array
           employeeType: formData.employeeType,
           contractType: formData.contractType,
           canWorkAlone: formData.canWorkAlone
@@ -106,8 +144,9 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
         await employeeService.createEmployee(createData);
       } else if (employee) {
         const updateData: UpdateEmployeeRequest = {
-          name: formData.name.trim(),
-          role: formData.role,
+          firstname: formData.firstname.trim(),
+          lastname: formData.lastname.trim(),
+          roles: formData.roles, // Use roles array
           employeeType: formData.employeeType,
           contractType: formData.contractType,
           canWorkAlone: formData.canWorkAlone,
@@ -141,8 +180,8 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
   };
 
   const isFormValid = mode === 'create' 
-    ? formData.name.trim() && formData.email.trim() && formData.password.length >= 6
-    : formData.name.trim() && formData.email.trim();
+    ? formData.firstname.trim() && formData.lastname.trim() && formData.password.length >= 6
+    : formData.firstname.trim() && formData.lastname.trim();
 
   const availableRoles = hasRole(['admin']) 
     ? ROLE_CONFIG 
@@ -200,12 +239,12 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#2c3e50' }}>
-                  Vollständiger Name *
+                  Vorname *
                 </label>
                 <input
                   type="text"
-                  name="name"
-                  value={formData.name}
+                  name="firstname"
+                  value={formData.firstname}
                   onChange={handleChange}
                   required
                   style={{
@@ -215,31 +254,51 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                     borderRadius: '4px',
                     fontSize: '16px'
                   }}
-                  placeholder="Max Mustermann"
+                  placeholder="Max"
                 />
               </div>
 
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#2c3e50' }}>
-                  E-Mail Adresse *
+                  Nachname *
                 </label>
                 <input
-                  type="email"
-                  name="email"
-                  value={formData.email}
+                  type="text"
+                  name="lastname"
+                  value={formData.lastname}
                   onChange={handleChange}
                   required
-                  disabled={mode === 'edit'} // Email cannot be changed in edit mode
                   style={{
                     width: '100%',
                     padding: '10px',
                     border: '1px solid #ddd',
                     borderRadius: '4px',
-                    fontSize: '16px',
-                    backgroundColor: mode === 'edit' ? '#f8f9fa' : 'white'
+                    fontSize: '16px'
                   }}
-                  placeholder="max.mustermann@example.com"
+                  placeholder="Mustermann"
                 />
+              </div>
+            </div>
+
+            {/* Email Preview */}
+            <div style={{ marginTop: '15px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#2c3e50' }}>
+                E-Mail Adresse (automatisch generiert)
+              </label>
+              <div style={{
+                width: '100%',
+                padding: '10px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '16px',
+                backgroundColor: '#f8f9fa',
+                color: '#6c757d'
+              }}>
+                {emailPreview || 'max.mustermann@sp.de'}
+              </div>
+              <div style={{ fontSize: '12px', color: '#7f8c8d', marginTop: '5px' }}>
+                Die E-Mail Adresse wird automatisch aus Vorname und Nachname generiert.
+                {formData.firstname && formData.lastname && ` Beispiel: ${emailPreview}`}
               </div>
             </div>
 
@@ -353,7 +412,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
             <h3 style={{ margin: '0 0 15px 0', color: '#495057' }}>👥 Mitarbeiter Kategorie</h3>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {EMPLOYEE_TYPE_CONFIG.map(type => (
+              {Object.values(EMPLOYEE_TYPE_CONFIG).map(type => (
                 <div 
                   key={type.value}
                   style={{
@@ -573,7 +632,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
             </div>
           )}
 
-          {/* Systemrolle (nur für Admins) */}
+          {/* Systemrollen (nur für Admins) */}
           {hasRole(['admin']) && (
             <div style={{
               padding: '20px',
@@ -581,7 +640,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
               borderRadius: '8px',
               border: '1px solid #ffeaa7'
             }}>
-              <h3 style={{ margin: '0 0 15px 0', color: '#856404' }}>⚙️ Systemrolle</h3>
+              <h3 style={{ margin: '0 0 15px 0', color: '#856404' }}>⚙️ Systemrollen</h3>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {availableRoles.map(role => (
@@ -591,29 +650,19 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                       display: 'flex',
                       alignItems: 'flex-start',
                       padding: '12px',
-                      border: `2px solid ${formData.role === role.value ? '#f39c12' : '#e0e0e0'}`,
+                      border: `2px solid ${formData.roles.includes(role.value) ? '#f39c12' : '#e0e0e0'}`,
                       borderRadius: '6px',
-                      backgroundColor: formData.role === role.value ? '#fef9e7' : 'white',
+                      backgroundColor: formData.roles.includes(role.value) ? '#fef9e7' : 'white',
                       cursor: 'pointer'
                     }}
-                    onClick={() => {
-                      setFormData(prev => ({
-                        ...prev,
-                        role: role.value as 'admin' | 'maintenance' | 'user'
-                      }));
-                    }}
+                    onClick={() => handleRoleChange(role.value, !formData.roles.includes(role.value))}
                   >
                     <input
-                      type="radio"
-                      name="role"
+                      type="checkbox"
+                      name="roles"
                       value={role.value}
-                      checked={formData.role === role.value}
-                      onChange={(e) => {
-                        setFormData(prev => ({
-                          ...prev,
-                          role: e.target.value as 'admin' | 'maintenance' | 'user'
-                        }));
-                      }}
+                      checked={formData.roles.includes(role.value)}
+                      onChange={(e) => handleRoleChange(role.value, e.target.checked)}
                       style={{
                         marginRight: '10px',
                         marginTop: '2px'
@@ -629,6 +678,9 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                     </div>
                   </div>
                 ))}
+              </div>
+              <div style={{ fontSize: '12px', color: '#7f8c8d', marginTop: '10px' }}>
+                <strong>Hinweis:</strong> Ein Mitarbeiter kann mehrere Rollen haben.
               </div>
             </div>
           )}

@@ -33,25 +33,35 @@ export const getEmployees = async (req: AuthRequest, res: Response): Promise<voi
     
     let query = `
       SELECT 
-        id, email, firstname, lastname, role, is_active as isActive, 
-        employee_type as employeeType, 
-        contract_type as contractType,
-        can_work_alone as canWorkAlone,
-        created_at as createdAt, 
-        last_login as lastLogin
-      FROM employees
+        e.id, e.email, e.firstname, e.lastname, 
+        e.is_active as isActive, 
+        e.employee_type as employeeType, 
+        e.contract_type as contractType,
+        e.can_work_alone as canWorkAlone,
+        e.created_at as createdAt, 
+        e.last_login as lastLogin,
+        er.role
+      FROM employees e
+      LEFT JOIN employee_roles er ON e.id = er.employee_id
     `;
     
     if (!includeInactiveFlag) {
-      query += ' WHERE is_active = 1';
+      query += ' WHERE e.is_active = 1';
     }
     
-    query += ' ORDER BY name';
+    // UPDATED: Order by firstname and lastname
+    query += ' ORDER BY e.firstname, e.lastname';
     
     const employees = await db.all<any>(query);
 
-    console.log('✅ Employees found:', employees.length);
-    res.json(employees);
+    // Format employees with roles array for frontend compatibility
+    const employeesWithRoles = employees.map(emp => ({
+      ...emp,
+      roles: emp.role ? [emp.role] : ['user']
+    }));
+
+    console.log('✅ Employees found:', employeesWithRoles.length);
+    res.json(employeesWithRoles);
   } catch (error) {
     console.error('❌ Error fetching employees:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -62,16 +72,21 @@ export const getEmployee = async (req: AuthRequest, res: Response): Promise<void
   try {
     const { id } = req.params;
 
+    // UPDATED: Query with role from employee_roles table
     const employee = await db.get<any>(`
       SELECT 
-        id, email, firstname, lastname, role, is_active as isActive, 
-        employee_type as employeeType, 
-        contract_type as contractType,
-        can_work_alone as canWorkAlone,
-        created_at as createdAt, 
-        last_login as lastLogin
-      FROM employees
-      WHERE id = ?
+        e.id, e.email, e.firstname, e.lastname, 
+        e.is_active as isActive, 
+        e.employee_type as employeeType, 
+        e.contract_type as contractType,
+        e.can_work_alone as canWorkAlone,
+        e.created_at as createdAt, 
+        e.last_login as lastLogin,
+        er.role
+      FROM employees e
+      LEFT JOIN employee_roles er ON e.id = er.employee_id
+      WHERE e.id = ?
+      LIMIT 1
     `, [id]);
 
     if (!employee) {
@@ -79,7 +94,13 @@ export const getEmployee = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    res.json(employee);
+    // Format employee with roles array
+    const employeeWithRoles = {
+      ...employee,
+      roles: employee.role ? [employee.role] : ['user']
+    };
+
+    res.json(employeeWithRoles);
   } catch (error) {
     console.error('Error fetching employee:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -97,17 +118,17 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
       password, 
       firstname, 
       lastname, 
-      role, 
+      roles = ['user'], // UPDATED: Now uses roles array
       employeeType, 
       contractType,
       canWorkAlone
     } = req.body as CreateEmployeeRequest;
 
-    // Validation - REMOVED email check
-    if (!password || !firstname || !lastname || !role || !employeeType || !contractType) {
+    // Validation
+    if (!password || !firstname || !lastname || !employeeType || !contractType) {
       console.log('❌ Validation failed: Missing required fields');
       res.status(400).json({ 
-        error: 'Password, firstname, lastname, role, employeeType und contractType sind erforderlich' 
+        error: 'Password, firstname, lastname, employeeType und contractType sind erforderlich' 
       });
       return;
     }
@@ -131,39 +152,68 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
     const hashedPassword = await bcrypt.hash(password, 10);
     const employeeId = uuidv4();
 
-    await db.run(
-      `INSERT INTO employees (
-        id, email, password, firstname, lastname, role, employee_type, contract_type, can_work_alone, 
-        is_active
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        employeeId, 
-        email, 
-        hashedPassword, 
-        firstname, 
-        lastname, 
-        role, 
-        employeeType, 
-        contractType,
-        canWorkAlone ? 1 : 0,
-        1
-      ]
-    );
+    // Start transaction for employee creation and role assignment
+    await db.run('BEGIN TRANSACTION');
 
-    // Return created employee with generated email
-    const newEmployee = await db.get<any>(`
-      SELECT 
-        id, email, firstname, lastname, role, is_active as isActive,
-        employee_type as employeeType, 
-        contract_type as contractType,
-        can_work_alone as canWorkAlone,
-        created_at as createdAt, 
-        last_login as lastLogin
-      FROM employees
-      WHERE id = ?
-    `, [employeeId]);
+    try {
+      // UPDATED: Insert employee without role (role is now in employee_roles table)
+      await db.run(
+        `INSERT INTO employees (
+          id, email, password, firstname, lastname, employee_type, contract_type, can_work_alone, 
+          is_active
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          employeeId, 
+          email, 
+          hashedPassword, 
+          firstname, 
+          lastname, 
+          employeeType, 
+          contractType,
+          canWorkAlone ? 1 : 0,
+          1
+        ]
+      );
 
-    res.status(201).json(newEmployee);
+      // UPDATED: Insert roles into employee_roles table
+      for (const role of roles) {
+        await db.run(
+          `INSERT INTO employee_roles (employee_id, role) VALUES (?, ?)`,
+          [employeeId, role]
+        );
+      }
+
+      await db.run('COMMIT');
+
+      // Return created employee with role from employee_roles
+      const newEmployee = await db.get<any>(`
+        SELECT 
+          e.id, e.email, e.firstname, e.lastname, 
+          e.is_active as isActive,
+          e.employee_type as employeeType, 
+          e.contract_type as contractType,
+          e.can_work_alone as canWorkAlone,
+          e.created_at as createdAt, 
+          e.last_login as lastLogin,
+          er.role
+        FROM employees e
+        LEFT JOIN employee_roles er ON e.id = er.employee_id
+        WHERE e.id = ?
+        LIMIT 1
+      `, [employeeId]);
+
+      // Format response with roles array
+      const employeeWithRoles = {
+        ...newEmployee,
+        roles: newEmployee.role ? [newEmployee.role] : ['user']
+      };
+
+      res.status(201).json(employeeWithRoles);
+
+    } catch (error) {
+      await db.run('ROLLBACK');
+      throw error;
+    }
   } catch (error) {
     console.error('Error creating employee:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -173,9 +223,9 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
 export const updateEmployee = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { firstname, lastname, role, isActive, employeeType, contractType, canWorkAlone } = req.body;
+    const { firstname, lastname, roles, isActive, employeeType, contractType, canWorkAlone } = req.body;
 
-    console.log('📝 Update Employee Request:', { id, firstname, lastname, role, isActive, employeeType, contractType, canWorkAlone });
+    console.log('📝 Update Employee Request:', { id, firstname, lastname, roles, isActive, employeeType, contractType, canWorkAlone });
 
     // Check if employee exists and get current data
     const existingEmployee = await db.get<any>('SELECT * FROM employees WHERE id = ?', [id]);
@@ -205,37 +255,71 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
       }
     }
 
-    // Update employee with potentially new email
-    await db.run(
-      `UPDATE employees 
-       SET firstname = COALESCE(?, firstname),
-           lastname = COALESCE(?, lastname),
-           email = ?,
-           role = COALESCE(?, role),
-           is_active = COALESCE(?, is_active),
-           employee_type = COALESCE(?, employee_type),
-           contract_type = COALESCE(?, contract_type),
-           can_work_alone = COALESCE(?, can_work_alone)
-       WHERE id = ?`,
-      [firstname, lastname, email, role, isActive, employeeType, contractType, canWorkAlone, id]
-    );
+    // Start transaction for employee update and role management
+    await db.run('BEGIN TRANSACTION');
 
-    console.log('✅ Employee updated successfully with email:', email);
+    try {
+      // UPDATED: Update employee without role (role is now in employee_roles table)
+      await db.run(
+        `UPDATE employees 
+         SET firstname = COALESCE(?, firstname),
+             lastname = COALESCE(?, lastname),
+             email = ?,
+             is_active = COALESCE(?, is_active),
+             employee_type = COALESCE(?, employee_type),
+             contract_type = COALESCE(?, contract_type),
+             can_work_alone = COALESCE(?, can_work_alone)
+         WHERE id = ?`,
+        [firstname, lastname, email, isActive, employeeType, contractType, canWorkAlone, id]
+      );
 
-    // Return updated employee
-    const updatedEmployee = await db.get<any>(`
-      SELECT 
-        id, email, firstname, lastname, role, is_active as isActive, 
-        employee_type as employeeType, 
-        contract_type as contractType,
-        can_work_alone as canWorkAlone,
-        created_at as createdAt, 
-        last_login as lastLogin
-      FROM employees
-      WHERE id = ?
-    `, [id]);
+      // UPDATED: Update roles if provided
+      if (roles) {
+        // Delete existing roles
+        await db.run('DELETE FROM employee_roles WHERE employee_id = ?', [id]);
+        
+        // Insert new roles
+        for (const role of roles) {
+          await db.run(
+            `INSERT INTO employee_roles (employee_id, role) VALUES (?, ?)`,
+            [id, role]
+          );
+        }
+      }
 
-    res.json(updatedEmployee);
+      await db.run('COMMIT');
+
+      console.log('✅ Employee updated successfully with email:', email);
+
+      // Return updated employee with role from employee_roles
+      const updatedEmployee = await db.get<any>(`
+        SELECT 
+          e.id, e.email, e.firstname, e.lastname, 
+          e.is_active as isActive, 
+          e.employee_type as employeeType, 
+          e.contract_type as contractType,
+          e.can_work_alone as canWorkAlone,
+          e.created_at as createdAt, 
+          e.last_login as lastLogin,
+          er.role
+        FROM employees e
+        LEFT JOIN employee_roles er ON e.id = er.employee_id
+        WHERE e.id = ?
+        LIMIT 1
+      `, [id]);
+
+      // Format response with roles array
+      const employeeWithRoles = {
+        ...updatedEmployee,
+        roles: updatedEmployee.role ? [updatedEmployee.role] : ['user']
+      };
+
+      res.json(employeeWithRoles);
+
+    } catch (error) {
+      await db.run('ROLLBACK');
+      throw error;
+    }
   } catch (error) {
     console.error('Error updating employee:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -247,11 +331,15 @@ export const deleteEmployee = async (req: AuthRequest, res: Response): Promise<v
     const { id } = req.params;
     console.log('🗑️ Starting deletion process for employee ID:', id);
 
-    // Check if employee exists
+    // UPDATED: Check if employee exists with role from employee_roles
     const existingEmployee = await db.get<any>(`
-      SELECT id, email, name, is_active, role 
-      FROM employees
-      WHERE id = ?
+      SELECT 
+        e.id, e.email, e.firstname, e.lastname, e.is_active,
+        er.role
+      FROM employees e
+      LEFT JOIN employee_roles er ON e.id = er.employee_id
+      WHERE e.id = ?
+      LIMIT 1
     `, [id]);
 
     if (!existingEmployee) {
@@ -297,10 +385,13 @@ export const deleteEmployee = async (req: AuthRequest, res: Response): Promise<v
         }
       }
 
-      // 3. Nullify created_by references
+      // 3. Remove roles from employee_roles
+      await db.run('DELETE FROM employee_roles WHERE employee_id = ?', [id]);
+
+      // 4. Nullify created_by references
       await db.run('UPDATE shift_plans SET created_by = NULL WHERE created_by = ?', [id]);
 
-      // 4. Finally delete the employee
+      // 5. Finally delete the employee
       await db.run('DELETE FROM employees WHERE id = ?', [id]);
 
       await db.run('COMMIT');
@@ -338,8 +429,6 @@ export const getAvailabilities = async (req: AuthRequest, res: Response): Promis
       WHERE ea.employee_id = ? 
       ORDER BY s.day_of_week, s.time_slot_id
     `, [employeeId]);
-
-    //console.log('✅ Successfully got availabilities from employee:', availabilities);
 
     res.json(availabilities.map(avail => ({
       id: avail.id,
@@ -393,14 +482,13 @@ export const updateAvailabilities = async (req: AuthRequest, res: Response): Pro
 
       await db.run('COMMIT');
 
-      console.log('✅ Successfully updated availablities employee:', );
-
-
       // Return updated availabilities
       const updatedAvailabilities = await db.all<any>(`
-        SELECT * FROM employee_availability 
-        WHERE employee_id = ? AND plan_id = ?
-        ORDER BY day_of_week, time_slot_id
+        SELECT ea.*, s.day_of_week, s.time_slot_id 
+        FROM employee_availability ea
+        JOIN shifts s ON ea.shift_id = s.id
+        WHERE ea.employee_id = ? AND ea.plan_id = ?
+        ORDER BY s.day_of_week, s.time_slot_id
       `, [employeeId, planId]);
 
       res.json(updatedAvailabilities.map(avail => ({
@@ -413,7 +501,7 @@ export const updateAvailabilities = async (req: AuthRequest, res: Response): Pro
         notes: avail.notes
       })));
 
-      console.log('✅ Successfully updated employee:', updateAvailabilities);
+      console.log('✅ Successfully updated employee availabilities');
 
     } catch (error) {
       await db.run('ROLLBACK');

@@ -136,7 +136,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const hasRole = (roles: string[]): boolean => {
     if (!user) return false;
-    return roles.includes(user.role);
+    return roles.length != 0;
   };
 
   useEffect(() => {

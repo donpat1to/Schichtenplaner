@@ -202,7 +202,7 @@ const Navigation: React.FC = () => {
         {/* User Menu - Rechts */}
         <div style={styles.userMenu}>
           <span style={styles.userInfo}>
-            {user?.name} <span style={{color: '#999'}}>({user?.role})</span>
+            {user?.firstname} {user?.lastname} <span style={{color: '#999'}}>({user?.roles})</span>
           </span>
           <button 
             onClick={handleLogout} 
@@ -266,8 +266,8 @@ const Navigation: React.FC = () => {
           ))}
           <div style={styles.mobileUserInfo}>
             <div style={{marginBottom: '0.5rem'}}>
-              <span style={{fontWeight: 500}}>{user?.name}</span>
-              <span style={{color: '#999', marginLeft: '0.5rem'}}>({user?.role})</span>
+              <span style={{fontWeight: 500}}>{user?.firstname} {user?.lastname}</span>
+              <span style={{color: '#999', marginLeft: '0.5rem'}}>({user?.roles})</span>
             </div>
             <button 
               onClick={handleLogout} 
