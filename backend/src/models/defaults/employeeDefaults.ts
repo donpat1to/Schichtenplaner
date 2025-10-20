@@ -4,19 +4,41 @@ import { EmployeeAvailability, ManagerAvailability } from '../Employee.js';
 // Default employee data for quick creation
 export const EMPLOYEE_DEFAULTS = {
   role: 'user' as const,
-  employeeType: 'experienced' as const,
+  employeeType: 'personell' as const,
   contractType: 'small' as const,
   canWorkAlone: false,
-  isActive: true
+  isActive: true,
+  isTrainee: false
 };
 
 // Manager-specific defaults
 export const MANAGER_DEFAULTS = {
   role: 'admin' as const,
   employeeType: 'manager' as const,
-  contractType: 'large' as const,
+  contractType: 'flexible' as const,
   canWorkAlone: true,
-  isActive: true
+  isActive: true,
+  isTrainee: false
+};
+
+// Apprentice defaults
+export const APPRENTICE_DEFAULTS = {
+  role: 'user' as const,
+  employeeType: 'apprentice' as const,
+  contractType: 'flexible' as const,
+  canWorkAlone: false,
+  isActive: true,
+  isTrainee: false
+};
+
+// Guest defaults
+export const GUEST_DEFAULTS = {
+  role: 'user' as const,
+  employeeType: 'guest' as const,
+  contractType: undefined,
+  canWorkAlone: false,
+  isActive: true,
+  isTrainee: false
 };
 
 export const EMPLOYEE_TYPE_CONFIG = {
@@ -24,22 +46,37 @@ export const EMPLOYEE_TYPE_CONFIG = {
     value: 'manager' as const,
     label: 'Chef/Administrator', 
     color: '#e74c3c',
+    category: 'internal' as const,
+    hasContractType: true,
     independent: true,
     description: 'Vollzugriff auf alle Funktionen und Mitarbeiterverwaltung'
   },
-  experienced: { 
-    value: 'experienced' as const,
-    label: 'Erfahren', 
+  personell: { 
+    value: 'personell' as const,
+    label: 'Personal', 
     color: '#3498db',
+    category: 'internal' as const,
+    hasContractType: true,
     independent: true,
-    description: 'Langjährige Erfahrung, kann komplexe Aufgaben übernehmen'
+    description: 'Reguläre Mitarbeiter mit Vertrag'
   },
-  trainee: { 
-    value: 'trainee' as const,
-    label: 'Neuling', 
-    color: '#27ae60', 
+  apprentice: { 
+    value: 'apprentice' as const,
+    label: 'Auszubildender', 
+    color: '#9b59b6',
+    category: 'internal' as const,
+    hasContractType: true,
     independent: false,
-    description: 'Benötigt Einarbeitung und Unterstützung'
+    description: 'Auszubildende mit flexiblem Vertrag'
+  },
+  guest: { 
+    value: 'guest' as const,
+    label: 'Gast', 
+    color: '#95a5a6',
+    category: 'external' as const,
+    hasContractType: false,
+    independent: false,
+    description: 'Externe Mitarbeiter ohne Vertrag'
   }
 } as const;
 
@@ -53,8 +90,9 @@ export const ROLE_CONFIG = [
 export const CONTRACT_TYPE_DESCRIPTIONS = {
   small: '1 Schicht pro Woche',
   large: '2 Schichten pro Woche',
-  manager: 'Kein Vertragslimit - Immer MO und DI verfügbar'
+  flexible: 'Flexible Arbeitszeiten'
 } as const;
+
 
 // Availability preference descriptions
 export const AVAILABILITY_PREFERENCES = {
@@ -104,4 +142,17 @@ export function createManagerDefaultSchedule(managerId: string, planId: string, 
   }
   
   return assignments;
+}
+
+export function getDefaultsByEmployeeType(employeeType: string) {
+  switch (employeeType) {
+    case 'manager':
+      return MANAGER_DEFAULTS;
+    case 'apprentice':
+      return APPRENTICE_DEFAULTS;
+    case 'guest':
+      return GUEST_DEFAULTS;
+    default:
+      return EMPLOYEE_DEFAULTS;
+  }
 }

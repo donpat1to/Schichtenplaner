@@ -11,6 +11,9 @@ interface EmployeeFormProps {
   onCancel: () => void;
 }
 
+type EmployeeType = 'manager' | 'personell' | 'apprentice' | 'guest';
+type ContractType = 'small' | 'large' | 'flexible';
+
 const EmployeeForm: React.FC<EmployeeFormProps> = ({
   mode,
   employee,
@@ -20,13 +23,14 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
   const [formData, setFormData] = useState({
     firstname: '',
     lastname: '',
-    email: '', // Will be auto-generated and display only
+    email: '',
     password: '',
-    roles: ['user'] as string[], // Changed from single role to array
-    employeeType: 'trainee' as 'manager' | 'trainee' | 'experienced',
-    contractType: 'small' as 'small' | 'large',
+    roles: ['user'] as string[],
+    employeeType: 'personell' as EmployeeType,
+    contractType: 'small' as ContractType | undefined,
     canWorkAlone: false,
-    isActive: true
+    isActive: true,
+    isTrainee: false
   });
   const [passwordForm, setPasswordForm] = useState({
     newPassword: '',
@@ -62,12 +66,13 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
         firstname: employee.firstname,
         lastname: employee.lastname,
         email: employee.email,
-        password: '', // Password wird beim Bearbeiten nicht angezeigt
-        roles: employee.roles || ['user'], // Use roles array
+        password: '',
+        roles: employee.roles || ['user'],
         employeeType: employee.employeeType,
         contractType: employee.contractType,
         canWorkAlone: employee.canWorkAlone,
-        isActive: employee.isActive
+        isActive: employee.isActive,
+        isTrainee: employee.isTrainee || false
       });
     }
   }, [mode, employee]);
@@ -92,13 +97,11 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
   const handleRoleChange = (role: string, checked: boolean) => {
     setFormData(prev => {
       if (checked) {
-        // Add role if checked
         return {
           ...prev,
           roles: [...prev.roles, role]
         };
       } else {
-        // Remove role if unchecked
         return {
           ...prev,
           roles: prev.roles.filter(r => r !== role)
@@ -107,18 +110,36 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
     });
   };
 
-  const handleEmployeeTypeChange = (employeeType: 'manager' | 'trainee' | 'experienced') => {
-    // Manager and experienced can work alone, trainee cannot
-    const canWorkAlone = employeeType === 'manager' || employeeType === 'experienced';
+  const handleEmployeeTypeChange = (employeeType: EmployeeType) => {
+    // Determine if contract type should be shown and set default
+    const requiresContract = employeeType !== 'guest';
+    const defaultContractType = requiresContract ? 'small' as ContractType : undefined;
     
+    // Determine if can work alone based on employee type
+    const canWorkAlone = employeeType === 'manager' || 
+                        (employeeType === 'personell' && !formData.isTrainee);
+    
+    // Reset isTrainee if not personell
+    const isTrainee = employeeType === 'personell' ? formData.isTrainee : false;
+
     setFormData(prev => ({
       ...prev,
       employeeType,
-      canWorkAlone
+      contractType: defaultContractType,
+      canWorkAlone,
+      isTrainee
     }));
   };
 
-  const handleContractTypeChange = (contractType: 'small' | 'large') => {
+  const handleTraineeChange = (isTrainee: boolean) => {
+    setFormData(prev => ({
+      ...prev,
+      isTrainee,
+      canWorkAlone: prev.employeeType === 'personell' ? !isTrainee : prev.canWorkAlone
+    }));
+  };
+
+  const handleContractTypeChange = (contractType: ContractType) => {
     setFormData(prev => ({
       ...prev,
       contractType
@@ -136,25 +157,27 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
           firstname: formData.firstname.trim(),
           lastname: formData.lastname.trim(),
           password: formData.password,
-          roles: formData.roles, // Use roles array
+          roles: formData.roles,
           employeeType: formData.employeeType,
-          contractType: formData.contractType,
-          canWorkAlone: formData.canWorkAlone
+          contractType: formData.employeeType !== 'guest' ? formData.contractType : undefined,
+          canWorkAlone: formData.canWorkAlone,
+          isTrainee: formData.isTrainee
         };
         await employeeService.createEmployee(createData);
       } else if (employee) {
         const updateData: UpdateEmployeeRequest = {
           firstname: formData.firstname.trim(),
           lastname: formData.lastname.trim(),
-          roles: formData.roles, // Use roles array
+          roles: formData.roles,
           employeeType: formData.employeeType,
-          contractType: formData.contractType,
+          contractType: formData.employeeType !== 'guest' ? formData.contractType : undefined,
           canWorkAlone: formData.canWorkAlone,
           isActive: formData.isActive,
+          isTrainee: formData.isTrainee
         };
         await employeeService.updateEmployee(employee.id, updateData);
 
-        // If password change is requested and user is admin
+        // Password change logic remains the same
         if (showPasswordSection && passwordForm.newPassword && hasRole(['admin'])) {
           if (passwordForm.newPassword.length < 6) {
             throw new Error('Das neue Passwort muss mindestens 6 Zeichen lang sein');
@@ -163,9 +186,8 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
             throw new Error('Die Passwörter stimmen nicht überein');
           }
 
-          // Use the password change endpoint
           await employeeService.changePassword(employee.id, {
-            currentPassword: '', // Empty for admin reset - backend should handle this
+            currentPassword: '',
             newPassword: passwordForm.newPassword
           });
         }
@@ -189,8 +211,11 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
 
   const contractTypeOptions = [
     { value: 'small' as const, label: 'Kleiner Vertrag', description: '1 Schicht pro Woche' },
-    { value: 'large' as const, label: 'Großer Vertrag', description: '2 Schichten pro Woche' }
+    { value: 'large' as const, label: 'Großer Vertrag', description: '2 Schichten pro Woche' },
+    { value: 'flexible' as const, label: 'Flexibler Vertrag', description: 'Flexible Arbeitszeiten' }
   ];
+
+  const showContractType = formData.employeeType !== 'guest';
 
   return (
     <div style={{
@@ -330,8 +355,8 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
             )}
           </div>
 
-          {/* Vertragstyp (nur für Admins) */}
-          {hasRole(['admin']) && (
+          {/* Vertragstyp (nur für Admins und interne Mitarbeiter) */}
+          {hasRole(['admin']) && showContractType && (
             <div style={{
               padding: '20px',
               backgroundColor: '#e8f4fd',
@@ -470,6 +495,37 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                 </div>
               ))}
             </div>
+
+            {/* FIXED: Trainee checkbox for personell type */}
+            {formData.employeeType === 'personell' && (
+              <div style={{ 
+                marginTop: '15px',
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '10px',
+                padding: '15px',
+                border: '1px solid #e0e0e0',
+                borderRadius: '6px',
+                backgroundColor: '#fff'
+              }}>
+                <input
+                  type="checkbox"
+                  name="isTrainee"
+                  id="isTrainee"
+                  checked={formData.isTrainee}
+                  onChange={(e) => handleTraineeChange(e.target.checked)}
+                  style={{ width: '18px', height: '18px' }}
+                />
+                <div>
+                  <label htmlFor="isTrainee" style={{ fontWeight: 'bold', color: '#2c3e50', display: 'block' }}>
+                    Als Neuling markieren
+                  </label>
+                  <div style={{ fontSize: '12px', color: '#7f8c8d' }}>
+                    Neulinge benötigen zusätzliche Betreuung und können nicht eigenständig arbeiten.
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Eigenständigkeit */}
@@ -496,11 +552,11 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                 id="canWorkAlone"
                 checked={formData.canWorkAlone}
                 onChange={handleChange}
-                disabled={formData.employeeType === 'manager'}
+                disabled={formData.employeeType === 'manager' || (formData.employeeType === 'personell' && formData.isTrainee)}
                 style={{ 
                   width: '20px', 
                   height: '20px',
-                  opacity: formData.employeeType === 'manager' ? 0.5 : 1
+                  opacity: (formData.employeeType === 'manager' || (formData.employeeType === 'personell' && formData.isTrainee)) ? 0.5 : 1
                 }}
               />
               <div style={{ flex: 1 }}>
@@ -508,14 +564,16 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                   fontWeight: 'bold', 
                   color: '#2c3e50', 
                   display: 'block',
-                  opacity: formData.employeeType === 'manager' ? 0.5 : 1
+                  opacity: (formData.employeeType === 'manager' || (formData.employeeType === 'personell' && formData.isTrainee)) ? 0.5 : 1
                 }}>
                   Als ausreichend eigenständig markieren
-                  {formData.employeeType === 'manager' && ' (Automatisch für Chefs)'}
+                  {(formData.employeeType === 'manager' || (formData.employeeType === 'personell' && formData.isTrainee)) && ' (Automatisch festgelegt)'}
                 </label>
                 <div style={{ fontSize: '14px', color: '#7f8c8d' }}>
                   {formData.employeeType === 'manager' 
                     ? 'Chefs sind automatisch als eigenständig markiert.'
+                    : formData.employeeType === 'personell' && formData.isTrainee
+                    ? 'Auszubildende können nicht als eigenständig markiert werden.'
                     : 'Dieser Mitarbeiter kann komplexe Aufgaben eigenständig lösen und benötigt keine ständige Betreuung.'
                   }
                 </div>
@@ -527,7 +585,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                 borderRadius: '15px',
                 fontSize: '12px',
                 fontWeight: 'bold',
-                opacity: formData.employeeType === 'manager' ? 0.7 : 1
+                opacity: (formData.employeeType === 'manager' || (formData.employeeType === 'personell' && formData.isTrainee)) ? 0.7 : 1
               }}>
                 {formData.canWorkAlone ? 'EIGENSTÄNDIG' : 'BETREUUNG'}
               </div>
@@ -632,7 +690,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
             </div>
           )}
 
-          {/* Systemrollen (nur für Admins) */}
+          {/* Systemrollen (nur für Admins) - AKTUALISIERT FÜR MEHRFACHE ROLLEN */}
           {hasRole(['admin']) && (
             <div style={{
               padding: '20px',
@@ -714,6 +772,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
               </div>
             </div>
           )}
+          
         </div>
 
         {/* Buttons */}

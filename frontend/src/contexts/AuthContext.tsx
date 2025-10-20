@@ -165,7 +165,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     refreshUser,
     needsSetup: needsSetup === null ? true : needsSetup,
     checkSetupStatus,
-    updateUser, // Add this to the context value
+    updateUser,
   };
 
   return (

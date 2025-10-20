@@ -1,3 +1,4 @@
+// EmployeeList.tsx
 import React, { useState } from 'react';
 import { ROLE_CONFIG, EMPLOYEE_TYPE_CONFIG } from '../../../models/defaults/employeeDefaults';
 import { Employee } from '../../../models/Employee';
@@ -12,6 +13,9 @@ interface EmployeeListProps {
 
 type SortField = 'name' | 'employeeType' | 'canWorkAlone' | 'role' | 'lastLogin';
 type SortDirection = 'asc' | 'desc';
+
+// FIXED: Use the actual employee types from the Employee interface
+type EmployeeType = 'manager' | 'personell' | 'apprentice' | 'guest';
 
 const EmployeeList: React.FC<EmployeeListProps> = ({
   employees,
@@ -122,18 +126,18 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
     return false;
   };
 
-  // Using shared configuration for consistent styling
-  type EmployeeType = 'manager' | 'trainee' | 'experienced';
-
-  const getEmployeeTypeBadge = (type: EmployeeType) => {
+  const getEmployeeTypeBadge = (type: EmployeeType, isTrainee: boolean = false) => {
     const config = EMPLOYEE_TYPE_CONFIG[type];
 
+    // FIXED: Updated color mapping for actual employee types
     const bgColor =
       type === 'manager'
-        ? '#fadbd8'
-        : type === 'trainee'
-        ? '#d5f4e6'
-        : '#d6eaf8'; // experienced
+        ? '#fadbd8' // light red
+        : type === 'personell'
+        ? isTrainee ? '#d5f4e6' : '#d6eaf8' // light green for trainee, light blue for experienced
+        : type === 'apprentice'
+        ? '#e8d7f7' // light purple for apprentice
+        : '#f8f9fa'; // light gray for guest
 
     return { text: config.label, color: config.color, bgColor };
   };
@@ -296,7 +300,8 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
         </div>
 
         {sortedEmployees.map(employee => {
-          const employeeType = getEmployeeTypeBadge(employee.employeeType);
+          // FIXED: Type assertion to ensure type safety
+          const employeeType = getEmployeeTypeBadge(employee.employeeType as EmployeeType, employee.isTrainee);
           const independence = getIndependenceBadge(employee.canWorkAlone);
           const roleInfo = getRoleBadge(employee.roles);
           const status = getStatusBadge(employee.isActive);
@@ -541,19 +546,30 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
               borderRadius: '12px',
               fontSize: '11px',
               fontWeight: 'bold'
-            }}>👴 ERFAHREN</span>
-            <span style={{ fontSize: '12px', color: '#666' }}>Langjährige Erfahrung</span>
+            }}>👨‍🏭 PERSONAL</span>
+            <span style={{ fontSize: '12px', color: '#666' }}>Reguläre Mitarbeiter</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
             <span style={{
-              backgroundColor: '#d5f4e6',
-              color: '#27ae60',
+              backgroundColor: '#e8d7f7',
+              color: '#9b59b6',
               padding: '4px 8px',
               borderRadius: '12px',
               fontSize: '11px',
               fontWeight: 'bold'
-            }}>👶 NEULING</span>
-            <span style={{ fontSize: '12px', color: '#666' }}>Benötigt Einarbeitung</span>
+            }}>👨‍🎓 AUSZUBILDENDER</span>
+            <span style={{ fontSize: '12px', color: '#666' }}>Auszubildende</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <span style={{
+              backgroundColor: '#f8f9fa',
+              color: '#95a5a6',
+              padding: '4px 8px',
+              borderRadius: '12px',
+              fontSize: '11px',
+              fontWeight: 'bold'
+            }}>👤 GAST</span>
+            <span style={{ fontSize: '12px', color: '#666' }}>Externe Mitarbeiter</span>
           </div>
         </div>
       </div>

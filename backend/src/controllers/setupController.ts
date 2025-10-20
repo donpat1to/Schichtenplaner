@@ -5,9 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { randomUUID } from 'crypto';
 import { db } from '../services/databaseService.js';
 
-// Add the same email generation function
 function generateEmail(firstname: string, lastname: string): string {
-  // Convert German umlauts to their expanded forms
   const convertUmlauts = (str: string): string => {
     return str
       .toLowerCase()
@@ -17,7 +15,6 @@ function generateEmail(firstname: string, lastname: string): string {
       .replace(/ß/g, 'ss');
   };
 
-  // Remove any remaining special characters and convert to lowercase
   const cleanFirstname = convertUmlauts(firstname).replace(/[^a-z0-9]/g, '');
   const cleanLastname = convertUmlauts(lastname).replace(/[^a-z0-9]/g, '');
   
@@ -98,14 +95,14 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
     await db.run('BEGIN TRANSACTION');
 
     try {
-      // Create admin user in employees table
+      // ✅ CORRECTED: Create admin with valid 'manager' type and 'flexible' contract
       await db.run(
-        `INSERT INTO employees (id, email, password, firstname, lastname, employee_type, contract_type, can_work_alone, is_active)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [adminId, email, hashedPassword, firstname, lastname, 'manager', 'large', true, 1]
+        `INSERT INTO employees (id, email, password, firstname, lastname, employee_type, contract_type, can_work_alone, is_active, is_trainee)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [adminId, email, hashedPassword, firstname, lastname, 'manager', 'flexible', true, 1, false]
       );
 
-      // UPDATED: Assign admin role in employee_roles table
+      // Assign admin role in employee_roles table
       await db.run(
         `INSERT INTO employee_roles (employee_id, role) VALUES (?, ?)`,
         [adminId, 'admin']

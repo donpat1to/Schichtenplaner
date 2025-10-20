@@ -4,10 +4,11 @@ export interface Employee {
   email: string;
   firstname: string;
   lastname: string;
-  employeeType: 'manager' | 'trainee' | 'experienced';
-  contractType: 'small' | 'large';
+  employeeType: 'manager' | 'personell' | 'apprentice' | 'guest';
+  contractType?: 'small' | 'large' | 'flexible';
   canWorkAlone: boolean;
   isActive: boolean;
+  isTrainee: boolean;
   createdAt: string;
   lastLogin?: string | null;
   roles?: string[];
@@ -17,20 +18,22 @@ export interface CreateEmployeeRequest {
   password: string;
   firstname: string;
   lastname: string;
-  roles: string[];
-  employeeType: 'manager' | 'trainee' | 'experienced';
-  contractType: 'small' | 'large';
+  roles?: string[];
+  employeeType: 'manager' | 'personell' | 'apprentice' | 'guest';
+  contractType?: 'small' | 'large' | 'flexible';
   canWorkAlone: boolean;
+  isTrainee?: boolean;
 }
 
 export interface UpdateEmployeeRequest {
   firstname?: string;
   lastname?: string;
   roles?: string[];
-  employeeType?: 'manager' | 'trainee' | 'experienced';
-  contractType?: 'small' | 'large';
+  employeeType?: 'manager' | 'personell' | 'apprentice' | 'guest';
+  contractType?: 'small' | 'large' | 'flexible';
   canWorkAlone?: boolean;
   isActive?: boolean;
+  isTrainee?: boolean;
 }
 
 export interface EmployeeWithPassword extends Employee {
@@ -41,7 +44,7 @@ export interface EmployeeAvailability {
   id: string;
   employeeId: string;
   planId: string;
-  shiftId: string; // Now references shift_id instead of time_slot_id + day_of_week
+  shiftId: string;
   preferenceLevel: 1 | 2 | 3; // 1:preferred, 2:available, 3:unavailable
   notes?: string;
 }
@@ -83,4 +86,11 @@ export interface Role {
 export interface EmployeeRole {
   employeeId: string;
   role: 'admin' | 'user' | 'maintenance';
+}
+
+// Employee type configuration
+export interface EmployeeType {
+  type: 'manager' | 'personell' | 'apprentice' | 'guest';
+  category: 'internal' | 'external';
+  has_contract_type: boolean;
 }

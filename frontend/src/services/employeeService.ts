@@ -130,6 +130,22 @@ export class EmployeeService {
       throw new Error(error.error || 'Failed to change password');
     }
   }
+
+  async updateLastLogin(employeeId: string): Promise<void> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/employees/${employeeId}/last-login`, {
+        method: 'PATCH',
+        headers: getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update last login');
+      }
+    } catch (error) {
+      console.error('Error updating last login:', error);
+      throw error;
+    }
+  }
 }
 
 export const employeeService = new EmployeeService();

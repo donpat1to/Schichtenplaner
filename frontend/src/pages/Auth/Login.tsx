@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
+import { employeeService } from '../../services/employeeService';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -12,7 +13,6 @@ const Login: React.FC = () => {
   const { showNotification } = useNotification();
   const navigate = useNavigate();
 
-  // 🔥 NEU: Redirect wenn bereits eingeloggt
   useEffect(() => {
     if (user) {
       console.log('✅ User already logged in, redirecting to dashboard');
@@ -27,8 +27,7 @@ const Login: React.FC = () => {
     try {
       console.log('🔐 Attempting login for:', email);
       await login({ email, password });
-      
-      // 🔥 WICHTIG: Erfolgsmeldung und Redirect
+
       console.log('✅ Login successful, redirecting to dashboard');
       showNotification({
         type: 'success',

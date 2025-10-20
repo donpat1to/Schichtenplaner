@@ -7,7 +7,6 @@ import { AuthRequest } from '../middleware/auth.js';
 import { CreateEmployeeRequest } from '../models/Employee.js';
 
 function generateEmail(firstname: string, lastname: string): string {
-  // Convert German umlauts to their expanded forms
   const convertUmlauts = (str: string): string => {
     return str
       .toLowerCase()
@@ -17,7 +16,6 @@ function generateEmail(firstname: string, lastname: string): string {
       .replace(/ß/g, 'ss');
   };
 
-  // Remove any remaining special characters and convert to lowercase
   const cleanFirstname = convertUmlauts(firstname).replace(/[^a-z0-9]/g, '');
   const cleanLastname = convertUmlauts(lastname).replace(/[^a-z0-9]/g, '');
   
@@ -34,12 +32,13 @@ export const getEmployees = async (req: AuthRequest, res: Response): Promise<voi
     let query = `
       SELECT 
         e.id, e.email, e.firstname, e.lastname, 
-        e.is_active as isActive, 
-        e.employee_type as employeeType, 
-        e.contract_type as contractType,
-        e.can_work_alone as canWorkAlone,
-        e.created_at as createdAt, 
-        e.last_login as lastLogin,
+        e.is_active, 
+        e.employee_type, 
+        e.contract_type,
+        e.can_work_alone,
+        e.is_trainee,
+        e.created_at, 
+        e.last_login,
         er.role
       FROM employees e
       LEFT JOIN employee_roles er ON e.id = er.employee_id
@@ -49,14 +48,23 @@ export const getEmployees = async (req: AuthRequest, res: Response): Promise<voi
       query += ' WHERE e.is_active = 1';
     }
     
-    // UPDATED: Order by firstname and lastname
     query += ' ORDER BY e.firstname, e.lastname';
     
     const employees = await db.all<any>(query);
 
-    // Format employees with roles array for frontend compatibility
+    // Format employees with proper field names and roles array
     const employeesWithRoles = employees.map(emp => ({
-      ...emp,
+      id: emp.id,
+      email: emp.email,
+      firstname: emp.firstname,
+      lastname: emp.lastname,
+      isActive: emp.is_active === 1,
+      employeeType: emp.employee_type,
+      contractType: emp.contract_type,
+      canWorkAlone: emp.can_work_alone === 1,
+      isTrainee: emp.is_trainee === 1,
+      createdAt: emp.created_at,
+      lastLogin: emp.last_login,
       roles: emp.role ? [emp.role] : ['user']
     }));
 
@@ -72,16 +80,16 @@ export const getEmployee = async (req: AuthRequest, res: Response): Promise<void
   try {
     const { id } = req.params;
 
-    // UPDATED: Query with role from employee_roles table
     const employee = await db.get<any>(`
       SELECT 
         e.id, e.email, e.firstname, e.lastname, 
-        e.is_active as isActive, 
-        e.employee_type as employeeType, 
-        e.contract_type as contractType,
-        e.can_work_alone as canWorkAlone,
-        e.created_at as createdAt, 
-        e.last_login as lastLogin,
+        e.is_active, 
+        e.employee_type, 
+        e.contract_type,
+        e.can_work_alone,
+        e.is_trainee,
+        e.created_at, 
+        e.last_login,
         er.role
       FROM employees e
       LEFT JOIN employee_roles er ON e.id = er.employee_id
@@ -94,9 +102,19 @@ export const getEmployee = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    // Format employee with roles array
+    // Format employee with proper field names
     const employeeWithRoles = {
-      ...employee,
+      id: employee.id,
+      email: employee.email,
+      firstname: employee.firstname,
+      lastname: employee.lastname,
+      isActive: employee.is_active === 1,
+      employeeType: employee.employee_type,
+      contractType: employee.contract_type,
+      canWorkAlone: employee.can_work_alone === 1,
+      isTrainee: employee.is_trainee === 1,
+      createdAt: employee.created_at,
+      lastLogin: employee.last_login,
       roles: employee.role ? [employee.role] : ['user']
     };
 
@@ -118,17 +136,64 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
       password, 
       firstname, 
       lastname, 
-      roles = ['user'], // UPDATED: Now uses roles array
+      roles = ['user'],
       employeeType, 
       contractType,
-      canWorkAlone
+      canWorkAlone = false,
+      isTrainee = false
     } = req.body as CreateEmployeeRequest;
 
     // Validation
-    if (!password || !firstname || !lastname || !employeeType || !contractType) {
+    if (!password || !firstname || !lastname || !employeeType) {
       console.log('❌ Validation failed: Missing required fields');
       res.status(400).json({ 
-        error: 'Password, firstname, lastname, employeeType und contractType sind erforderlich' 
+        error: 'Password, firstname, lastname und employeeType sind erforderlich' 
+      });
+      return;
+    }
+
+    // ✅ ENHANCED: Validate employee type exists and get category info
+    const employeeTypeInfo = await db.get<{type: string, category: string, has_contract_type: number}>(
+      'SELECT type, category, has_contract_type FROM employee_types WHERE type = ?',
+      [employeeType]
+    );
+
+    if (!employeeTypeInfo) {
+      res.status(400).json({ 
+        error: `Ungültiger employeeType: ${employeeType}. Gültige Typen: manager, personell, apprentice, guest` 
+      });
+      return;
+    }
+
+    // ✅ ENHANCED: Contract type validation based on category
+    if (employeeTypeInfo.has_contract_type === 1) {
+      // Internal types require contract type
+      if (!contractType) {
+        res.status(400).json({ 
+          error: `contractType ist erforderlich für employeeType: ${employeeType}` 
+        });
+        return;
+      }
+      if (!['small', 'large', 'flexible'].includes(contractType)) {
+        res.status(400).json({ 
+          error: `Ungültiger contractType: ${contractType}. Gültige Werte: small, large, flexible` 
+        });
+        return;
+      }
+    } else {
+      // External types (guest) should not have contract type
+      if (contractType) {
+        res.status(400).json({ 
+          error: `contractType ist nicht erlaubt für employeeType: ${employeeType}` 
+        });
+        return;
+      }
+    }
+
+    // ✅ ENHANCED: isTrainee validation - only applicable for personell type
+    if (isTrainee && employeeType !== 'personell') {
+      res.status(400).json({ 
+        error: `isTrainee ist nur für employeeType 'personell' erlaubt` 
       });
       return;
     }
@@ -156,12 +221,12 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
     await db.run('BEGIN TRANSACTION');
 
     try {
-      // UPDATED: Insert employee without role (role is now in employee_roles table)
+      // Insert employee with proper contract type handling
       await db.run(
         `INSERT INTO employees (
           id, email, password, firstname, lastname, employee_type, contract_type, can_work_alone, 
-          is_active
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          is_active, is_trainee
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           employeeId, 
           email, 
@@ -169,13 +234,14 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
           firstname, 
           lastname, 
           employeeType, 
-          contractType,
+          contractType, // Will be NULL for external types
           canWorkAlone ? 1 : 0,
-          1
+          1,
+          isTrainee ? 1 : 0
         ]
       );
 
-      // UPDATED: Insert roles into employee_roles table
+      // Insert roles into employee_roles table
       for (const role of roles) {
         await db.run(
           `INSERT INTO employee_roles (employee_id, role) VALUES (?, ?)`,
@@ -185,16 +251,17 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
 
       await db.run('COMMIT');
 
-      // Return created employee with role from employee_roles
+      // Return created employee
       const newEmployee = await db.get<any>(`
         SELECT 
           e.id, e.email, e.firstname, e.lastname, 
-          e.is_active as isActive,
-          e.employee_type as employeeType, 
-          e.contract_type as contractType,
-          e.can_work_alone as canWorkAlone,
-          e.created_at as createdAt, 
-          e.last_login as lastLogin,
+          e.is_active,
+          e.employee_type, 
+          e.contract_type,
+          e.can_work_alone,
+          e.is_trainee,
+          e.created_at, 
+          e.last_login,
           er.role
         FROM employees e
         LEFT JOIN employee_roles er ON e.id = er.employee_id
@@ -202,9 +269,19 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
         LIMIT 1
       `, [employeeId]);
 
-      // Format response with roles array
+      // Format response with proper field names
       const employeeWithRoles = {
-        ...newEmployee,
+        id: newEmployee.id,
+        email: newEmployee.email,
+        firstname: newEmployee.firstname,
+        lastname: newEmployee.lastname,
+        isActive: newEmployee.is_active === 1,
+        employeeType: newEmployee.employee_type,
+        contractType: newEmployee.contract_type,
+        canWorkAlone: newEmployee.can_work_alone === 1,
+        isTrainee: newEmployee.is_trainee === 1,
+        createdAt: newEmployee.created_at,
+        lastLogin: newEmployee.last_login,
         roles: newEmployee.role ? [newEmployee.role] : ['user']
       };
 
@@ -223,15 +300,33 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
 export const updateEmployee = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { firstname, lastname, roles, isActive, employeeType, contractType, canWorkAlone } = req.body;
+    const { firstname, lastname, roles, isActive, employeeType, contractType, canWorkAlone, isTrainee } = req.body;
 
-    console.log('📝 Update Employee Request:', { id, firstname, lastname, roles, isActive, employeeType, contractType, canWorkAlone });
+    console.log('📝 Update Employee Request:', { 
+      id, firstname, lastname, roles, isActive, 
+      employeeType, contractType, canWorkAlone, isTrainee 
+    });
 
     // Check if employee exists and get current data
     const existingEmployee = await db.get<any>('SELECT * FROM employees WHERE id = ?', [id]);
     if (!existingEmployee) {
       res.status(404).json({ error: 'Employee not found' });
       return;
+    }
+
+    // Validate employee type if provided
+    if (employeeType) {
+      const validEmployeeType = await db.get(
+        'SELECT type FROM employee_types WHERE type = ?',
+        [employeeType]
+      );
+
+      if (!validEmployeeType) {
+        res.status(400).json({ 
+          error: `Ungültiger employeeType: ${employeeType}` 
+        });
+        return;
+      }
     }
 
     // Generate new email if firstname or lastname changed
@@ -259,7 +354,7 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
     await db.run('BEGIN TRANSACTION');
 
     try {
-      // UPDATED: Update employee without role (role is now in employee_roles table)
+      // Update employee with new schema
       await db.run(
         `UPDATE employees 
          SET firstname = COALESCE(?, firstname),
@@ -268,12 +363,13 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
              is_active = COALESCE(?, is_active),
              employee_type = COALESCE(?, employee_type),
              contract_type = COALESCE(?, contract_type),
-             can_work_alone = COALESCE(?, can_work_alone)
+             can_work_alone = COALESCE(?, can_work_alone),
+             is_trainee = COALESCE(?, is_trainee)
          WHERE id = ?`,
-        [firstname, lastname, email, isActive, employeeType, contractType, canWorkAlone, id]
+        [firstname, lastname, email, isActive, employeeType, contractType, canWorkAlone, isTrainee, id]
       );
 
-      // UPDATED: Update roles if provided
+      // Update roles if provided
       if (roles) {
         // Delete existing roles
         await db.run('DELETE FROM employee_roles WHERE employee_id = ?', [id]);
@@ -291,16 +387,17 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
 
       console.log('✅ Employee updated successfully with email:', email);
 
-      // Return updated employee with role from employee_roles
+      // Return updated employee
       const updatedEmployee = await db.get<any>(`
         SELECT 
           e.id, e.email, e.firstname, e.lastname, 
-          e.is_active as isActive, 
-          e.employee_type as employeeType, 
-          e.contract_type as contractType,
-          e.can_work_alone as canWorkAlone,
-          e.created_at as createdAt, 
-          e.last_login as lastLogin,
+          e.is_active, 
+          e.employee_type, 
+          e.contract_type,
+          e.can_work_alone,
+          e.is_trainee,
+          e.created_at, 
+          e.last_login,
           er.role
         FROM employees e
         LEFT JOIN employee_roles er ON e.id = er.employee_id
@@ -308,9 +405,19 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
         LIMIT 1
       `, [id]);
 
-      // Format response with roles array
+      // Format response with proper field names
       const employeeWithRoles = {
-        ...updatedEmployee,
+        id: updatedEmployee.id,
+        email: updatedEmployee.email,
+        firstname: updatedEmployee.firstname,
+        lastname: updatedEmployee.lastname,
+        isActive: updatedEmployee.is_active === 1,
+        employeeType: updatedEmployee.employee_type,
+        contractType: updatedEmployee.contract_type,
+        canWorkAlone: updatedEmployee.can_work_alone === 1,
+        isTrainee: updatedEmployee.is_trainee === 1,
+        createdAt: updatedEmployee.created_at,
+        lastLogin: updatedEmployee.last_login,
         roles: updatedEmployee.role ? [updatedEmployee.role] : ['user']
       };
 
@@ -434,6 +541,7 @@ export const getAvailabilities = async (req: AuthRequest, res: Response): Promis
       id: avail.id,
       employeeId: avail.employee_id,
       planId: avail.plan_id,
+      shiftId: avail.shift_id,
       dayOfWeek: avail.day_of_week,
       timeSlotId: avail.time_slot_id,
       preferenceLevel: avail.preference_level,
@@ -559,6 +667,36 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
     res.json({ message: 'Password updated successfully' });
   } catch (error) {
     console.error('Error changing password:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const updateLastLogin = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    // Check if employee exists
+    const employee = await db.get('SELECT id FROM employees WHERE id = ?', [id]);
+    if (!employee) {
+      res.status(404).json({ error: 'Employee not found' });
+      return;
+    }
+
+    // Update last_login with current timestamp
+    const currentTimestamp = new Date().toISOString();
+    await db.run(
+      'UPDATE employees SET last_login = ? WHERE id = ?', 
+      [currentTimestamp, id]
+    );
+
+    console.log(`✅ Last login updated for employee ${id}: ${currentTimestamp}`);
+    
+    res.json({ 
+      message: 'Last login updated successfully',
+      lastLogin: currentTimestamp
+    });
+  } catch (error) {
+    console.error('Error updating last login:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

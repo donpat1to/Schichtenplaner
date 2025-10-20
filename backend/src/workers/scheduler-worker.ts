@@ -17,17 +17,42 @@ interface WorkerData {
 function buildSchedulingModel(model: CPModel, data: WorkerData): void {
   const { employees, shifts, availabilities, constraints } = data;
   
-  // Filter employees to only include active ones
-  const nonManagerEmployees = employees.filter(emp => emp.isActive && emp.employeeType !== 'manager');
-  const activeEmployees = employees.filter(emp => emp.isActive);
-  const trainees = nonManagerEmployees.filter(emp => emp.employeeType === 'trainee');
-  const experienced = nonManagerEmployees.filter(emp => emp.employeeType === 'experienced');
+  const schedulableEmployees = employees.filter(emp => 
+    emp.isActive && 
+    emp.employeeType === 'personell'
+  );
   
-  console.log(`Building model with ${nonManagerEmployees.length} employees, ${shifts.length} shifts`);
-  console.log(`Available shifts per week: ${shifts.length}`);
+  // Debug: Count constraints that will be created
+  console.log('\n🔧 CONSTRAINT ANALYSIS:');
+  let hardConstraints = 0;
+  let availabilityConstraints = 0;
+  
+  // Count availability constraints
+  schedulableEmployees.forEach((employee: any) => {
+    shifts.forEach((shift: any) => {
+      const availability = availabilities.find(
+        (a: any) => a.employeeId === employee.id && a.shiftId === shift.id
+      );
+      
+      if (!availability || availability.preferenceLevel === 3) {
+        availabilityConstraints++;
+      }
+    });
+  });
+  
+  console.log(`Availability constraints to create: ${availabilityConstraints}`);
+  console.log(`Total possible assignments: ${schedulableEmployees.length * shifts.length}`);
+  
+  const trainees = schedulableEmployees.filter(emp => emp.isTrainee);
+  const experienced = schedulableEmployees.filter(emp => !emp.isTrainee);
+  
+  console.log(`Building model with ${schedulableEmployees.length} schedulable employees, ${shifts.length} shifts`);
+  console.log(`- Trainees: ${trainees.length}`);
+  console.log(`- Experienced: ${experienced.length}`);
+  console.log(`- Excluded: ${employees.filter(emp => !emp.isActive || emp.employeeType !== 'personell').length} employees (managers, apprentices, guests, inactive)`);
 
   // 1. Create assignment variables for all possible assignments
-  nonManagerEmployees.forEach((employee: any) => {
+  schedulableEmployees.forEach((employee: any) => {
     shifts.forEach((shift: any) => {
       const varName = `assign_${employee.id}_${shift.id}`;
       model.addVariable(varName, 'bool');
@@ -35,18 +60,18 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
   });
 
   // 2. Availability constraints
-  nonManagerEmployees.forEach((employee: any) => {
+  schedulableEmployees.forEach((employee: any) => {
     shifts.forEach((shift: any) => {
       const availability = availabilities.find(
         (a: any) => a.employeeId === employee.id && a.shiftId === shift.id
       );
       
-      // Hard constraint: never assign when preference level is 3 (unavailable)
-      if (availability?.preferenceLevel === 3) {
-        const varName = `assign_${employee.id}_${shift.id}`;
+      const varName = `assign_${employee.id}_${shift.id}`;
+      
+      if (!availability || availability.preferenceLevel === 3) {
         model.addConstraint(
           `${varName} == 0`,
-          `Hard availability constraint for ${employee.name} in shift ${shift.id}`
+          `Employee ${employee.firstname} ${employee.lastname} has not signed up for shift ${shift.id}`
         );
       }
     });
@@ -54,7 +79,7 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
 
   // 3. Max 1 shift per day per employee
   const shiftsByDate = groupShiftsByDate(shifts);
-  nonManagerEmployees.forEach((employee: any) => {
+  schedulableEmployees.forEach((employee: any) => {
     Object.entries(shiftsByDate).forEach(([date, dayShifts]) => {
       const dayAssignmentVars = (dayShifts as any[]).map(
         (shift: any) => `assign_${employee.id}_${shift.id}`
@@ -71,7 +96,7 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
 
   // 4. Shift staffing constraints
   shifts.forEach((shift: any) => {
-    const assignmentVars = nonManagerEmployees.map(
+    const assignmentVars = schedulableEmployees.map(
       (emp: any) => `assign_${emp.id}_${shift.id}`
     );
     
@@ -117,13 +142,13 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
   });
 
   // 6. Employees who cannot work alone constraint
-  const employeesWhoCantWorkAlone = nonManagerEmployees.filter(emp => !emp.canWorkAlone);
+  const employeesWhoCantWorkAlone = schedulableEmployees.filter(emp => !emp.canWorkAlone);
   console.log(`Found ${employeesWhoCantWorkAlone.length} employees who cannot work alone`);
 
   employeesWhoCantWorkAlone.forEach((employee: any) => {
     shifts.forEach((shift: any) => {
       const employeeVar = `assign_${employee.id}_${shift.id}`;
-      const otherEmployees = nonManagerEmployees.filter(emp => 
+      const otherEmployees = schedulableEmployees.filter(emp => 
         emp.id !== employee.id && emp.isActive
       );
       
@@ -151,7 +176,7 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
   const totalShifts = shifts.length;
   console.log(`Total available shifts: ${totalShifts}`);
 
-  nonManagerEmployees.forEach((employee: any) => {
+  schedulableEmployees.forEach((employee: any) => {
     const contractType = employee.contractType || 'large';
     
     // EXACT SHIFTS PER WEEK
@@ -181,8 +206,8 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
   // 8. Objective: Maximize preferred assignments with soft constraints
   let objectiveExpression = '';
   let softConstraintPenalty = '';
-  
-  nonManagerEmployees.forEach((employee: any) => {
+
+  schedulableEmployees.forEach((employee: any) => {
     shifts.forEach((shift: any) => {
       const varName = `assign_${employee.id}_${shift.id}`;
       const availability = availabilities.find(
@@ -191,25 +216,28 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
       
       let score = 0;
       if (availability) {
-        score = availability.preferenceLevel === 1 ? 10 : 
-               availability.preferenceLevel === 2 ? 5 : 
-               -10000; // Very heavy penalty for unavailable
-      } else {
-        // No availability info - slight preference to assign
-        score = 1;
+        // Only give positive scores for shifts employees actually signed up for
+        if (availability.preferenceLevel === 1) {
+          score = 100; // High reward for preferred shifts
+        } else if (availability.preferenceLevel === 2) {
+          score = 50;  // Medium reward for available shifts
+        }
       }
-      
-      if (objectiveExpression) {
-        objectiveExpression += ` + ${score} * ${varName}`;
-      } else {
-        objectiveExpression = `${score} * ${varName}`;
+      if (score > 0) {
+        if (objectiveExpression) {
+          objectiveExpression += ` + ${score} * ${varName}`;
+        } else {
+          objectiveExpression = `${score} * ${varName}`;
+        }
       }
     });
   });
-  
+
   if (objectiveExpression) {
     model.maximize(objectiveExpression);
-    console.log('Objective function set with preference optimization');
+    console.log('Objective function set with strict availability enforcement');
+  } else {
+    console.warn('No valid objective expression could be created');
   }
 }
 
@@ -282,12 +310,12 @@ function detectViolations(assignments: any, employees: any[], shifts: any[]): st
     const assignedEmployees = assignments[shift.id] || [];
     const hasTrainee = assignedEmployees.some((empId: string) => {
       const emp = employeeMap.get(empId);
-      return emp?.employeeType === 'trainee';
+      return emp?.isTrainee;
     });
     
     const hasExperienced = assignedEmployees.some((empId: string) => {
       const emp = employeeMap.get(empId);
-      return emp?.employeeType === 'experienced';
+      return emp && !emp.isTrainee;
     });
     
     if (hasTrainee && !hasExperienced) {
@@ -330,9 +358,13 @@ function detectViolations(assignments: any, employees: any[], shifts: any[]): st
 }
 
 function assignManagersToShifts(assignments: any, managers: any[], shifts: any[], availabilities: any[]): any {
-  const managersToAssign = managers.filter(emp => emp.isActive && emp.employeeType === 'manager');
+  const managersToAssign = managers.filter(emp => 
+    emp.isActive && 
+    emp.employeeType === 'manager'
+  );
   
   console.log(`Assigning ${managersToAssign.length} managers to shifts based on availability=1`);
+  console.log(`- Excluded ${managers.filter(emp => !emp.isActive || emp.employeeType !== 'manager').length} non-manager employees from auto-assignment`);
   
   managersToAssign.forEach((manager: any) => {
     shifts.forEach((shift: any) => {
@@ -349,7 +381,7 @@ function assignManagersToShifts(assignments: any, managers: any[], shifts: any[]
         // Check if manager is already assigned (avoid duplicates)
         if (!assignments[shift.id].includes(manager.id)) {
           assignments[shift.id].push(manager.id);
-          console.log(`✅ Assigned manager ${manager.name} to shift ${shift.id} (availability=1)`);
+          console.log(`✅ Assigned manager ${manager.firstname} ${manager.lastname} to shift ${shift.id} (availability=1)`);
         }
       }
     });
@@ -375,8 +407,110 @@ async function runScheduling() {
     
     console.log(`Optimizing ${data.shifts.length} shifts for ${data.employees.length} employees`);
 
+    // 🆕 COMPREHENSIVE AVAILABILITY DEBUGGING
+    console.log('\n🔍 ===== AVAILABILITY ANALYSIS =====');
+    console.log(`Total shifts: ${data.shifts.length}`);
+    console.log(`Total availability records: ${data.availabilities.length}`);
+    
+    // Count by preference level
+    const pref1Count = data.availabilities.filter(a => a.preferenceLevel === 1).length;
+    const pref2Count = data.availabilities.filter(a => a.preferenceLevel === 2).length;
+    const pref3Count = data.availabilities.filter(a => a.preferenceLevel === 3).length;
+    
+    console.log(`Preference Level 1 (Preferred): ${pref1Count}`);
+    console.log(`Preference Level 2 (Available): ${pref2Count}`);
+    console.log(`Preference Level 3 (Unavailable): ${pref3Count}`);
+    
+    // Analyze each shift
+    console.log('\n📊 AVAILABILITIES PER SHIFT:');
+    data.shifts.forEach((shift, index) => {
+      const shiftAvailabilities = data.availabilities.filter(avail => avail.shiftId === shift.id);
+      const pref1 = shiftAvailabilities.filter(a => a.preferenceLevel === 1).length;
+      const pref2 = shiftAvailabilities.filter(a => a.preferenceLevel === 2).length;
+      const pref3 = shiftAvailabilities.filter(a => a.preferenceLevel === 3).length;
+      
+      console.log(`Shift ${index + 1}: ${shift.id}`);
+      console.log(`  📅 Date: ${shift.dayOfWeek}, TimeSlot: ${shift.timeSlotId}`);
+      console.log(`  👥 Required: ${shift.requiredEmployees}`);
+      console.log(`  ✅ Preferred (1): ${pref1}`);
+      console.log(`  🔶 Available (2): ${pref2}`);
+      console.log(`  ❌ Unavailable (3): ${pref3}`);
+      console.log(`  📋 Total signed up: ${pref1 + pref2}`);
+      
+      // Show employee names for each preference level
+      if (pref1 > 0) {
+        const pref1Employees = shiftAvailabilities
+          .filter(a => a.preferenceLevel === 1)
+          .map(a => {
+            const emp = data.employees.find(e => e.id === a.employeeId);
+            return emp ? `${emp.firstname} ${emp.lastname}` : 'Unknown';
+          });
+        console.log(`    Preferred employees: ${pref1Employees.join(', ')}`);
+      }
+      
+      if (pref2 > 0) {
+        const pref2Employees = shiftAvailabilities
+          .filter(a => a.preferenceLevel === 2)
+          .map(a => {
+            const emp = data.employees.find(e => e.id === a.employeeId);
+            return emp ? `${emp.firstname} ${emp.lastname}` : 'Unknown';
+          });
+        console.log(`    Available employees: ${pref2Employees.join(', ')}`);
+      }
+    });
+
+    // Employee-level analysis
+    console.log('\n👤 EMPLOYEE SIGNUP SUMMARY:');
+    const schedulableEmployees = data.employees.filter(emp => 
+      emp.isActive && emp.employeeType === 'personell'
+    );
+    
+    schedulableEmployees.forEach(employee => {
+      const employeeAvailabilities = data.availabilities.filter(avail => avail.employeeId === employee.id);
+      const pref1 = employeeAvailabilities.filter(a => a.preferenceLevel === 1).length;
+      const pref2 = employeeAvailabilities.filter(a => a.preferenceLevel === 2).length;
+      const pref3 = employeeAvailabilities.filter(a => a.preferenceLevel === 3).length;
+      
+      console.log(`${employee.firstname} ${employee.lastname} (${employee.contractType}):`);
+      console.log(`  ✅ Preferred: ${pref1} shifts, 🔶 Available: ${pref2} shifts, ❌ Unavailable: ${pref3} shifts`);
+    });
+
+    // Check shift ID matching
+    console.log('\n🔍 SHIFT ID MATCHING ANALYSIS:');
+    const shiftsWithNoSignups = data.shifts.filter(shift => {
+      const shiftAvailabilities = data.availabilities.filter(avail => avail.shiftId === shift.id);
+      const signedUp = shiftAvailabilities.filter(a => a.preferenceLevel === 1 || a.preferenceLevel === 2);
+      return signedUp.length === 0;
+    });
+
+    console.log(`Shifts with NO signups: ${shiftsWithNoSignups.length}/${data.shifts.length}`);
+    shiftsWithNoSignups.forEach(shift => {
+      console.log(`  ❌ No signups: ${shift.id} (${shift.dayOfWeek}, ${shift.timeSlotId})`);
+    });
+
+    console.log('===== END AVAILABILITY ANALYSIS =====\n');
+
     const nonManagerEmployees = data.employees.filter(emp => emp.isActive && emp.employeeType !== 'manager');
     
+    // Check if we have any employees who signed up for shifts
+    const employeesWithSignups = new Set(
+      data.availabilities
+        .filter(avail => avail.preferenceLevel === 1 || avail.preferenceLevel === 2)
+        .map(avail => avail.employeeId)
+    );
+
+    if (employeesWithSignups.size === 0) {
+      console.log('❌ CRITICAL: No employees have signed up for any shifts!');
+      parentPort?.postMessage({
+        assignments: {},
+        violations: ['NO_SIGNUPS: No employees have signed up for any shifts with preference level 1 or 2'],
+        success: false,
+        resolutionReport: ['❌ Scheduling failed: No employees have signed up for any shifts'],
+        processingTime: Date.now() - startTime
+      });
+      return;
+    }
+
     const model = new CPModel();
     buildSchedulingModel(model, data);
     
@@ -406,7 +540,6 @@ async function runScheduling() {
       // Extract assignments from solution (non-managers only)
       assignments = extractAssignmentsFromSolution(solution, nonManagerEmployees, data.shifts);
       
-      // 🆕 ADD THIS: Assign managers to shifts where they have availability=1
       assignments = assignManagersToShifts(assignments, data.employees, data.shifts, data.availabilities);
       
       // Only detect violations for non-manager assignments
@@ -416,7 +549,6 @@ async function runScheduling() {
         violations.push('NO_ASSIGNMENTS: Solver reported success but produced no assignments');
       }
       
-      // Update resolution report
       if (violations.length === 0) {
         resolutionReport.push('✅ No constraint violations detected for non-manager employees');
       } else {

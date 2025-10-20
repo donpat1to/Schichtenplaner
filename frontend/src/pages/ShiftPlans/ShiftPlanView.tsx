@@ -16,14 +16,27 @@ interface ExtendedTimeSlot extends TimeSlot {
   displayName?: string;
 }
 
+interface ExtendedShift {
+  id: string;
+  planId: string;
+  timeSlotId: string;
+  dayOfWeek: number;
+  requiredEmployees: number;
+  color?: string;
+  timeSlotName?: string;
+  startTime?: string;
+  endTime?: string;
+  displayName?: string;
+}
+
 const weekdays = [
-  { id: 1, name: 'Mo' },
-  { id: 2, name: 'Di' },
-  { id: 3, name: 'Mi' },
-  { id: 4, name: 'Do' },
-  { id: 5, name: 'Fr' },
-  { id: 6, name: 'Sa' },
-  { id: 7, name: 'So' }
+  { id: 1, name: 'Montag' },
+  { id: 2, name: 'Dienstag' },
+  { id: 3, name: 'Mittwoch' },
+  { id: 4, name: 'Donnerstag' },
+  { id: 5, name: 'Freitag' },
+  { id: 6, name: 'Samstag' },
+  { id: 7, name: 'Sonntag' }
 ];
 
 const ShiftPlanView: React.FC = () => {
@@ -35,13 +48,12 @@ const ShiftPlanView: React.FC = () => {
   const [shiftPlan, setShiftPlan] = useState<ShiftPlan | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [availabilities, setAvailabilities] = useState<EmployeeAvailability[]>([]);
-  const [assignmentResult, setAssignmentResult] = useState<AssignmentResult | null>(null); // Add this line
+  const [assignmentResult, setAssignmentResult] = useState<AssignmentResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [publishing, setPublishing] = useState(false);
   const [scheduledShifts, setScheduledShifts] = useState<ScheduledShift[]>([]);
   const [showAssignmentPreview, setShowAssignmentPreview] = useState(false);
   const [recreating, setRecreating] = useState(false);
-
 
   useEffect(() => {
     loadShiftPlanData();
@@ -76,31 +88,133 @@ const ShiftPlanView: React.FC = () => {
     };
   }, []);
 
+  // Add this useEffect to debug state changes
   useEffect(() => {
-    if (assignmentResult) {
-      console.log("🔄 assignmentResult UPDATED:", {
-        success: assignmentResult.success,
-        assignmentsCount: Object.keys(assignmentResult.assignments).length,
-        assignmentKeys: Object.keys(assignmentResult.assignments).slice(0, 5), // First 5 keys
-        violations: assignmentResult.violations.length
-      });
-      
-      // Log all assignments with their keys
-      Object.entries(assignmentResult.assignments).forEach(([key, empIds]) => {
-        console.log(`   🗂️ Assignment Key: ${key}`);
-        console.log(`      Employees: ${empIds.join(', ')}`);
-        
-        // Try to identify what this key represents
-        const isUuid = key.length === 36; // UUID format
-        console.log(`      Type: ${isUuid ? 'UUID (likely scheduled shift)' : 'Pattern (likely shift pattern)'}`);
-      });
-    }
-  }, [assignmentResult]);
+    console.log('🔍 STATE DEBUG - showAssignmentPreview:', showAssignmentPreview);
+    console.log('🔍 STATE DEBUG - assignmentResult:', assignmentResult ? 'EXISTS' : 'NULL');
+    console.log('🔍 STATE DEBUG - publishing:', publishing);
+  }, [showAssignmentPreview, assignmentResult, publishing]);
 
-  useEffect(() => {
-    (window as any).debugRenderLogic = debugRenderLogic;
-    return () => { (window as any).debugRenderLogic = undefined; };
-  }, [shiftPlan, scheduledShifts]);
+  // Create a data structure that maps days to their shifts with time slot info - SAME AS AVAILABILITYMANAGER
+  const getTimetableData = () => {
+    if (!shiftPlan || !shiftPlan.shifts || !shiftPlan.timeSlots) {
+      return { days: [], shiftsByDay: {}, allTimeSlots: [] };
+    }
+
+    // Create a map for quick time slot lookups
+    const timeSlotMap = new Map(shiftPlan.timeSlots.map(ts => [ts.id, ts]));
+
+    // Group shifts by day and enhance with time slot info - SAME LOGIC AS AVAILABILITYMANAGER
+    const shiftsByDay = shiftPlan.shifts.reduce((acc, shift) => {
+      if (!acc[shift.dayOfWeek]) {
+        acc[shift.dayOfWeek] = [];
+      }
+      
+      const timeSlot = timeSlotMap.get(shift.timeSlotId);
+      const enhancedShift: ExtendedShift = {
+        ...shift,
+        timeSlotName: timeSlot?.name,
+        startTime: timeSlot?.startTime,
+        endTime: timeSlot?.endTime,
+        displayName: timeSlot ? `${timeSlot.name} (${formatTime(timeSlot.startTime)}-${formatTime(timeSlot.endTime)})` : shift.id
+      };
+      
+      acc[shift.dayOfWeek].push(enhancedShift);
+      return acc;
+    }, {} as Record<number, ExtendedShift[]>);
+
+    // Sort shifts within each day by start time - SAME LOGIC AS AVAILABILITYMANAGER
+    Object.keys(shiftsByDay).forEach(day => {
+      shiftsByDay[parseInt(day)].sort((a, b) => {
+        const timeA = a.startTime || '';
+        const timeB = b.startTime || '';
+        return timeA.localeCompare(timeB);
+      });
+    });
+
+    // Get unique days that have shifts - SAME LOGIC AS AVAILABILITYMANAGER
+    const days = Array.from(new Set(shiftPlan.shifts.map(shift => shift.dayOfWeek)))
+      .sort()
+      .map(dayId => {
+        return weekdays.find(day => day.id === dayId) || { id: dayId, name: `Tag ${dayId}` };
+      });
+
+    // Get all unique time slots (rows) by collecting from all shifts - SAME LOGIC AS AVAILABILITYMANAGER
+    const allTimeSlotsMap = new Map();
+    days.forEach(day => {
+      shiftsByDay[day.id]?.forEach(shift => {
+        const timeSlot = timeSlotMap.get(shift.timeSlotId);
+        if (timeSlot && !allTimeSlotsMap.has(timeSlot.id)) {
+          allTimeSlotsMap.set(timeSlot.id, {
+            ...timeSlot,
+            shiftsByDay: {} // Initialize empty object to store shifts by day
+          });
+        }
+      });
+    });
+
+    // Populate shifts for each time slot by day - SAME LOGIC AS AVAILABILITYMANAGER
+    days.forEach(day => {
+      shiftsByDay[day.id]?.forEach(shift => {
+        const timeSlot = allTimeSlotsMap.get(shift.timeSlotId);
+        if (timeSlot) {
+          timeSlot.shiftsByDay[day.id] = shift;
+        }
+      });
+    });
+
+    // Convert to array and sort by start time - SAME LOGIC AS AVAILABILITYMANAGER
+    const allTimeSlots = Array.from(allTimeSlotsMap.values()).sort((a, b) => {
+      return (a.startTime || '').localeCompare(b.startTime || '');
+    });
+
+    return { days, shiftsByDay, allTimeSlots };
+  };
+
+  // VALIDATION FUNCTION - Check if shifts are correctly placed (like in AvailabilityManager)
+  const validateTimetableStructure = () => {
+    if (!shiftPlan || !shiftPlan.shifts || !shiftPlan.timeSlots) {
+      return { isValid: false, errors: ['No shift plan data available'] };
+    }
+
+    const validationErrors: string[] = [];
+    
+    // Check for missing time slots - SAME VALIDATION AS AVAILABILITYMANAGER
+    const usedTimeSlotIds = new Set(shiftPlan.shifts.map(s => s.timeSlotId));
+    const availableTimeSlotIds = new Set(shiftPlan.timeSlots.map(ts => ts.id));
+    
+    usedTimeSlotIds.forEach(timeSlotId => {
+      if (!availableTimeSlotIds.has(timeSlotId)) {
+        validationErrors.push(`Zeitslot ${timeSlotId} wird verwendet, existiert aber nicht in timeSlots`);
+      }
+    });
+
+    // Check for shifts with invalid day numbers - SAME VALIDATION AS AVAILABILITYMANAGER
+    shiftPlan.shifts.forEach(shift => {
+      if (shift.dayOfWeek < 1 || shift.dayOfWeek > 7) {
+        validationErrors.push(`Shift ${shift.id} hat ungültigen Wochentag: ${shift.dayOfWeek}`);
+      }
+
+      // Check if shift timeSlotId exists in timeSlots
+      const timeSlotExists = shiftPlan.timeSlots.some(ts => ts.id === shift.timeSlotId);
+      if (!timeSlotExists) {
+        validationErrors.push(`Shift ${shift.id} verweist auf nicht existierenden Zeitslot: ${shift.timeSlotId}`);
+      }
+    });
+
+    // Check for scheduled shifts consistency
+    scheduledShifts.forEach(scheduledShift => {
+      const timeSlotExists = shiftPlan.timeSlots.some(ts => ts.id === scheduledShift.timeSlotId);
+      if (!timeSlotExists) {
+        validationErrors.push(`Scheduled Shift ${scheduledShift.id} verweist auf nicht existierenden Zeitslot: ${scheduledShift.timeSlotId}`);
+      }
+    });
+
+    return {
+      isValid: validationErrors.length === 0,
+      errors: validationErrors
+    };
+  };
 
   const loadShiftPlanData = async () => {
     if (!id) return;
@@ -132,7 +246,9 @@ const ShiftPlanView: React.FC = () => {
 
       setScheduledShifts(shiftsData);
 
-      // Load availabilities
+      // Load availabilities - USING THE SAME LOGIC AS AVAILABILITYMANAGER
+      console.log('🔄 LADE VERFÜGBARKEITEN FÜR PLAN:', id);
+      
       const availabilityPromises = employeesData
         .filter(emp => emp.isActive)
         .map(emp => employeeService.getAvailabilities(emp.id));
@@ -140,11 +256,20 @@ const ShiftPlanView: React.FC = () => {
       const allAvailabilities = await Promise.all(availabilityPromises);
       const flattenedAvailabilities = allAvailabilities.flat();
       
+      // Filter to only include availabilities for the current plan - SAME LOGIC AS AVAILABILITYMANAGER
       const planAvailabilities = flattenedAvailabilities.filter(
         availability => availability.planId === id
       );
       
+      console.log('✅ VERFÜGBARKEITEN FÜR DIESEN PLAN:', planAvailabilities.length);
+      
       setAvailabilities(planAvailabilities);
+
+      // Run validation
+      const validation = validateTimetableStructure();
+      if (!validation.isValid) {
+        console.warn('⚠️ TIMETABLE VALIDATION ERRORS:', validation.errors);
+      }
 
     } catch (error) {
       console.error('Error loading shift plan data:', error);
@@ -222,143 +347,6 @@ const ShiftPlanView: React.FC = () => {
     }
   };
 
-  const debugRenderLogic = () => {
-    if (!shiftPlan) return;
-    
-    console.log('🔍 RENDER LOGIC DEBUG:');
-    console.log('=====================');
-    
-    const { days, allTimeSlots, timeSlotsByDay } = getTimetableData();
-    
-    console.log('📊 TABLE STRUCTURE:');
-    console.log('- Days in table:', days.length);
-    console.log('- TimeSlots in table:', allTimeSlots.length);
-    console.log('- Days with data:', Object.keys(timeSlotsByDay).length);
-    
-    // Zeige die tatsächliche Struktur der Tabelle
-    console.log('\n📅 ACTUAL TABLE DAYS:');
-    days.forEach(day => {
-      const slotsForDay = timeSlotsByDay[day.id] || [];
-      console.log(`- ${day.name}: ${slotsForDay.length} time slots`);
-    });
-    
-    console.log('\n⏰ ACTUAL TIME SLOTS:');
-    allTimeSlots.forEach(slot => {
-      console.log(`- ${slot.name} (${slot.startTime}-${slot.endTime})`);
-    });
-    
-    // Prüfe wie viele Scheduled Shifts tatsächlich gerendert werden
-    console.log('\n🔍 SCHEDULED SHIFTS RENDER ANALYSIS:');
-    
-    let totalRenderedShifts = 0;
-    let shiftsWithAssignments = 0;
-    
-    days.forEach(day => {
-      const slotsForDay = timeSlotsByDay[day.id] || [];
-      slotsForDay.forEach(timeSlot => {
-        totalRenderedShifts++;
-        
-        // Finde den entsprechenden Scheduled Shift
-        const scheduledShift = scheduledShifts.find(scheduled => {
-          const scheduledDayOfWeek = getDayOfWeek(scheduled.date);
-          return scheduledDayOfWeek === day.id && 
-                scheduled.timeSlotId === timeSlot.id;
-        });
-        
-        if (scheduledShift && scheduledShift.assignedEmployees && scheduledShift.assignedEmployees.length > 0) {
-          shiftsWithAssignments++;
-        }
-      });
-    });
-    
-    console.log(`- Total shifts in table: ${totalRenderedShifts}`);
-    console.log(`- Shifts with assignments: ${shiftsWithAssignments}`);
-    console.log(`- Total scheduled shifts: ${scheduledShifts.length}`);
-    console.log(`- Coverage: ${Math.round((totalRenderedShifts / scheduledShifts.length) * 100)}%`);
-    
-    // Problem-Analyse
-    if (totalRenderedShifts < scheduledShifts.length) {
-      console.log('\n🚨 PROBLEM: Table is not showing all scheduled shifts!');
-      console.log('💡 The table structure (days × timeSlots) is smaller than actual scheduled shifts');
-      
-      // Zeige die fehlenden Shifts
-      const missingShifts = scheduledShifts.filter(scheduled => {
-        const dayOfWeek = getDayOfWeek(scheduled.date);
-        const timeSlotExists = allTimeSlots.some(ts => ts.id === scheduled.timeSlotId);
-        const dayExists = days.some(day => day.id === dayOfWeek);
-        
-        return !(timeSlotExists && dayExists);
-      });
-      
-      if (missingShifts.length > 0) {
-        console.log(`❌ ${missingShifts.length} shifts cannot be rendered in table:`);
-        missingShifts.slice(0, 5).forEach(shift => {
-          const dayOfWeek = getDayOfWeek(shift.date);
-          const timeSlot = shiftPlan.timeSlots?.find(ts => ts.id === shift.timeSlotId);
-          console.log(`   - ${shift.date} (Day ${dayOfWeek}): ${timeSlot?.name || 'Unknown'} - ${shift.assignedEmployees?.length || 0} assignments`);
-        });
-      }
-    }
-  };
-
-  // Extract plan-specific shifts using the same logic as AvailabilityManager
-  const getTimetableData = () => {
-    if (!shiftPlan || !shiftPlan.shifts || !shiftPlan.timeSlots) {
-      return { days: [], timeSlotsByDay: {}, allTimeSlots: [] };
-    }
-
-    // Group shifts by day
-    const shiftsByDay = shiftPlan.shifts.reduce((acc, shift) => {
-      if (!acc[shift.dayOfWeek]) {
-        acc[shift.dayOfWeek] = [];
-      }
-      acc[shift.dayOfWeek].push(shift);
-      return acc;
-    }, {} as Record<number, typeof shiftPlan.shifts>);
-
-    // Get unique days that have shifts
-    const days = Array.from(new Set(shiftPlan.shifts.map(shift => shift.dayOfWeek)))
-      .sort()
-      .map(dayId => {
-        return weekdays.find(day => day.id === dayId) || { id: dayId, name: `Tag ${dayId}` };
-      });
-
-    // For each day, get the time slots that actually have shifts
-    const timeSlotsByDay: Record<number, ExtendedTimeSlot[]> = {};
-    
-    days.forEach(day => {
-      const shiftsForDay = shiftsByDay[day.id] || [];
-      const timeSlotIdsForDay = new Set(shiftsForDay.map(shift => shift.timeSlotId));
-      
-      timeSlotsByDay[day.id] = shiftPlan.timeSlots
-        .filter(timeSlot => timeSlotIdsForDay.has(timeSlot.id))
-        .map(timeSlot => ({
-          ...timeSlot,
-          displayName: `${timeSlot.name} (${formatTime(timeSlot.startTime)}-${formatTime(timeSlot.endTime)})`
-        }))
-        .sort((a, b) => a.startTime.localeCompare(b.startTime));
-    });
-
-    // Get all unique time slots across all days for row headers
-    const allTimeSlotIds = new Set<string>();
-    days.forEach(day => {
-      timeSlotsByDay[day.id]?.forEach(timeSlot => {
-        allTimeSlotIds.add(timeSlot.id);
-      });
-    });
-
-    const allTimeSlots = Array.from(allTimeSlotIds)
-      .map(timeSlotId => shiftPlan.timeSlots.find(ts => ts.id === timeSlotId))
-      .filter(Boolean)
-      .map(timeSlot => ({
-        ...timeSlot!,
-        displayName: `${timeSlot!.name} (${formatTime(timeSlot!.startTime)}-${formatTime(timeSlot!.endTime)})`
-      }))
-      .sort((a, b) => a.startTime.localeCompare(b.startTime));
-
-    return { days, timeSlotsByDay, allTimeSlots };
-  };
-
   const getDayOfWeek = (dateString: string): number => {
     const date = new Date(dateString);
     return date.getDay() === 0 ? 7 : date.getDay();
@@ -369,20 +357,31 @@ const ShiftPlanView: React.FC = () => {
 
     try {
       setPublishing(true);
+      setAssignmentResult(null); // Reset previous results
+      setShowAssignmentPreview(false); // Reset preview
+      
+      console.log('🔄 STARTING ASSIGNMENT PREVIEW...');
       
       // FORCE COMPLETE REFRESH - don't rely on cached state
       const [refreshedEmployees, refreshedAvailabilities] = await Promise.all([
-        // Reload employees fresh
         employeeService.getEmployees().then(emps => emps.filter(emp => emp.isActive)),
-        // Reload availabilities fresh
         refreshAllAvailabilities()
       ]);
 
       console.log('🔄 USING FRESH DATA:');
       console.log('- Employees:', refreshedEmployees.length);
       console.log('- Availabilities:', refreshedAvailabilities.length);
+      console.log('- Shift Patterns:', shiftPlan.shifts?.length || 0);
+      console.log('- Scheduled Shifts:', scheduledShifts.length);
 
-      // ADD THIS: Define constraints object
+      // DEBUG: Show shift pattern IDs
+      if (shiftPlan.shifts) {
+        console.log('📋 SHIFT PATTERN IDs:');
+        shiftPlan.shifts.forEach((shift, index) => {
+          console.log(`   ${index + 1}. ${shift.id} (Day ${shift.dayOfWeek}, TimeSlot ${shift.timeSlotId})`);
+        });
+      }
+
       const constraints = {
         enforceNoTraineeAlone: true,
         enforceExperiencedWithChef: true,
@@ -390,6 +389,8 @@ const ShiftPlanView: React.FC = () => {
         targetEmployeesPerShift: 2
       };
 
+      console.log('🧠 Calling shift assignment service...');
+      
       // Use the freshly loaded data, not the state
       const result = await shiftAssignmentService.assignShifts(
         shiftPlan,
@@ -398,7 +399,6 @@ const ShiftPlanView: React.FC = () => {
         constraints
       );
 
-      // COMPREHENSIVE DEBUGGING
       console.log("🎯 RAW ASSIGNMENT RESULT FROM API:", {
         success: result.success,
         assignmentsCount: Object.keys(result.assignments).length,
@@ -407,31 +407,31 @@ const ShiftPlanView: React.FC = () => {
         resolutionReport: result.resolutionReport?.length || 0
       });
 
-      // Log the actual assignments with more context
+      // Log assignments with shift pattern context
+      console.log('🔍 ASSIGNMENTS BY SHIFT PATTERN:');
       Object.entries(result.assignments).forEach(([shiftId, empIds]) => {
-        console.log(`   📅 Assignment Key: ${shiftId}`);
-        console.log(`      Employees: ${empIds.join(', ')}`);
+        const shiftPattern = shiftPlan.shifts?.find(s => s.id === shiftId);
         
-        // Try to identify what type of ID this is
-        const isUuid = shiftId.length === 36; // UUID format
-        console.log(`      Type: ${isUuid ? 'UUID (likely scheduled shift)' : 'Pattern (likely shift pattern)'}`);
-        
-        // If it's a UUID, check if it matches any scheduled shift
-        if (isUuid) {
-          const matchingScheduledShift = scheduledShifts.find(s => s.id === shiftId);
-          if (matchingScheduledShift) {
-            console.log(`      ✅ Matches scheduled shift: ${matchingScheduledShift.date} - TimeSlot: ${matchingScheduledShift.timeSlotId}`);
-          } else {
-            console.log(`      ❌ No matching scheduled shift found for UUID`);
-          }
+        if (shiftPattern) {
+          console.log(`   ✅ Shift Pattern: ${shiftId}`);
+          console.log(`      - Day: ${shiftPattern.dayOfWeek}, TimeSlot: ${shiftPattern.timeSlotId}`);
+          console.log(`      - Employees: ${empIds.join(', ')}`);
+        } else {
+          console.log(`   ❌ UNKNOWN ID: ${shiftId}`);
+          console.log(`      - Employees: ${empIds.join(', ')}`);
+          console.log(`      - This ID does not match any shift pattern!`);
         }
       });
 
+      // CRITICAL: Update state and show preview
+      console.log('🔄 Setting assignment result and showing preview...');
       setAssignmentResult(result);
       setShowAssignmentPreview(true);
+      
+      console.log('✅ Assignment preview ready, modal should be visible');
 
     } catch (error) {
-      console.error('Error during assignment:', error);
+      console.error('❌ Error during assignment:', error);
       showNotification({
         type: 'error',
         title: 'Fehler',
@@ -458,13 +458,13 @@ const ShiftPlanView: React.FC = () => {
       }
 
       console.log(`📊 Found ${updatedShifts.length} scheduled shifts to update`);
+      console.log('🎯 Assignment keys from algorithm:', Object.keys(assignmentResult.assignments));
 
       const updatePromises = updatedShifts.map(async (scheduledShift) => {
-        // ✅ FIX: Map scheduled shift to shift pattern to find assignments
         const dayOfWeek = getDayOfWeek(scheduledShift.date);
         
         // Find the corresponding shift pattern for this day and time slot
-        const shiftPattern = shiftPlan.shifts?.find(shift => 
+        const shiftPattern = shiftPlan?.shifts?.find(shift => 
           shift.dayOfWeek === dayOfWeek && 
           shift.timeSlotId === scheduledShift.timeSlotId
         );
@@ -472,9 +472,13 @@ const ShiftPlanView: React.FC = () => {
         let assignedEmployees: string[] = [];
         
         if (shiftPattern) {
-          // Look for assignments using the shift pattern ID (what scheduler uses)
           assignedEmployees = assignmentResult.assignments[shiftPattern.id] || [];
           console.log(`📝 Updating scheduled shift ${scheduledShift.id} (Day ${dayOfWeek}, TimeSlot ${scheduledShift.timeSlotId}) with`, assignedEmployees, 'employees');
+          
+          if (assignedEmployees.length === 0) {
+            console.warn(`⚠️ No assignments found for shift pattern ${shiftPattern.id}`);
+            console.log('🔍 Available assignment keys:', Object.keys(assignmentResult.assignments));
+          }
         } else {
           console.warn(`⚠️ No shift pattern found for scheduled shift ${scheduledShift.id} (Day ${dayOfWeek}, TimeSlot ${scheduledShift.timeSlotId})`);
         }
@@ -509,13 +513,16 @@ const ShiftPlanView: React.FC = () => {
       setShiftPlan(reloadedPlan);
       setScheduledShifts(reloadedShifts);
 
+      setShowAssignmentPreview(false);
+      setAssignmentResult(null);
+
+      console.log('✅ Publishing completed, modal closed');
+
       showNotification({
         type: 'success',
         title: 'Erfolg',
         message: 'Schichtplan wurde erfolgreich veröffentlicht!'
       });
-
-      setShowAssignmentPreview(false);
 
     } catch (error) {
       console.error('❌ Error publishing shift plan:', error);
@@ -576,36 +583,36 @@ const ShiftPlanView: React.FC = () => {
     }
   };
 
-  const validateSchedulingData = (): boolean => {
-    console.log('🔍 Validating scheduling data...');
+  const debugShiftMatching = () => {
+    if (!shiftPlan || !scheduledShifts.length) return;
     
-    const totalEmployees = employees.length;
-    const employeesWithAvailabilities = new Set(
-      availabilities.map(avail => avail.employeeId)
-    ).size;
+    console.log('🔍 DEBUG: Shift Pattern to Scheduled Shift Matching');
+    console.log('==================================================');
     
-    const availabilityStatus = {
-      totalEmployees,
-      employeesWithAvailabilities,
-      coverage: Math.round((employeesWithAvailabilities / totalEmployees) * 100)
-    };
-    
-    console.log('📊 Availability Coverage:', availabilityStatus);
-    
-    // Check if we have ALL employee availabilities
-    if (employeesWithAvailabilities < totalEmployees) {
-      const missingEmployees = employees.filter(emp => 
-        !availabilities.some(avail => avail.employeeId === emp.id)
-      );
+    shiftPlan.shifts?.forEach(shiftPattern => {
+      const matchingScheduledShifts = scheduledShifts.filter(scheduled => {
+        const dayOfWeek = getDayOfWeek(scheduled.date);
+        return dayOfWeek === shiftPattern.dayOfWeek && 
+              scheduled.timeSlotId === shiftPattern.timeSlotId;
+      });
       
-      console.warn('⚠️ Missing availabilities for employees:', 
-        missingEmployees.map(emp => emp.email));
+      console.log(`📅 Shift Pattern: ${shiftPattern.id}`);
+      console.log(`   - Day: ${shiftPattern.dayOfWeek}, TimeSlot: ${shiftPattern.timeSlotId}`);
+      console.log(`   - Matching scheduled shifts: ${matchingScheduledShifts.length}`);
       
-      return false;
-    }
-    
-    return true;
+      if (assignmentResult) {
+        const assignments = assignmentResult.assignments[shiftPattern.id] || [];
+        console.log(`   - Assignments: ${assignments.length} employees`);
+      }
+    });
   };
+
+  // Rufe die Debug-Funktion auf, wenn Assignment-Ergebnisse geladen werden
+  useEffect(() => {
+    if (assignmentResult && shiftPlan) {
+      debugShiftMatching();
+    }
+  }, [assignmentResult, shiftPlan]);
 
   const canPublish = () => {
     if (!shiftPlan || shiftPlan.status === 'published') return false;
@@ -660,32 +667,33 @@ const ShiftPlanView: React.FC = () => {
   const getAssignmentsForScheduledShift = (scheduledShift: ScheduledShift): string[] => {
     if (!assignmentResult) return [];
     
-    // First try direct match with scheduled shift ID
-    if (assignmentResult.assignments[scheduledShift.id]) {
-      return assignmentResult.assignments[scheduledShift.id];
-    }
-    
-    // If no direct match, try to find by day and timeSlot pattern
     const dayOfWeek = getDayOfWeek(scheduledShift.date);
+    
+    // Find the corresponding shift pattern for this day and time slot
     const shiftPattern = shiftPlan?.shifts?.find(shift => 
       shift.dayOfWeek === dayOfWeek && 
       shift.timeSlotId === scheduledShift.timeSlotId
     );
     
     if (shiftPattern && assignmentResult.assignments[shiftPattern.id]) {
+      console.log(`✅ Found assignments for shift pattern ${shiftPattern.id}:`, assignmentResult.assignments[shiftPattern.id]);
       return assignmentResult.assignments[shiftPattern.id];
     }
     
+    // Fallback: Check if there's a direct match with scheduled shift ID (unlikely)
+    if (assignmentResult.assignments[scheduledShift.id]) {
+      console.log(`⚠️ Using direct scheduled shift assignment for ${scheduledShift.id}`);
+      return assignmentResult.assignments[scheduledShift.id];
+    }
+    
+    console.warn(`❌ No assignments found for scheduled shift ${scheduledShift.id} (Day ${dayOfWeek}, TimeSlot ${scheduledShift.timeSlotId})`);
     return [];
   };
 
   // Render timetable using the same structure as AvailabilityManager
   const renderTimetable = () => {
-    const { days, allTimeSlots, timeSlotsByDay } = getTimetableData();
-    if (!shiftPlan?.id) {
-      console.warn("Shift plan ID is missing");
-      return null;
-    }
+    const { days, allTimeSlots } = getTimetableData();
+    const validation = validateTimetableStructure();
 
     if (days.length === 0 || allTimeSlots.length === 0) {
       return (
@@ -719,8 +727,37 @@ const ShiftPlanView: React.FC = () => {
         }}>
           Schichtplan
           <div style={{ fontSize: '14px', fontWeight: 'normal', marginTop: '5px' }}>
-            {allTimeSlots.length} Schichttypen • {days.length} Tage • Nur tatsächlich im Plan verwendete Schichten
+            {allTimeSlots.length} Zeitslots • {days.length} Tage • Zeitbasierte Darstellung
           </div>
+        </div>
+
+        {/* Validation Warnings - SAME AS AVAILABILITYMANAGER */}
+        {!validation.isValid && (
+          <div style={{
+            backgroundColor: '#fff3cd',
+            border: '1px solid #ffeaa7',
+            padding: '15px',
+            margin: '10px'
+          }}>
+            <h4 style={{ margin: '0 0 10px 0', color: '#856404' }}>⚠️ Validierungswarnungen:</h4>
+            <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '12px' }}>
+              {validation.errors.map((error, index) => (
+                <li key={index}>{error}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Timetable Structure Info - SAME AS AVAILABILITYMANAGER */}
+        <div style={{
+          backgroundColor: '#d1ecf1',
+          border: '1px solid #bee5eb',
+          padding: '10px 15px',
+          margin: '10px',
+          borderRadius: '4px',
+          fontSize: '12px'
+        }}>
+          <strong>Struktur-Info:</strong> {allTimeSlots.length} Zeitslots × {days.length} Tage = {allTimeSlots.length * days.length} Zellen
         </div>
 
         <div style={{ overflowX: 'auto' }}>
@@ -754,23 +791,32 @@ const ShiftPlanView: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {allTimeSlots.map((timeSlot, timeIndex) => (
+              {allTimeSlots.map((timeSlot, timeSlotIndex) => (
                 <tr key={timeSlot.id} style={{
-                  backgroundColor: timeIndex % 2 === 0 ? 'white' : '#f8f9fa'
+                  backgroundColor: timeSlotIndex % 2 === 0 ? 'white' : '#f8f9fa'
                 }}>
                   <td style={{
                     padding: '12px 16px',
                     border: '1px solid #dee2e6',
                     fontWeight: '500',
-                    backgroundColor: '#f8f9fa'
+                    backgroundColor: '#f8f9fa',
+                    position: 'sticky',
+                    left: 0
                   }}>
-                    {timeSlot.displayName}
+                    <div style={{ fontWeight: 'bold' }}>
+                      {timeSlot.name}
+                    </div>
+                    <div style={{ fontSize: '14px', color: '#666' }}>
+                      {formatTime(timeSlot.startTime)} - {formatTime(timeSlot.endTime)}
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>
+                      ID: {timeSlot.id.substring(0, 8)}...
+                    </div>
                   </td>
                   {days.map(weekday => {
-                    // Check if this time slot exists for this day
-                    const timeSlotForDay = timeSlotsByDay[weekday.id]?.find(ts => ts.id === timeSlot.id);
+                    const shift = timeSlot.shiftsByDay[weekday.id];
                     
-                    if (!timeSlotForDay) {
+                    if (!shift) {
                       return (
                         <td key={weekday.id} style={{
                           padding: '12px 16px',
@@ -780,11 +826,14 @@ const ShiftPlanView: React.FC = () => {
                           color: '#ccc',
                           fontStyle: 'italic'
                         }}>
-                          -
+                          Kein Shift
                         </td>
                       );
                     }
 
+                    // Validation: Check if shift has correct timeSlotId and dayOfWeek - SAME AS AVAILABILITYMANAGER
+                    const isValidShift = shift.timeSlotId === timeSlot.id && shift.dayOfWeek === weekday.id;
+                    
                     let assignedEmployees: string[] = [];
                     let displayText = '';
 
@@ -806,7 +855,7 @@ const ShiftPlanView: React.FC = () => {
                         
                         displayText = assignedEmployees.map(empId => {
                           const employee = employees.find(emp => emp.id === empId);
-                          return employee ? employee.email : 'Unbekannt';
+                          return employee ? `${employee.firstname} ${employee.lastname}` : 'Unbekannt';
                         }).join(', ');
                       }
                     } else if (assignmentResult) {
@@ -821,20 +870,20 @@ const ShiftPlanView: React.FC = () => {
                         assignedEmployees = getAssignmentsForScheduledShift(scheduledShift);
                         displayText = assignedEmployees.map(empId => {
                           const employee = employees.find(emp => emp.id === empId);
-                          return employee ? employee.email : 'Unbekannt';
+                          return employee ? `${employee.firstname} ${employee.lastname}` : 'Unbekannt';
                         }).join(', ');
                       }
                     }
 
                     // If no assignments yet, show empty or required count
                     if (!displayText) {
-                      const shiftsForSlot = shiftPlan?.shifts?.filter(shift => 
-                        shift.dayOfWeek === weekday.id && 
-                        shift.timeSlotId === timeSlot.id
+                      const shiftsForSlot = shiftPlan?.shifts?.filter(s => 
+                        s.dayOfWeek === weekday.id && 
+                        s.timeSlotId === timeSlot.id
                       ) || [];
                       
-                      const totalRequired = shiftsForSlot.reduce((sum, shift) => 
-                        sum + shift.requiredEmployees, 0);
+                      const totalRequired = shiftsForSlot.reduce((sum, s) => 
+                        sum + s.requiredEmployees, 0);
                       
                       // Show "0/2" instead of just "0" to indicate it's empty
                       displayText = `0/${totalRequired}`;
@@ -850,11 +899,51 @@ const ShiftPlanView: React.FC = () => {
                         padding: '12px 16px',
                         border: '1px solid #dee2e6',
                         textAlign: 'center',
-                        backgroundColor: assignedEmployees.length > 0 ? '#e8f5e8' : 'transparent',
+                        backgroundColor: !isValidShift ? '#fff3cd' : (assignedEmployees.length > 0 ? '#e8f5e8' : 'transparent'),
                         color: assignedEmployees.length > 0 ? '#2c3e50' : '#666',
-                        fontSize: assignedEmployees.length > 0 ? '14px' : 'inherit'
+                        fontSize: assignedEmployees.length > 0 ? '14px' : 'inherit',
+                        position: 'relative'
                       }}>
+                        {/* Validation indicator - SAME AS AVAILABILITYMANAGER */}
+                        {!isValidShift && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '2px',
+                            right: '2px',
+                            backgroundColor: '#f39c12',
+                            color: 'white',
+                            borderRadius: '50%',
+                            width: '16px',
+                            height: '16px',
+                            fontSize: '10px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                          title={`Shift Validierung: timeSlotId=${shift.timeSlotId}, dayOfWeek=${shift.dayOfWeek}`}
+                          >
+                            ⚠️
+                          </div>
+                        )}
+
                         {displayText}
+
+                        {/* Shift debug info - SAME AS AVAILABILITYMANAGER */}
+                        <div style={{ 
+                          fontSize: '10px', 
+                          color: '#666', 
+                          marginTop: '4px',
+                          textAlign: 'left',
+                          fontFamily: 'monospace'
+                        }}>
+                          <div>Shift: {shift.id.substring(0, 6)}...</div>
+                          <div>Day: {shift.dayOfWeek}</div>
+                          {!isValidShift && (
+                            <div style={{ color: '#e74c3c', fontWeight: 'bold' }}>
+                              VALIDATION ERROR
+                            </div>
+                          )}
+                        </div>
                       </td>
                     );
                   })}
@@ -862,6 +951,24 @@ const ShiftPlanView: React.FC = () => {
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Summary Statistics - SAME AS AVAILABILITYMANAGER */}
+        <div style={{
+          backgroundColor: '#f8f9fa',
+          padding: '15px',
+          borderTop: '1px solid #dee2e6',
+          fontSize: '12px',
+          color: '#666'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <strong>Zusammenfassung:</strong> {allTimeSlots.length} Zeitslots × {days.length} Tage = {allTimeSlots.length * days.length} mögliche Shifts
+            </div>
+            <div>
+              <strong>Validierungsfehler:</strong> {validation.errors.length}
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -872,7 +979,7 @@ const ShiftPlanView: React.FC = () => {
 
   const { days, allTimeSlots } = getTimetableData();
   const availabilityStatus = getAvailabilityStatus();
-
+  const validation = validateTimetableStructure();
 
   return (
     <div style={{ padding: '20px' }}>
@@ -938,6 +1045,50 @@ const ShiftPlanView: React.FC = () => {
         </div>
       </div>
 
+      {/* Debug Info - Enhanced */}
+      <div style={{
+        backgroundColor: validation.errors.length > 0 ? '#fff3cd' : (allTimeSlots.length === 0 ? '#f8d7da' : '#d1ecf1'),
+        border: `1px solid ${validation.errors.length > 0 ? '#ffeaa7' : (allTimeSlots.length === 0 ? '#f5c6cb' : '#bee5eb')}`,
+        borderRadius: '6px',
+        padding: '15px',
+        marginBottom: '20px'
+      }}>
+        <h4 style={{ 
+          margin: '0 0 10px 0', 
+          color: validation.errors.length > 0 ? '#856404' : (allTimeSlots.length === 0 ? '#721c24' : '#0c5460') 
+        }}>
+          {validation.errors.length > 0 ? '⚠️ VALIDIERUNGSPROBLEME' : 
+          allTimeSlots.length === 0 ? '❌ KEINE SHIFTS GEFUNDEN' : '✅ PLAN-DATEN GELADEN'}
+        </h4>
+        <div style={{ fontSize: '12px', fontFamily: 'monospace' }}>
+          <div><strong>Ausgewählter Plan:</strong> {shiftPlan.name}</div>
+          <div><strong>Plan ID:</strong> {shiftPlan.id}</div>
+          <div><strong>Einzigartige Zeitslots:</strong> {allTimeSlots.length}</div>
+          <div><strong>Verwendete Tage:</strong> {days.length} ({days.map(d => d.name).join(', ')})</div>
+          <div><strong>Shift Patterns:</strong> {shiftPlan.shifts?.length || 0}</div>
+          <div><strong>Scheduled Shifts:</strong> {scheduledShifts.length}</div>
+          <div><strong>Geladene Verfügbarkeiten:</strong> {availabilities.length}</div>
+          <div><strong>Aktive Mitarbeiter:</strong> {employees.length}</div>
+          {assignmentResult && (
+            <div><strong>Assignment Keys:</strong> {Object.keys(assignmentResult.assignments).length}</div>
+          )}
+        </div>
+
+        {/* Show shift pattern vs scheduled shift matching */}
+        {shiftPlan.shifts && scheduledShifts.length > 0 && (
+          <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #bee5eb' }}>
+            <strong>Shift Matching:</strong>
+            <div style={{ fontSize: '11px' }}>
+              • {shiftPlan.shifts.length} Patterns → {scheduledShifts.length} Scheduled Shifts
+              {assignmentResult && (
+                <div>• {Object.keys(assignmentResult.assignments).length} Assignment Keys</div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Rest of the component remains the same... */}
       {/* Availability Status - only show for drafts */}
       {shiftPlan.status === 'draft' && (
         <div style={{
@@ -1017,8 +1168,8 @@ const ShiftPlanView: React.FC = () => {
         </div>
       )}
 
-      {/* Assignment Preview Modal */}
-      {showAssignmentPreview && assignmentResult && (
+      {/* Assignment Preview Modal - FIXED CONDITION */}
+      {(showAssignmentPreview || assignmentResult) && (
         <div style={{
           position: 'fixed',
           top: 0,
@@ -1037,12 +1188,13 @@ const ShiftPlanView: React.FC = () => {
             padding: '30px',
             maxWidth: '800px',
             maxHeight: '80vh',
-            overflow: 'auto'
+            overflow: 'auto',
+            width: '90%'
           }}>
             <h2>Wochenmuster-Zuordnung</h2>
             
             {/* Detaillierter Reparatur-Bericht anzeigen */}
-            {assignmentResult.resolutionReport && (
+            {assignmentResult?.resolutionReport && (
               <div style={{
                 backgroundColor: '#f8f9fa',
                 border: '1px solid #e9ecef',
@@ -1170,7 +1322,10 @@ const ShiftPlanView: React.FC = () => {
 
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
               <button
-                onClick={() => setShowAssignmentPreview(false)}
+                onClick={() => {
+                  setShowAssignmentPreview(false);
+                  setAssignmentResult(null);
+                }}
                 style={{
                   padding: '8px 16px',
                   backgroundColor: '#95a5a6',
@@ -1183,38 +1338,41 @@ const ShiftPlanView: React.FC = () => {
                 Abbrechen
               </button>
               
+              {/* KORRIGIERTER BUTTON MIT TYPESCRIPT-FIX */}
               <button
                 onClick={handlePublish}
-                disabled={publishing || assignmentResult.violations.filter(v => 
+                disabled={publishing || (assignmentResult ? assignmentResult.violations.filter(v => 
                   v.includes('ERROR:') || v.includes('❌ KRITISCH:')
-                ).length > 0}
+                ).length > 0 : true)}
                 style={{
                   padding: '10px 20px',
-                  backgroundColor: assignmentResult.violations.filter(v => 
+                  backgroundColor: assignmentResult ? (assignmentResult.violations.filter(v => 
                     v.includes('ERROR:') || v.includes('❌ KRITISCH:')
-                  ).length === 0 ? '#2ecc71' : '#95a5a6',
+                  ).length === 0 ? '#2ecc71' : '#95a5a6') : '#95a5a6',
                   color: 'white',
                   border: 'none',
                   borderRadius: '4px',
-                  cursor: assignmentResult.violations.filter(v => 
+                  cursor: assignmentResult ? (assignmentResult.violations.filter(v => 
                     v.includes('ERROR:') || v.includes('❌ KRITISCH:')
-                  ).length === 0 ? 'pointer' : 'not-allowed',
+                  ).length === 0 ? 'pointer' : 'not-allowed') : 'not-allowed',
                   fontWeight: 'bold',
                   fontSize: '16px'
                 }}
               >
                 {publishing ? 'Veröffentliche...' : (
-                  assignmentResult.violations.filter(v => 
-                    v.includes('ERROR:') || v.includes('❌ KRITISCH:')
-                  ).length === 0 
-                    ? 'Schichtplan veröffentlichen' 
-                    : 'Kritische Probleme müssen behoben werden'
+                  assignmentResult ? (
+                    assignmentResult.violations.filter(v => 
+                      v.includes('ERROR:') || v.includes('❌ KRITISCH:')
+                    ).length === 0 
+                      ? 'Schichtplan veröffentlichen' 
+                      : 'Kritische Probleme müssen behoben werden'
+                  ) : 'Lade Zuordnungen...'
                 )}
               </button>
             </div>
           </div>
         </div>
-      )}  
+      )}     
 
       {/* Timetable */}
       <div style={{

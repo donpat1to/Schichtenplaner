@@ -6,6 +6,25 @@ import { dirname, join } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Define interfaces for type safety
+interface TableColumnInfo {
+  cid: number;
+  name: string;
+  type: string;
+  notnull: number;
+  dflt_value: string | null;
+  pk: number;
+}
+
+interface CountResult {
+  count: number;
+}
+
+interface EmployeeRecord {
+  id: string;
+  // Note: roles column doesn't exist in new schema
+}
+
 // Helper function to ensure migrations are tracked
 async function ensureMigrationTable() {
   await db.exec(`
@@ -19,7 +38,7 @@ async function ensureMigrationTable() {
 
 // Helper function to check if a migration has been applied
 async function isMigrationApplied(migrationName: string): Promise<boolean> {
-  const result = await db.get<{ count: number }>(
+  const result = await db.get<CountResult>(
     'SELECT COUNT(*) as count FROM applied_migrations WHERE name = ?',
     [migrationName]
   );
@@ -34,6 +53,85 @@ async function markMigrationAsApplied(migrationName: string) {
   );
 }
 
+// UPDATED: Function to handle schema changes for the new employee type system
+async function applySchemaUpdates() {
+  console.log('🔄 Applying schema updates for new employee type system...');
+  
+  await db.run('BEGIN TRANSACTION');
+  
+  try {
+    // 1. Create employee_types table if it doesn't exist
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS employee_types (
+        type TEXT PRIMARY KEY,
+        category TEXT CHECK(category IN ('internal', 'external')) NOT NULL,
+        has_contract_type BOOLEAN NOT NULL DEFAULT FALSE
+      )
+    `);
+    
+    // 2. Insert default employee types
+    await db.run(`INSERT OR IGNORE INTO employee_types (type, category, has_contract_type) VALUES ('manager', 'internal', 1)`);
+    await db.run(`INSERT OR IGNORE INTO employee_types (type, category, has_contract_type) VALUES ('personell', 'internal', 1)`);
+    await db.run(`INSERT OR IGNORE INTO employee_types (type, category, has_contract_type) VALUES ('apprentice', 'internal', 1)`);
+    await db.run(`INSERT OR IGNORE INTO employee_types (type, category, has_contract_type) VALUES ('guest', 'external', 0)`);
+    
+    // 3. Check if employees table needs to be altered
+    const employeesTableInfo = await db.all<TableColumnInfo>(`
+      PRAGMA table_info(employees)
+    `);
+    
+    // FIXED: Check for employee_type column (not roles column)
+    const hasEmployeeType = employeesTableInfo.some((col: TableColumnInfo) => col.name === 'employee_type');
+    const hasIsTrainee = employeesTableInfo.some((col: TableColumnInfo) => col.name === 'is_trainee');
+    
+    if (!hasEmployeeType) {
+      console.log('🔄 Adding employee_type column to employees table...');
+      await db.run('ALTER TABLE employees ADD COLUMN employee_type TEXT NOT NULL DEFAULT "personell"');
+    }
+    
+    if (!hasIsTrainee) {
+      console.log('🔄 Adding is_trainee column to employees table...');
+      await db.run('ALTER TABLE employees ADD COLUMN is_trainee BOOLEAN DEFAULT FALSE NOT NULL');
+    }
+    
+    // 4. Create roles table if it doesn't exist
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS roles (
+        role TEXT PRIMARY KEY CHECK(role IN ('admin', 'user', 'maintenance')),
+        authority_level INTEGER NOT NULL UNIQUE CHECK(authority_level BETWEEN 1 AND 100),
+        description TEXT
+      )
+    `);
+    
+    // 5. Insert default roles
+    await db.run(`INSERT OR IGNORE INTO roles (role, authority_level, description) VALUES ('admin', 100, 'Vollzugriff')`);
+    await db.run(`INSERT OR IGNORE INTO roles (role, authority_level, description) VALUES ('maintenance', 50, 'Wartungszugriff')`);
+    await db.run(`INSERT OR IGNORE INTO roles (role, authority_level, description) VALUES ('user', 10, 'Standardbenutzer')`);
+    
+    // 6. Create employee_roles junction table if it doesn't exist
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS employee_roles (
+        employee_id TEXT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+        role TEXT NOT NULL REFERENCES roles(role),
+        PRIMARY KEY (employee_id, role)
+      )
+    `);
+    
+    // 7. REMOVED: Role migration logic since roles column doesn't exist in new schema
+    // In a fresh installation, we don't need to migrate existing roles
+    
+    console.log('ℹ️ Skipping role migration - fresh installation with new schema');
+    
+    await db.run('COMMIT');
+    console.log('✅ Schema updates applied successfully');
+    
+  } catch (error) {
+    await db.run('ROLLBACK');
+    console.error('❌ Schema updates failed:', error);
+    throw error;
+  }
+}
+
 export async function applyMigration() {
   try {
     console.log('📦 Starting database migration...');
@@ -41,60 +139,68 @@ export async function applyMigration() {
     // Ensure migration tracking table exists
     await ensureMigrationTable();
     
+    // Apply schema updates for new employee type system
+    await applySchemaUpdates();
+    
     // Get all migration files
     const migrationsDir = join(__dirname, '../database/migrations');
-    const files = await readdir(migrationsDir);
     
-    // Sort files to ensure consistent order
-    const migrationFiles = files
-      .filter(f => f.endsWith('.sql'))
-      .sort();
-    
-    // Process each migration file
-    for (const migrationFile of migrationFiles) {
-      if (await isMigrationApplied(migrationFile)) {
-        console.log(`ℹ️ Migration ${migrationFile} already applied, skipping...`);
-        continue;
-      }
+    try {
+      const files = await readdir(migrationsDir);
       
-      console.log(`📄 Applying migration: ${migrationFile}`);
-      const migrationPath = join(migrationsDir, migrationFile);
-      const migrationSQL = await readFile(migrationPath, 'utf-8');
+      // Sort files to ensure consistent order
+      const migrationFiles = files
+        .filter(f => f.endsWith('.sql'))
+        .sort();
       
-      // Split into individual statements
-      const statements = migrationSQL
-        .split(';')
-        .map(s => s.trim())
-        .filter(s => s.length > 0);
-      
-      // Start transaction for this migration
-      await db.run('BEGIN TRANSACTION');
-      
-      try {
-        // Execute each statement
-        for (const statement of statements) {
-          try {
-            await db.exec(statement);
-            console.log('✅ Executed:', statement.slice(0, 50) + '...');
-          } catch (error) {
-            const err = error as { code: string; message: string };
-            if (err.code === 'SQLITE_ERROR' && err.message.includes('duplicate column name')) {
-              console.log('ℹ️ Column already exists, skipping...');
-              continue;
-            }
-            throw error;
-          }
+      // Process each migration file
+      for (const migrationFile of migrationFiles) {
+        if (await isMigrationApplied(migrationFile)) {
+          console.log(`ℹ️ Migration ${migrationFile} already applied, skipping...`);
+          continue;
         }
         
-        // Mark migration as applied
-        await markMigrationAsApplied(migrationFile);
-        await db.run('COMMIT');
-        console.log(`✅ Migration ${migrationFile} applied successfully`);
+        console.log(`📄 Applying migration: ${migrationFile}`);
+        const migrationPath = join(migrationsDir, migrationFile);
+        const migrationSQL = await readFile(migrationPath, 'utf-8');
         
-      } catch (error) {
-        await db.run('ROLLBACK');
-        throw error;
+        // Split into individual statements
+        const statements = migrationSQL
+          .split(';')
+          .map(s => s.trim())
+          .filter(s => s.length > 0);
+        
+        // Start transaction for this migration
+        await db.run('BEGIN TRANSACTION');
+        
+        try {
+          // Execute each statement
+          for (const statement of statements) {
+            try {
+              await db.exec(statement);
+              console.log('✅ Executed:', statement.slice(0, 50) + '...');
+            } catch (error) {
+              const err = error as { code: string; message: string };
+              if (err.code === 'SQLITE_ERROR' && err.message.includes('duplicate column name')) {
+                console.log('ℹ️ Column already exists, skipping...');
+                continue;
+              }
+              throw error;
+            }
+          }
+          
+          // Mark migration as applied
+          await markMigrationAsApplied(migrationFile);
+          await db.run('COMMIT');
+          console.log(`✅ Migration ${migrationFile} applied successfully`);
+          
+        } catch (error) {
+          await db.run('ROLLBACK');
+          throw error;
+        }
       }
+    } catch (error) {
+      console.log('ℹ️ No migration directory found or no migration files, skipping file-based migrations...');
     }
     
     console.log('✅ All migrations completed successfully');

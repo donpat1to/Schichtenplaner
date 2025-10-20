@@ -7,10 +7,10 @@ export interface Availability {
   id: string;
   employeeId: string;
   planId: string;
-  shiftId: string; // Now references shift_id instead of time_slot_id + day_of_week
-  preferenceLevel: 1 | 2 | 3; // 1:preferred, 2:available, 3:unavailable
+  shiftId: string;
+  preferenceLevel: 1 | 2 | 3;
   notes?: string;
-  // Optional convenience fields (can be joined from shifts and time_slots tables)
+  // Optional convenience fields
   dayOfWeek?: number;
   timeSlotId?: string;
   timeSlotName?: string;
@@ -30,7 +30,7 @@ export interface Constraint {
     maxHoursPerWeek?: number;
     [key: string]: any;
   };
-  weight?: number; // For soft constraints
+  weight?: number;
 }
 
 export interface ScheduleRequest {
@@ -153,8 +153,9 @@ export interface AvailabilityWithDetails extends Availability {
     id: string;
     firstname: string;
     lastname: string;
-    employeeType: 'manager' | 'trainee' | 'experienced';
+    employeeType: 'manager' | 'personell' | 'apprentice' | 'guest';
     canWorkAlone: boolean;
+    isTrainee: boolean;
   };
   shift?: {
     dayOfWeek: number;

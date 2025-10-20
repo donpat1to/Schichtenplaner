@@ -20,6 +20,7 @@ interface DashboardData {
   }>;
   teamStats: {
     totalEmployees: number;
+    personell: number;
     manager: number;
     trainee: number;
     experienced: number;
@@ -36,6 +37,7 @@ const Dashboard: React.FC = () => {
     upcomingShifts: [],
     teamStats: {
       totalEmployees: 0,
+      personell: 0,
       manager: 0,
       trainee: 0,
       experienced: 0
@@ -208,11 +210,13 @@ const Dashboard: React.FC = () => {
 
     // Count by type
     const managerCount = employees.filter(e => e.employeeType === 'manager').length;
-    const traineeCount = employees.filter(e => e.employeeType === 'trainee').length;
-    const experiencedCount = employees.filter(e => e.employeeType === 'experienced').length;
+    const personellCount = employees.filter(e => e.employeeType === 'personell').length;
+    const traineeCount = employees.filter(e => e.isTrainee === true).length;
+    const experiencedCount = employees.filter(e => e.isTrainee === false).length;
 
     return {
       totalEmployees,
+      personell: personellCount,
       manager: managerCount,
       trainee: traineeCount,
       experienced: experiencedCount,
@@ -538,7 +542,7 @@ const Dashboard: React.FC = () => {
           <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>👥 Team-Übersicht</h3>
           <div style={{ display: 'grid', gap: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>Mitarbeiter:</span>
+              <span>Gesamte Belegschaft:</span>
               <span style={{ fontWeight: 'bold', fontSize: '18px' }}>
                 {data.teamStats.totalEmployees}
               </span>
@@ -550,15 +554,9 @@ const Dashboard: React.FC = () => {
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>Erfahrene:</span>
+              <span>Personal:</span>
               <span style={{ fontWeight: 'bold', color: '#f39c12' }}>
-                {data.teamStats.experienced}
-              </span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>Neue:</span>
-              <span style={{ fontWeight: 'bold', color: '#e74c3c' }}>
-                {data.teamStats.trainee}
+                {data.teamStats.personell}
               </span>
             </div>
           </div>

@@ -42,7 +42,7 @@ export async function initializeDatabase(): Promise<void> {
       
       console.log('Existing tables found:', existingTables.map(t => t.name).join(', ') || 'none');
       
-      // UPDATED: Drop tables in correct dependency order
+      // UPDATED: Drop tables in correct dependency order for new schema
       const tablesToDrop = [
         'employee_availability',
         'shift_assignments', 
@@ -50,9 +50,10 @@ export async function initializeDatabase(): Promise<void> {
         'shifts',
         'time_slots',
         'employee_roles',
-        'shift_plans',
         'roles',
         'employees',
+        'employee_types',
+        'shift_plans',
         'applied_migrations'
       ];
       
@@ -100,15 +101,22 @@ export async function initializeDatabase(): Promise<void> {
       }
     }
     
-    // UPDATED: Insert default roles after creating the tables
+    // UPDATED: Insert default data in correct order
     try {
+      console.log('Inserting default employee types...');
+      await db.run(`INSERT OR IGNORE INTO employee_types (type, category, has_contract_type) VALUES ('manager', 'internal', 1)`);
+      await db.run(`INSERT OR IGNORE INTO employee_types (type, category, has_contract_type) VALUES ('personell', 'internal', 1)`);
+      await db.run(`INSERT OR IGNORE INTO employee_types (type, category, has_contract_type) VALUES ('apprentice', 'internal', 1)`);
+      await db.run(`INSERT OR IGNORE INTO employee_types (type, category, has_contract_type) VALUES ('guest', 'external', 0)`);
+      console.log('✅ Default employee types inserted');
+      
       console.log('Inserting default roles...');
-      await db.run(`INSERT OR IGNORE INTO roles (role) VALUES ('admin')`);
-      await db.run(`INSERT OR IGNORE INTO roles (role) VALUES ('user')`);
-      await db.run(`INSERT OR IGNORE INTO roles (role) VALUES ('maintenance')`);
+      await db.run(`INSERT OR IGNORE INTO roles (role, authority_level, description) VALUES ('admin', 100, 'Vollzugriff')`);
+      await db.run(`INSERT OR IGNORE INTO roles (role, authority_level, description) VALUES ('maintenance', 50, 'Wartungszugriff')`);
+      await db.run(`INSERT OR IGNORE INTO roles (role, authority_level, description) VALUES ('user', 10, 'Standardbenutzer')`);
       console.log('✅ Default roles inserted');
     } catch (error) {
-      console.error('Error inserting default roles:', error);
+      console.error('Error inserting default data:', error);
       await db.run('ROLLBACK');
       throw error;
     }

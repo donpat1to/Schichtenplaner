@@ -1,3 +1,28 @@
+-- Employee Types
+CREATE TABLE IF NOT EXISTS employee_types (
+  type TEXT PRIMARY KEY,
+  category TEXT CHECK(category IN ('internal', 'external')) NOT NULL,
+  has_contract_type BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+-- Default Employee Types
+-- 'manager' and 'apprentice' contract_type_default = flexible
+-- 'personell' contract_type_default = small
+-- employee_types category 'external' contract_type = NONE
+-- moved experienced and trainee into personell -> is_trainee boolean added in employees
+INSERT OR IGNORE INTO employee_types (type, category, has_contract_type) VALUES 
+  ('manager', 'internal', 1),
+  ('personell', 'internal', 1),
+  ('apprentice', 'internal', 1),
+  ('guest', 'external', 0);
+
+-- Roles lookup table
+CREATE TABLE IF NOT EXISTS roles (
+  role TEXT PRIMARY KEY CHECK(role IN ('admin', 'user', 'maintenance')),
+  authority_level INTEGER NOT NULL UNIQUE CHECK(authority_level BETWEEN 1 AND 100),
+  description TEXT
+);
+
 -- Employees table
 CREATE TABLE IF NOT EXISTS employees (
   id TEXT PRIMARY KEY,
@@ -5,30 +30,27 @@ CREATE TABLE IF NOT EXISTS employees (
   password TEXT NOT NULL,
   firstname TEXT NOT NULL,
   lastname TEXT NOT NULL,
-  employee_type TEXT CHECK(employee_type IN ('manager', 'trainee', 'experienced')) NOT NULL,
-  contract_type TEXT CHECK(contract_type IN ('small', 'large')) NOT NULL,
+  employee_type TEXT NOT NULL REFERENCES employee_types(type),
+  contract_type TEXT CHECK(contract_type IN ('small', 'large', 'flexible')),
   can_work_alone BOOLEAN DEFAULT FALSE,
+  is_trainee BOOLEAN DEFAULT FALSE NOT NULL,
   is_active BOOLEAN DEFAULT TRUE,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   last_login TEXT DEFAULT NULL
 );
 
--- Roles lookup table
-CREATE TABLE IF NOT EXISTS roles (
-  role TEXT PRIMARY KEY CHECK(role IN ('admin', 'user', 'maintenance'))
-);
-
--- Junction table: many-to-many relationship
+-- Roles Employee Junction table (NACH employees und roles)
 CREATE TABLE IF NOT EXISTS employee_roles (
   employee_id TEXT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
   role TEXT NOT NULL REFERENCES roles(role),
   PRIMARY KEY (employee_id, role)
 );
 
--- Insert default roles if they don't exist
-INSERT OR IGNORE INTO roles (role) VALUES ('admin');
-INSERT OR IGNORE INTO roles (role) VALUES ('user');
-INSERT OR IGNORE INTO roles (role) VALUES ('maintenance');
+-- Insert default roles (NACH roles Tabelle)
+INSERT OR IGNORE INTO roles (role, authority_level, description) VALUES 
+  ('admin', 100, 'Vollzugriff'),
+  ('maintenance', 50, 'Wartungszugriff'),
+  ('user', 10, 'Standardbenutzer');
 
 -- Shift plans table
 CREATE TABLE IF NOT EXISTS shift_plans (
@@ -109,29 +131,21 @@ CREATE TABLE IF NOT EXISTS employee_availability (
   UNIQUE(employee_id, plan_id, shift_id)
 );
 
--- Performance indexes (UPDATED - removed role index from employees)
+-- Performance indexes
 CREATE INDEX IF NOT EXISTS idx_employees_email_active ON employees(email, is_active);
 CREATE INDEX IF NOT EXISTS idx_employees_type_active ON employees(employee_type, is_active);
-
--- Index for employee_roles table (NEW)
 CREATE INDEX IF NOT EXISTS idx_employee_roles_employee ON employee_roles(employee_id);
 CREATE INDEX IF NOT EXISTS idx_employee_roles_role ON employee_roles(role);
-
 CREATE INDEX IF NOT EXISTS idx_shift_plans_status_date ON shift_plans(status, start_date, end_date);
 CREATE INDEX IF NOT EXISTS idx_shift_plans_created_by ON shift_plans(created_by);
 CREATE INDEX IF NOT EXISTS idx_shift_plans_template ON shift_plans(is_template, status);
-
 CREATE INDEX IF NOT EXISTS idx_time_slots_plan ON time_slots(plan_id);
-
 CREATE INDEX IF NOT EXISTS idx_shifts_plan_day ON shifts(plan_id, day_of_week);
 CREATE INDEX IF NOT EXISTS idx_shifts_required_employees ON shifts(required_employees);
 CREATE INDEX IF NOT EXISTS idx_shifts_plan_time ON shifts(plan_id, time_slot_id, day_of_week);
-
 CREATE INDEX IF NOT EXISTS idx_scheduled_shifts_plan_date ON scheduled_shifts(plan_id, date);
 CREATE INDEX IF NOT EXISTS idx_scheduled_shifts_date_time ON scheduled_shifts(date, time_slot_id);
 CREATE INDEX IF NOT EXISTS idx_scheduled_shifts_required_employees ON scheduled_shifts(required_employees);
-
 CREATE INDEX IF NOT EXISTS idx_shift_assignments_employee ON shift_assignments(employee_id);
 CREATE INDEX IF NOT EXISTS idx_shift_assignments_shift ON shift_assignments(scheduled_shift_id);
-
 CREATE INDEX IF NOT EXISTS idx_employee_availability_employee_plan ON employee_availability(employee_id, plan_id);

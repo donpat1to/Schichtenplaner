@@ -97,16 +97,17 @@ export class SchedulingService {
       const currentDate = new Date(startDate);
       currentDate.setDate(startDate.getDate() + dayOffset);
       
-      const dayOfWeek = currentDate.getDay() === 0 ? 7 : currentDate.getDay(); // Convert Sunday from 0 to 7
+      const dayOfWeek = currentDate.getDay() === 0 ? 7 : currentDate.getDay();
       const dayShifts = shiftPlan.shifts.filter(shift => shift.dayOfWeek === dayOfWeek);
       
       dayShifts.forEach(shift => {
-        // ✅ Use day-of-week pattern instead of date-based pattern
-        const shiftId = `${shift.id}`;
+        // ✅ CRITICAL FIX: Use consistent shift ID format that matches availability lookup
+        const shiftId = `shift_${dayOfWeek}_${shift.timeSlotId}`;
+        const dateStr = currentDate.toISOString().split('T')[0];
         
         shifts.push({
-          id: shiftId, // This matches what frontend expects
-          date: currentDate.toISOString().split('T')[0],
+          id: shiftId, // This will match what availabilities are looking for
+          date: dateStr,
           timeSlotId: shift.timeSlotId,
           requiredEmployees: shift.requiredEmployees,
           minWorkers: 1,
@@ -114,7 +115,7 @@ export class SchedulingService {
           isPriority: false
         });
 
-        console.log(`✅ Generated shift: ${shiftId} for day ${dayOfWeek}, timeSlot ${shift.timeSlotId}`);
+        console.log(`✅ Generated shift: ${shiftId} for date ${dateStr}, day ${dayOfWeek}, timeSlot ${shift.timeSlotId}`);
       });
     }
 
