@@ -550,7 +550,7 @@ const ShiftPlanView: React.FC = () => {
           try {
             return await employeeService.getAvailabilities(emp.id);
           } catch (error) {
-            console.error(`❌ Failed to load availabilities for ${emp.name}:`, error);
+            console.error(`❌ Failed to load availabilities for ${emp.email}:`, error);
             return []; // Return empty array instead of failing entire operation
           }
         });
@@ -599,7 +599,7 @@ const ShiftPlanView: React.FC = () => {
       );
       
       console.warn('⚠️ Missing availabilities for employees:', 
-        missingEmployees.map(emp => emp.name));
+        missingEmployees.map(emp => emp.email));
       
       return false;
     }
@@ -806,7 +806,7 @@ const ShiftPlanView: React.FC = () => {
                         
                         displayText = assignedEmployees.map(empId => {
                           const employee = employees.find(emp => emp.id === empId);
-                          return employee ? employee.name : 'Unbekannt';
+                          return employee ? employee.email : 'Unbekannt';
                         }).join(', ');
                       }
                     } else if (assignmentResult) {
@@ -821,7 +821,7 @@ const ShiftPlanView: React.FC = () => {
                         assignedEmployees = getAssignmentsForScheduledShift(scheduledShift);
                         displayText = assignedEmployees.map(empId => {
                           const employee = employees.find(emp => emp.id === empId);
-                          return employee ? employee.name : 'Unbekannt';
+                          return employee ? employee.email : 'Unbekannt';
                         }).join(', ');
                       }
                     }

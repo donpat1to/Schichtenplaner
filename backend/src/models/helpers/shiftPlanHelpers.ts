@@ -78,7 +78,8 @@ export function calculateTotalRequiredEmployees(plan: ShiftPlan): number {
   return plan.shifts.reduce((total, shift) => total + shift.requiredEmployees, 0);
 }
 
-/*export function getScheduledShiftByDateAndTime(
+// UPDATED: Get scheduled shift by date and time slot
+export function getScheduledShiftByDateAndTime(
   plan: ShiftPlan, 
   date: string, 
   timeSlotId: string
@@ -86,7 +87,7 @@ export function calculateTotalRequiredEmployees(plan: ShiftPlan): number {
   return plan.scheduledShifts?.find(shift => 
     shift.date === date && shift.timeSlotId === timeSlotId
   );
-}*/
+}
 
 export function canPublishPlan(plan: ShiftPlan): { canPublish: boolean; errors: string[] } {
   const errors: string[] = [];
@@ -115,4 +116,14 @@ export function canPublishPlan(plan: ShiftPlan): { canPublish: boolean; errors: 
     canPublish: errors.length === 0,
     errors
   };
+}
+
+// NEW: Helper for shift generation
+export function generateShiftId(): string {
+  return `shift_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+// NEW: Helper for time slot generation
+export function generateTimeSlotId(): string {
+  return `timeslot_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }

@@ -16,7 +16,7 @@ interface AuthContextType {
   refreshUser: () => void;
   needsSetup: boolean;
   checkSetupStatus: () => Promise<void>;
-  updateUser: (userData: Employee) => void; // Add this line
+  updateUser: (userData: Employee) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);

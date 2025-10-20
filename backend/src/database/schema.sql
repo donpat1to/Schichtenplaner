@@ -104,10 +104,13 @@ CREATE TABLE IF NOT EXISTS employee_availability (
   UNIQUE(employee_id, plan_id, shift_id)
 );
 
--- Performance indexes
-CREATE INDEX IF NOT EXISTS idx_employees_role_active ON employees(role, is_active);
+-- Performance indexes (UPDATED - removed role index from employees)
 CREATE INDEX IF NOT EXISTS idx_employees_email_active ON employees(email, is_active);
 CREATE INDEX IF NOT EXISTS idx_employees_type_active ON employees(employee_type, is_active);
+
+-- Index for employee_roles table (NEW)
+CREATE INDEX IF NOT EXISTS idx_employee_roles_employee ON employee_roles(employee_id);
+CREATE INDEX IF NOT EXISTS idx_employee_roles_role ON employee_roles(role);
 
 CREATE INDEX IF NOT EXISTS idx_shift_plans_status_date ON shift_plans(status, start_date, end_date);
 CREATE INDEX IF NOT EXISTS idx_shift_plans_created_by ON shift_plans(created_by);

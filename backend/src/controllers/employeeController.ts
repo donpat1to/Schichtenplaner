@@ -7,9 +7,20 @@ import { AuthRequest } from '../middleware/auth.js';
 import { CreateEmployeeRequest } from '../models/Employee.js';
 
 function generateEmail(firstname: string, lastname: string): string {
-  // Remove special characters and convert to lowercase
-  const cleanFirstname = firstname.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const cleanLastname = lastname.toLowerCase().replace(/[^a-z0-9]/g, '');
+  // Convert German umlauts to their expanded forms
+  const convertUmlauts = (str: string): string => {
+    return str
+      .toLowerCase()
+      .replace(/ü/g, 'ue')
+      .replace(/ö/g, 'oe')
+      .replace(/ä/g, 'ae')
+      .replace(/ß/g, 'ss');
+  };
+
+  // Remove any remaining special characters and convert to lowercase
+  const cleanFirstname = convertUmlauts(firstname).replace(/[^a-z0-9]/g, '');
+  const cleanLastname = convertUmlauts(lastname).replace(/[^a-z0-9]/g, '');
+  
   return `${cleanFirstname}.${cleanLastname}@sp.de`;
 }
 

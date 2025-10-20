@@ -14,9 +14,10 @@ const Settings: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showAvailabilityManager, setShowAvailabilityManager] = useState(false);
   
-  // Profile form state
+  // Profile form state - updated for firstname/lastname
   const [profileForm, setProfileForm] = useState({
-    name: currentUser?.name || ''
+    firstname: currentUser?.firstname || '',
+    lastname: currentUser?.lastname || ''
   });
 
   // Password form state
@@ -29,7 +30,8 @@ const Settings: React.FC = () => {
   useEffect(() => {
     if (currentUser) {
       setProfileForm({
-        name: currentUser.name
+        firstname: currentUser.firstname || '',
+        lastname: currentUser.lastname || ''
       });
     }
   }, [currentUser]);
@@ -54,10 +56,21 @@ const Settings: React.FC = () => {
     e.preventDefault();
     if (!currentUser) return;
 
+    // Validation
+    if (!profileForm.firstname.trim() || !profileForm.lastname.trim()) {
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: 'Vorname und Nachname sind erforderlich'
+      });
+      return;
+    }
+
     try {
       setLoading(true);
       await employeeService.updateEmployee(currentUser.id, {
-        name: profileForm.name.trim()
+        firstname: profileForm.firstname.trim(),
+        lastname: profileForm.lastname.trim()
       });
 
       // Update the auth context with new user data
@@ -167,8 +180,10 @@ const Settings: React.FC = () => {
     );
   }
 
-  // Style constants for consistency
-
+  // Get full name for display
+  const getFullName = () => {
+    return `${currentUser.firstname || ''} ${currentUser.lastname || ''}`.trim();
+  };
 
   return (
     <div style={styles.container}>
@@ -294,6 +309,9 @@ const Settings: React.FC = () => {
                         disabled
                         style={styles.fieldInputDisabled}
                       />
+                      <div style={styles.fieldHint}>
+                        E-Mail wird automatisch aus Vor- und Nachname generiert
+                      </div>
                     </div>
                     <div style={styles.field}>
                       <label style={styles.fieldLabel}>
@@ -331,31 +349,61 @@ const Settings: React.FC = () => {
                   </div>
                 </div>
                 <div style={styles.infoCard}>
-                  {/* Editable name field */}
-                  <div style={{ ...styles.field, marginTop: '1rem' }}>
-                    <label style={styles.fieldLabel}>
-                      Vollständiger Name *
-                    </label>
-                    <input
-                      type="text"
-                      name="name"
-                      value={profileForm.name}
-                      onChange={handleProfileChange}
-                      required
-                      style={{
-                        ...styles.fieldInput,
-                        width: '95%'
-                      }}
-                      placeholder="Ihr vollständiger Name"
-                      onFocus={(e) => {
-                        e.target.style.borderColor = '#1a1325';
-                        e.target.style.boxShadow = '0 0 0 3px rgba(26, 19, 37, 0.1)';
-                      }}
-                      onBlur={(e) => {
-                        e.target.style.borderColor = '#e8e8e8';
-                        e.target.style.boxShadow = 'none';
-                      }}
-                    />
+                  <h4 style={styles.infoCardTitle}>Persönliche Informationen</h4>
+                  {/* Editable name fields */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div style={styles.field}>
+                      <label style={styles.fieldLabel}>
+                        Vorname *
+                      </label>
+                      <input
+                        type="text"
+                        name="firstname"
+                        value={profileForm.firstname}
+                        onChange={handleProfileChange}
+                        required
+                        style={styles.fieldInput}
+                        placeholder="Ihr Vorname"
+                        onFocus={(e) => {
+                          e.target.style.borderColor = '#1a1325';
+                          e.target.style.boxShadow = '0 0 0 3px rgba(26, 19, 37, 0.1)';
+                        }}
+                        onBlur={(e) => {
+                          e.target.style.borderColor = '#e8e8e8';
+                          e.target.style.boxShadow = 'none';
+                        }}
+                      />
+                    </div>
+                    <div style={styles.field}>
+                      <label style={styles.fieldLabel}>
+                        Nachname *
+                      </label>
+                      <input
+                        type="text"
+                        name="lastname"
+                        value={profileForm.lastname}
+                        onChange={handleProfileChange}
+                        required
+                        style={styles.fieldInput}
+                        placeholder="Ihr Nachname"
+                        onFocus={(e) => {
+                          e.target.style.borderColor = '#1a1325';
+                          e.target.style.boxShadow = '0 0 0 3px rgba(26, 19, 37, 0.1)';
+                        }}
+                        onBlur={(e) => {
+                          e.target.style.borderColor = '#e8e8e8';
+                          e.target.style.boxShadow = 'none';
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ marginTop: '1rem', padding: '1rem', background: '#f8f9fa', borderRadius: '8px' }}>
+                    <div style={{ fontSize: '0.9rem', color: '#666' }}>
+                      <strong>Vorschau:</strong> {getFullName() || '(Kein Name)'}
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: '#888', marginTop: '0.5rem' }}>
+                      E-Mail: {currentUser.email}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -363,21 +411,21 @@ const Settings: React.FC = () => {
               <div style={styles.actions}>
                 <button
                   type="submit"
-                  disabled={loading || !profileForm.name.trim()}
+                  disabled={loading || !profileForm.firstname.trim() || !profileForm.lastname.trim()}
                   style={{
                     ...styles.button,
                     ...styles.buttonPrimary,
-                    ...((loading || !profileForm.name.trim()) ? styles.buttonDisabled : {})
+                    ...((loading || !profileForm.firstname.trim() || !profileForm.lastname.trim()) ? styles.buttonDisabled : {})
                   }}
                   onMouseEnter={(e) => {
-                    if (!loading && profileForm.name.trim()) {
+                    if (!loading && profileForm.firstname.trim() && profileForm.lastname.trim()) {
                       e.currentTarget.style.background = styles.buttonPrimaryHover.background;
                       e.currentTarget.style.transform = styles.buttonPrimaryHover.transform;
                       e.currentTarget.style.boxShadow = styles.buttonPrimaryHover.boxShadow;
                     }
                   }}
                   onMouseLeave={(e) => {
-                    if (!loading && profileForm.name.trim()) {
+                    if (!loading && profileForm.firstname.trim() && profileForm.lastname.trim()) {
                       e.currentTarget.style.background = styles.buttonPrimary.background;
                       e.currentTarget.style.transform = 'none';
                       e.currentTarget.style.boxShadow = styles.buttonPrimary.boxShadow;
