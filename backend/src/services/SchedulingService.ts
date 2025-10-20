@@ -52,6 +52,55 @@ export class SchedulingService {
     const shifts = this.prepareShifts(shiftPlan);
     const workerAvailabilities = this.prepareAvailabilities(availabilities, shiftPlan);
     
+    // 🆕 ENHANCED DATA VALIDATION
+    console.log('\n🔍 ===== ENHANCED DATA VALIDATION =====');
+    console.log(`Shift Plan: ${shiftPlan.name} (${shiftPlan.id})`);
+    console.log(`Template: ${shiftPlan.isTemplate}`);
+    console.log(`Generated shifts: ${shifts.length}`);
+    console.log(`Input availabilities: ${availabilities.length}`);
+    console.log(`Mapped availabilities: ${workerAvailabilities.length}`);
+    
+    // Check shift ID patterns
+    const shiftIdsFromShifts = shifts.map(s => s.id);
+    const shiftIdsFromAvailabilities = [...new Set(workerAvailabilities.map(a => a.shiftId))];
+    
+    console.log(`Shift IDs in generated shifts: ${shiftIdsFromShifts.length}`);
+    console.log(`Unique shift IDs in availabilities: ${shiftIdsFromAvailabilities.length}`);
+    
+    // Find matching shift IDs
+    const matchingShiftIds = shiftIdsFromAvailabilities.filter(availId => 
+      shiftIdsFromShifts.includes(availId)
+    );
+    
+    console.log(`✅ Matching shift IDs: ${matchingShiftIds.length}/${shiftIdsFromAvailabilities.length}`);
+    
+    // Show first few matches for verification
+    if (matchingShiftIds.length > 0) {
+      console.log('🔍 FIRST 5 MATCHING SHIFT IDs:');
+      matchingShiftIds.slice(0, 5).forEach(id => {
+        const shift = shifts.find(s => s.id === id);
+        const availCount = workerAvailabilities.filter(a => a.shiftId === id).length;
+        console.log(`   - ${id}: ${availCount} availabilities, Date: ${shift?.date}, TimeSlot: ${shift?.timeSlotId}`);
+      });
+    }
+    
+    // Show unmatched availabilities for debugging
+    const unmatchedAvailabilities = workerAvailabilities.filter(avail => 
+      !shiftIdsFromShifts.includes(avail.shiftId)
+    );
+    
+    if (unmatchedAvailabilities.length > 0) {
+      console.log('❌ UNMATCHED AVAILABILITIES:');
+      const uniqueUnmatched = [...new Set(unmatchedAvailabilities.map(a => a.shiftId))];
+      uniqueUnmatched.slice(0, 5).forEach(shiftId => {
+        const count = unmatchedAvailabilities.filter(a => a.shiftId === shiftId).length;
+        console.log(`   - ${shiftId}: ${count} availabilities`);
+      });
+      if (uniqueUnmatched.length > 5) console.log(`   ... and ${uniqueUnmatched.length - 5} more unique unmatched shift IDs`);
+    }
+    
+    console.log('===== END ENHANCED DATA VALIDATION =====\n');
+    
     return {
       shiftPlan: {
         id: shiftPlan.id,
@@ -97,16 +146,16 @@ export class SchedulingService {
       const currentDate = new Date(startDate);
       currentDate.setDate(startDate.getDate() + dayOffset);
       
-      const dayOfWeek = currentDate.getDay() === 0 ? 7 : currentDate.getDay(); // Convert Sunday from 0 to 7
+      const dayOfWeek = currentDate.getDay() === 0 ? 7 : currentDate.getDay();
       const dayShifts = shiftPlan.shifts.filter(shift => shift.dayOfWeek === dayOfWeek);
       
       dayShifts.forEach(shift => {
-        // ✅ Use day-of-week pattern instead of date-based pattern
-        const shiftId = `${shift.id}`;
+        const shiftId = shift.id; // Use the original shift pattern ID
+        const dateStr = currentDate.toISOString().split('T')[0];
         
         shifts.push({
-          id: shiftId, // This matches what frontend expects
-          date: currentDate.toISOString().split('T')[0],
+          id: shiftId, // This matches the frontend availability records
+          date: dateStr,
           timeSlotId: shift.timeSlotId,
           requiredEmployees: shift.requiredEmployees,
           minWorkers: 1,
@@ -114,37 +163,42 @@ export class SchedulingService {
           isPriority: false
         });
 
-        console.log(`✅ Generated shift: ${shiftId} for day ${dayOfWeek}, timeSlot ${shift.timeSlotId}`);
+        console.log(`✅ Generated shift: ${shiftId} for date ${dateStr}, day ${dayOfWeek}, timeSlot ${shift.timeSlotId}`);
       });
     }
 
     console.log("Created shifts for one week. Amount: ", shifts.length);
+    
+    // Debug: Show which shift IDs we're using
+    console.log('🔍 SHIFT IDS IN GENERATED SHIFTS:');
+    shifts.forEach(shift => {
+      console.log(`   - ${shift.id} (Date: ${shift.date}, TimeSlot: ${shift.timeSlotId})`);
+    });
+    
     return shifts;
   }
 
   private prepareAvailabilities(availabilities: Availability[], shiftPlan: ShiftPlan): any[] {
-    return availabilities.map(avail => ({
-      employeeId: avail.employeeId,
-      shiftId: this.findShiftIdForAvailability(avail, shiftPlan),
-      availability: avail.preferenceLevel
-    }));
+    console.log('🔄 Preparing availabilities for worker...');
+    console.log(`Input availabilities: ${availabilities.length} records`);
+    
+    const workerAvailabilities = availabilities.map(avail => {
+      const shiftId = avail.shiftId;
+      
+      console.log(`📋 Availability ${avail.id}: employee=${avail.employeeId}, shift=${shiftId}, preference=${avail.preferenceLevel}`);
+      
+      return {
+        employeeId: avail.employeeId,
+        shiftId: shiftId, // Use the original shift ID from frontend
+        preferenceLevel: avail.preferenceLevel
+      };
+    });
+    console.log(`✅ Mapped ${workerAvailabilities.length} availabilities for worker`);
+    return workerAvailabilities;
   }
 
   private findShiftIdForAvailability(availability: Availability, shiftPlan: ShiftPlan): string {
-    // Find the corresponding scheduled shift ID for this availability
-    if (shiftPlan.scheduledShifts) {
-      const scheduledShift = shiftPlan.scheduledShifts.find(shift => 
-        shift.timeSlotId === availability.timeSlotId && 
-        this.getDayOfWeekFromDate(shift.date) === availability.dayOfWeek
-      );
-      
-      if (scheduledShift) {
-        return scheduledShift.id;
-      }
-    }
-    
-    // Fallback: generate a consistent ID
-    return `shift_${availability.dayOfWeek}_${availability.timeSlotId}`;
+    return availability.shiftId;
   }
 
   private getDayOfWeekFromDate(dateString: string): number {

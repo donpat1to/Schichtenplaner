@@ -95,6 +95,30 @@ const ShiftPlanView: React.FC = () => {
     console.log('🔍 STATE DEBUG - publishing:', publishing);
   }, [showAssignmentPreview, assignmentResult, publishing]);
 
+  const debugAvailabilityShiftIds = () => {
+    if (!availabilities.length) return;
+    
+    console.log('🔍 AVAILABILITY SHIFT ID ANALYSIS:');
+    const uniqueShiftIds = [...new Set(availabilities.map(a => a.shiftId))];
+    
+    console.log(`Unique shift IDs in availabilities: ${uniqueShiftIds.length}`);
+    uniqueShiftIds.forEach(shiftId => {
+      const count = availabilities.filter(a => a.shiftId === shiftId).length;
+      const pref1 = availabilities.filter(a => a.shiftId === shiftId && a.preferenceLevel === 1).length;
+      const pref2 = availabilities.filter(a => a.shiftId === shiftId && a.preferenceLevel === 2).length;
+      const pref3 = availabilities.filter(a => a.shiftId === shiftId && a.preferenceLevel === 3).length;
+      
+      console.log(`   ${shiftId}: ${count} total (✅${pref1} 🔶${pref2} ❌${pref3})`);
+    });
+  };
+
+  // Call this after loading availabilities
+  useEffect(() => {
+    if (availabilities.length > 0) {
+      debugAvailabilityShiftIds();
+    }
+  }, [availabilities]);
+
   // Create a data structure that maps days to their shifts with time slot info - SAME AS AVAILABILITYMANAGER
   const getTimetableData = () => {
     if (!shiftPlan || !shiftPlan.shifts || !shiftPlan.timeSlots) {
