@@ -31,7 +31,7 @@ RUN python -c "from ortools.sat.python import cp_model; print('OR-Tools installe
 
 
 # Frontend build stage
-FROM node:20-alpine AS frontend-builder
+FROM node:20-bullseye AS frontend-builder
 
 WORKDIR /app/frontend
 
