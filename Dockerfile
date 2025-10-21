@@ -3,15 +3,9 @@ FROM node:20-alpine AS backend-builder
 
 WORKDIR /app/backend
 
-# Install ortools from Alpine packages (if available)
-RUN apk add --no-cache \
-    python3 \
-    py3-pip \
-    build-base \
-    python3-dev
-
-# Try Alpine package first, then pip as fallback
-RUN apk add py3-ortools 2>/dev/null || pip3 install --break-system-packages --no-cache-dir ortools
+# Install Python + OR-Tools
+RUN apt-get update && apt-get install -y python3 python3-pip build-essential \
+ && pip install --no-cache-dir ortools
 
 # Create symlink so python3 is callable as python
 RUN ln -sf /usr/bin/python3 /usr/bin/python
@@ -29,14 +23,12 @@ COPY backend/src/ ./src/
 # Build backend
 RUN npm run build
 
-RUN echo "import ortools; import ortools.sat.python.cp_model; print('OR-Tools installed successfully')" > verify_ortools.py \
- && python3 verify_ortools.py \
- && rm verify_ortools.py
 
 # Verify Python and OR-Tools installation
-RUN echo "import ortools; import ortools.sat.python.cp_model; print('OR-Tools installed successfully')" > verify_ortools.py \
- && python verify_ortools.py \
- && rm verify_ortools.py
+RUN python -c "from ortools.sat.python import cp_model; print('OR-Tools installed successfully')"
+
+RUN python3 -c "from ortools.sat.python import cp_model; print('OR-Tools installed successfully')"
+
 
 # Frontend build stage
 FROM node:20-alpine AS frontend-builder
