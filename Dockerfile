@@ -29,6 +29,10 @@ COPY backend/src/ ./src/
 # Build backend
 RUN npm run build
 
+RUN echo "import ortools; import ortools.sat.python.cp_model; print('OR-Tools installed successfully')" > verify_ortools.py \
+ && python3 verify_ortools.py \
+ && rm verify_ortools.py
+
 # Verify Python and OR-Tools installation
 RUN echo "import ortools; import ortools.sat.python.cp_model; print('OR-Tools installed successfully')" > verify_ortools.py \
  && python verify_ortools.py \
