@@ -1,5 +1,5 @@
 # Multi-stage build for combined frontend + backend
-FROM node:20-alpine AS backend-builder
+FROM node:20-bullseye AS backend-builder
 
 WORKDIR /app/backend
 
@@ -27,7 +27,7 @@ RUN npm run build
 # Verify Python and OR-Tools installation
 RUN python -c "from ortools.sat.python import cp_model; print('OR-Tools installed successfully')"
 
-RUN python3 -c "from ortools.sat.python import cp_model; print('OR-Tools installed successfully')"
+#RUN python3 -c "from ortools.sat.python import cp_model; print('OR-Tools installed successfully')"
 
 
 # Frontend build stage
