@@ -30,11 +30,11 @@ const Navigation: React.FC = () => {
   };
 
   const navigationItems = [
-    { path: '/', label: 'Dashboard', roles: ['admin', 'instandhalter', 'user'] },
-    { path: '/shift-plans', label: 'Schichtpläne', roles: ['admin', 'instandhalter', 'user'] },
-    { path: '/employees', label: 'Mitarbeiter', roles: ['admin', 'instandhalter'] },
-    { path: '/help', label: 'Hilfe', roles: ['admin', 'instandhalter', 'user'] },
-    { path: '/settings', label: 'Einstellungen', roles: ['admin', 'instandhalter', 'user'] },
+    { path: '/', label: 'Dashboard', roles: ['admin', 'maintenance', 'user'] },
+    { path: '/shift-plans', label: 'Schichtpläne', roles: ['admin', 'maintenance', 'user'] },
+    { path: '/employees', label: 'Mitarbeiter', roles: ['admin', 'maintenance'] },
+    { path: '/help', label: 'Hilfe', roles: ['admin', 'maintenance', 'user'] },
+    { path: '/settings', label: 'Einstellungen', roles: ['admin', 'maintenance', 'user'] },
   ];
 
   const filteredNavigation = navigationItems.filter(item => 

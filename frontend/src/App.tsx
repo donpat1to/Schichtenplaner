@@ -19,7 +19,7 @@ import Setup from './pages/Setup/Setup';
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[] }> = ({ 
   children, 
-  roles = ['admin', 'instandhalter', 'user'] 
+  roles = ['admin', 'maintenance', 'user'] 
 }) => {
   const { user, loading, hasRole } = useAuth();
 
@@ -91,12 +91,12 @@ const AppContent: React.FC = () => {
         </ProtectedRoute>
       } />
       <Route path="/shift-plans/new" element={
-        <ProtectedRoute roles={['admin', 'instandhalter']}>
+        <ProtectedRoute roles={['admin', 'maintenance']}>
           <ShiftPlanCreate />
         </ProtectedRoute>
       } />
       <Route path="/shift-plans/:id/edit" element={
-        <ProtectedRoute roles={['admin', 'instandhalter']}>
+        <ProtectedRoute roles={['admin', 'maintenance']}>
           <ShiftPlanEdit />
         </ProtectedRoute>
       } />
@@ -106,7 +106,7 @@ const AppContent: React.FC = () => {
         </ProtectedRoute>
       } />
       <Route path="/employees" element={
-        <ProtectedRoute roles={['admin', 'instandhalter']}>
+        <ProtectedRoute roles={['admin', 'maintenance']}>
           <EmployeeManagement />
         </ProtectedRoute>
       } />

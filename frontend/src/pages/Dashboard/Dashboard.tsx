@@ -393,7 +393,7 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Quick Actions - Nur für Admins/Instandhalter */}
-      {hasRole(['admin', 'instandhalter']) && (
+      {hasRole(['admin', 'maintenance']) && (
         <div style={{ marginBottom: '30px' }}>
           <h2 style={{ marginBottom: '15px', color: '#2c3e50' }}>Schnellaktionen</h2>
           <div style={{ 
@@ -535,7 +535,7 @@ const Dashboard: React.FC = () => {
             <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
               <div style={{ fontSize: '48px', marginBottom: '10px' }}>📅</div>
               <div>Kein aktiver Schichtplan</div>
-              {hasRole(['admin', 'instandhalter']) && (
+              {hasRole(['admin', 'maintenance']) && (
                 <Link to="/shift-plans/new">
                   <button style={{
                     marginTop: '10px',
@@ -643,7 +643,7 @@ const Dashboard: React.FC = () => {
         )}
 
         {/* Letzte Schichtpläne (für Admins/Instandhalter) */}
-        {hasRole(['admin', 'instandhalter']) && (
+        {hasRole(['admin', 'maintenance']) && (
           <div style={{
             backgroundColor: 'white',
             padding: '20px',

@@ -24,18 +24,18 @@ router.get('/' , authMiddleware, getShiftPlans);
 router.get('/:id', authMiddleware, getShiftPlan);
 
 // POST create new shift plan
-router.post('/', requireRole(['admin', 'instandhalter']), createShiftPlan);
+router.post('/', requireRole(['admin', 'maintenance']), createShiftPlan);
 
 // POST create new plan from preset
-router.post('/from-preset', requireRole(['admin', 'instandhalter']), createFromPreset);
+router.post('/from-preset', requireRole(['admin', 'maintenance']), createFromPreset);
 
 // PUT update shift plan or template
-router.put('/:id', requireRole(['admin', 'instandhalter']), updateShiftPlan);
+router.put('/:id', requireRole(['admin', 'maintenance']), updateShiftPlan);
 
 // DELETE shift plan or template
-router.delete('/:id', requireRole(['admin', 'instandhalter']), deleteShiftPlan);
+router.delete('/:id', requireRole(['admin', 'maintenance']), deleteShiftPlan);
 
 // POST clear assignments and reset to draft
-router.post('/:id/clear-assignments', requireRole(['admin', 'instandhalter']), clearAssignments);
+router.post('/:id/clear-assignments', requireRole(['admin', 'maintenance']), clearAssignments);
 
 export default router;

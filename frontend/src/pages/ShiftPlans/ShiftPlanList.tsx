@@ -70,7 +70,7 @@ const ShiftPlanList: React.FC = () => {
         marginBottom: '30px' 
       }}>
         <h1>📅 Schichtpläne</h1>
-        {hasRole(['admin', 'instandhalter']) && (
+        {hasRole(['admin', 'maintenance']) && (
           <Link to="/shift-plans/new">
             <button style={{ 
               padding: '10px 20px', 
@@ -143,7 +143,7 @@ const ShiftPlanList: React.FC = () => {
                 >
                   Anzeigen
                 </button>
-                {hasRole(['admin', 'instandhalter']) && (
+                {hasRole(['admin', 'maintenance']) && (
                   <>
                     <button
                       onClick={() => navigate(`/shift-plans/${plan.id}/edit`)}

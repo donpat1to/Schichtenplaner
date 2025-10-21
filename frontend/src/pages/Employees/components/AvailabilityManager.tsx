@@ -322,7 +322,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
     // Check for missing time slots
     const usedTimeSlotIds = new Set(selectedPlan?.shifts?.map(s => s.timeSlotId) || []);
     const availableTimeSlotIds = new Set(selectedPlan?.timeSlots?.map(ts => ts.id) || []);
-    
+
     usedTimeSlotIds.forEach(timeSlotId => {
       if (!availableTimeSlotIds.has(timeSlotId)) {
         validationErrors.push(`Zeitslot ${timeSlotId} wird verwendet, existiert aber nicht in timeSlots`);
@@ -588,6 +588,31 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         return;
       }
 
+      // Contract type validation
+      const availableShifts = validAvailabilities.filter(avail => 
+        avail.preferenceLevel === 1 || avail.preferenceLevel === 2
+      ).length;
+
+      let contractRequirement = 0;
+      let contractTypeName = '';
+
+      if (employee.contractType === 'small') {
+        contractRequirement = 2;
+        contractTypeName = 'Kleiner Vertrag';
+      } else if (employee.contractType === 'large') {
+        contractRequirement = 3;
+        contractTypeName = 'Großer Vertrag';
+      }
+
+      if (contractRequirement > 0 && availableShifts < contractRequirement) {
+        setError(
+          `${contractTypeName} erfordert mindestens ${contractRequirement} verfügbare Shifts. ` +
+          `Aktuell sind nur ${availableShifts} Shifts mit Verfügbarkeit "Bevorzugt" oder "Möglich" ausgewählt.`
+        );
+        setSaving(false);
+        return;
+      }
+
       // Convert to the format expected by the API - using shiftId directly
       const requestData = {
         planId: selectedPlanId,
@@ -633,6 +658,12 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
   // Get full name for display
   const employeeFullName = `${employee.firstname} ${employee.lastname}`;
 
+  // Mininmum amount of shifts per contract type
+  const availableShiftsCount = availabilities.filter(avail => 
+    avail.preferenceLevel === 1 || avail.preferenceLevel === 2
+  ).length;
+    
+
   return (
     <div style={{
       maxWidth: '1900px',
@@ -660,6 +691,14 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         <p style={{ margin: 0, color: '#7f8c8d' }}>
           <strong>Email:</strong> {employee.email}
         </p>
+        {employee.contractType && (
+          <p style={{ margin: '5px 0 0 0', color: employee.contractType === 'small' ? '#f39c12' : '#27ae60' }}>
+            <strong>Vertrag:</strong> 
+            {employee.contractType === 'small' ? ' Kleiner Vertrag (min. 2 verfügbare Shifts)' : 
+            employee.contractType === 'large' ? ' Großer Vertrag (min. 3 verfügbare Shifts)' : 
+            ' Flexibler Vertrag'}
+          </p>
+        )}
       </div>
 
       {error && (
@@ -816,7 +855,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
             fontWeight: 'bold'
           }}
         >
-          {saving ? '⏳ Wird gespeichert...' : 'Verfügbarkeiten speichern'}
+          {saving ? '⏳ Wird gespeichert...' : `Verfügbarkeiten speichern (${availableShiftsCount})`}
         </button>
       </div>
     </div>

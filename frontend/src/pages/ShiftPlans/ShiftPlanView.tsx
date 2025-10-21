@@ -1005,7 +1005,7 @@ const ShiftPlanView: React.FC = () => {
           </div>
         </div>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            {shiftPlan.status === 'published' && hasRole(['admin', 'instandhalter']) && (
+            {shiftPlan.status === 'published' && hasRole(['admin', 'maintenance']) && (
             <button
               onClick={handleRecreateAssignments}
               disabled={recreating}
@@ -1076,7 +1076,7 @@ const ShiftPlanView: React.FC = () => {
               </div>
             </div>
             
-            {hasRole(['admin', 'instandhalter']) && (
+            {hasRole(['admin', 'maintenance']) && (
               <div>
                 <button
                   onClick={handlePreviewAssignment}

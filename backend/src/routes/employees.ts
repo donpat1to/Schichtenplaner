@@ -20,9 +20,9 @@ router.use(authMiddleware);
 
 // Employee CRUD Routes
 router.get('/', authMiddleware, getEmployees);
-router.get('/:id', requireRole(['admin', 'instandhalter']), getEmployee);
+router.get('/:id', requireRole(['admin', 'maintenance']), getEmployee);
 router.post('/', requireRole(['admin']), createEmployee);
-router.put('/:id', requireRole(['admin']), updateEmployee);
+router.put('/:id', requireRole(['admin', 'maintenance']), updateEmployee);
 router.delete('/:id', requireRole(['admin']), deleteEmployee);
 router.put('/:id/password', authMiddleware, changePassword);
 router.put('/:id/last-login', authMiddleware, updateLastLogin);

@@ -99,22 +99,27 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
       if (checked) {
         return {
           ...prev,
-          roles: [...prev.roles, role]
+          roles: [role]
         };
       } else {
-        return {
+        const newRoles = prev.roles.filter(r => r !== role);
+        return{
           ...prev,
-          roles: prev.roles.filter(r => r !== role)
+          roles: newRoles.length > 0 ? newRoles : ['user']
         };
       }
     });
   };
 
   const handleEmployeeTypeChange = (employeeType: EmployeeType) => {
-    // Determine if contract type should be shown and set default
-    const requiresContract = employeeType !== 'guest';
-    const defaultContractType = requiresContract ? 'small' as ContractType : undefined;
-    
+    // Determine contract type based on employee type
+    let contractType: ContractType | undefined;
+    if (employeeType === 'manager' || employeeType === 'apprentice') {
+      contractType = 'flexible';
+    } else if (employeeType !== 'guest') {
+      contractType = 'small';
+    }
+
     // Determine if can work alone based on employee type
     const canWorkAlone = employeeType === 'manager' || 
                         (employeeType === 'personell' && !formData.isTrainee);
@@ -125,7 +130,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
     setFormData(prev => ({
       ...prev,
       employeeType,
-      contractType: defaultContractType,
+      contractType,
       canWorkAlone,
       isTrainee
     }));
@@ -273,7 +278,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                   onChange={handleChange}
                   required
                   style={{
-                    width: '100%',
+                    width: '94%',
                     padding: '10px',
                     border: '1px solid #ddd',
                     borderRadius: '4px',
@@ -294,7 +299,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                   onChange={handleChange}
                   required
                   style={{
-                    width: '100%',
+                    width: '94%',
                     padding: '10px',
                     border: '1px solid #ddd',
                     borderRadius: '4px',
@@ -311,7 +316,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                 E-Mail Adresse (automatisch generiert)
               </label>
               <div style={{
-                width: '100%',
+                width: '97%',
                 padding: '10px',
                 border: '1px solid #ddd',
                 borderRadius: '4px',
@@ -340,7 +345,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                   required
                   minLength={6}
                   style={{
-                    width: '100%',
+                    width: '97%',
                     padding: '10px',
                     border: '1px solid #ddd',
                     borderRadius: '4px',
@@ -354,78 +359,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
               </div>
             )}
           </div>
-
-          {/* Vertragstyp (nur für Admins und interne Mitarbeiter) */}
-          {hasRole(['admin']) && showContractType && (
-            <div style={{
-              padding: '20px',
-              backgroundColor: '#e8f4fd',
-              borderRadius: '8px',
-              border: '1px solid #b6d7e8'
-            }}>
-              <h3 style={{ margin: '0 0 15px 0', color: '#0c5460' }}>📝 Vertragstyp</h3>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {contractTypeOptions.map(contract => (
-                  <div 
-                    key={contract.value}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      padding: '15px',
-                      border: `2px solid ${formData.contractType === contract.value ? '#3498db' : '#e0e0e0'}`,
-                      borderRadius: '8px',
-                      backgroundColor: formData.contractType === contract.value ? '#f0f8ff' : 'white',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s'
-                    }}
-                    onClick={() => handleContractTypeChange(contract.value)}
-                  >
-                    <input
-                      type="radio"
-                      name="contractType"
-                      value={contract.value}
-                      checked={formData.contractType === contract.value}
-                      onChange={() => handleContractTypeChange(contract.value)}
-                      style={{
-                        marginRight: '12px',
-                        marginTop: '2px',
-                        width: '18px',
-                        height: '18px'
-                      }}
-                    />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ 
-                        fontWeight: 'bold', 
-                        color: '#2c3e50',
-                        marginBottom: '4px',
-                        fontSize: '16px'
-                      }}>
-                        {contract.label}
-                      </div>
-                      <div style={{ 
-                        fontSize: '14px', 
-                        color: '#7f8c8d',
-                        lineHeight: '1.4'
-                      }}>
-                        {contract.description}
-                      </div>
-                    </div>
-                    <div style={{
-                      padding: '6px 12px',
-                      backgroundColor: formData.contractType === contract.value ? '#3498db' : '#95a5a6',
-                      color: 'white',
-                      borderRadius: '15px',
-                      fontSize: '12px',
-                      fontWeight: 'bold'
-                    }}>
-                      {contract.value.toUpperCase()}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Mitarbeiter Kategorie */}
           <div style={{
@@ -527,6 +460,107 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
               </div>
             )}
           </div>
+
+          {/* Vertragstyp (nur für Admins und interne Mitarbeiter) */}
+          {hasRole(['admin']) && showContractType && (
+            <div style={{
+              padding: '20px',
+              backgroundColor: '#e8f4fd',
+              borderRadius: '8px',
+              border: '1px solid #b6d7e8'
+            }}>
+              <h3 style={{ margin: '0 0 15px 0', color: '#0c5460' }}>📝 Vertragstyp</h3>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {contractTypeOptions.map(contract => {
+                  const isFlexibleDisabled = contract.value === 'flexible' && formData.employeeType === 'personell';
+                  const isSmallLargeDisabled = (contract.value === 'small' || contract.value === 'large') && 
+                                            (formData.employeeType === 'manager' || formData.employeeType === 'apprentice');
+                  const isDisabled = isFlexibleDisabled || isSmallLargeDisabled;
+                  
+                  return (
+                    <div 
+                      key={contract.value}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        padding: '15px',
+                        border: `2px solid ${formData.contractType === contract.value ? '#3498db' : '#e0e0e0'}`,
+                        borderRadius: '8px',
+                        backgroundColor: formData.contractType === contract.value ? '#f0f8ff' : 'white',
+                        cursor: isDisabled ? 'not-allowed' : 'pointer',
+                        transition: 'all 0.2s',
+                        opacity: isDisabled ? 0.6 : 1
+                      }}
+                      onClick={isDisabled ? undefined : () => handleContractTypeChange(contract.value)}
+                    >
+                      <input
+                        type="radio"
+                        name="contractType"
+                        value={contract.value}
+                        checked={formData.contractType === contract.value}
+                        onChange={isDisabled ? undefined : () => handleContractTypeChange(contract.value)}
+                        disabled={isDisabled}
+                        style={{
+                          marginRight: '12px',
+                          marginTop: '2px',
+                          width: '18px',
+                          height: '18px'
+                        }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ 
+                          fontWeight: 'bold', 
+                          color: '#2c3e50',
+                          marginBottom: '4px',
+                          fontSize: '16px'
+                        }}>
+                          {contract.label}
+                          {isFlexibleDisabled && (
+                            <span style={{
+                              fontSize: '12px',
+                              color: '#e74c3c',
+                              marginLeft: '8px',
+                              fontWeight: 'normal'
+                            }}>
+                              (Nicht verfügbar für Personell)
+                            </span>
+                          )}
+                          {isSmallLargeDisabled && (
+                            <span style={{
+                              fontSize: '12px',
+                              color: '#e74c3c',
+                              marginLeft: '8px',
+                              fontWeight: 'normal'
+                            }}>
+                              (Nicht verfügbar für {formData.employeeType === 'manager' ? 'Manager' : 'Auszubildende'})
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ 
+                          fontSize: '14px', 
+                          color: '#7f8c8d',
+                          lineHeight: '1.4'
+                        }}>
+                          {contract.description}
+                        </div>
+                      </div>
+                      <div style={{
+                        padding: '6px 12px',
+                        backgroundColor: isDisabled ? '#95a5a6' : (formData.contractType === contract.value ? '#3498db' : '#95a5a6'),
+                        color: 'white',
+                        borderRadius: '15px',
+                        fontSize: '12px',
+                        fontWeight: 'bold'
+                      }}>
+                        {contract.value.toUpperCase()}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Eigenständigkeit */}
           <div style={{

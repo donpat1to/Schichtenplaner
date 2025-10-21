@@ -14,9 +14,9 @@ const router = express.Router();
 router.use(authMiddleware);
 
 
-router.post('/:id/generate-shifts', requireRole(['admin', 'instandhalter']), generateScheduledShiftsForPlan);
+router.post('/:id/generate-shifts', requireRole(['admin', 'maintenance']), generateScheduledShiftsForPlan);
 
-router.post('/:id/regenerate-shifts', requireRole(['admin', 'instandhalter']), regenerateScheduledShifts);
+router.post('/:id/regenerate-shifts', requireRole(['admin', 'maintenance']), regenerateScheduledShifts);
 
 // GET all scheduled shifts for a plan
 router.get('/plan/:planId', authMiddleware, getScheduledShiftsFromPlan);

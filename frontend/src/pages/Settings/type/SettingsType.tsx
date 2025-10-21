@@ -74,7 +74,7 @@
       border: '1px solid rgba(255, 255, 255, 0.8)',
       boxShadow: '0 4px 20px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.04)',
       backdropFilter: 'blur(10px)',
-      minHeight: '200px',
+      minHeight: '100px',
     },
     section: {
       marginBottom: '2rem',

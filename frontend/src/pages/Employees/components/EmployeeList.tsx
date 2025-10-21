@@ -48,6 +48,13 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
     return true;
   });
 
+  // Helper to get highest role for sorting
+  const getHighestRole = (roles: string[]): string => {
+    if (roles.includes('admin')) return 'admin';
+    if (roles.includes('maintenance')) return 'maintenance';
+    return 'user';
+  };
+
   // Sort employees based on selected field and direction
   const sortedEmployees = [...filteredEmployees].sort((a, b) => {
     let aValue: any;
@@ -67,7 +74,6 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
         bValue = b.canWorkAlone;
         break;
       case 'role':
-        // Use the highest role for sorting
         aValue = getHighestRole(a.roles || []);
         bValue = getHighestRole(b.roles || []);
         break;
@@ -86,13 +92,6 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
       return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
     }
   });
-
-  // Helper to get highest role for sorting
-  const getHighestRole = (roles: string[]): string => {
-    if (roles.includes('admin')) return 'admin';
-    if (roles.includes('maintenance')) return 'maintenance';
-    return 'user';
-  };
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
