@@ -14,12 +14,13 @@ RUN apk add --no-cache \
     g++ \
     linux-headers
 
-# Create symlink so python3 is callable as python
-RUN ln -sf /usr/bin/python3 /usr/bin/python
+# Install python package which provides 'python' command
+RUN apk add --no-cache python3 py3-pip && \
+    ln -s /usr/bin/python3 /usr/bin/python
 
 # Upgrade pip and install Python dependencies
-RUN python -m pip install --upgrade pip && \
-    pip install ortools
+RUN python3 -m pip install --upgrade pip && \
+    python3 -m pip install ortools
 
 # Copy backend files
 COPY backend/package*.json ./
