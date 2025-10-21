@@ -3,7 +3,7 @@ import path from 'path';
 
 export function runPythonScript(scriptPath, args = []) {
   return new Promise((resolve, reject) => {
-    const pythonProcess = spawn('python3', [scriptPath, ...args]);
+    const pythonProcess = spawn('python', [scriptPath, ...args]);
     
     let stdout = '';
     let stderr = '';
