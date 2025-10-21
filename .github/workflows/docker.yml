@@ -159,3 +159,4 @@ jobs:
           echo "📦 Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
           echo "🏷️  Tags: ${{ steps.meta.outputs.tags }}"
           echo "🚀 New version: ${{ needs.set-tag.outputs.tag_name }}"
+          
