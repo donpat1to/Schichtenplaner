@@ -1,18 +1,26 @@
 version: '3.8'
-services:
-  frontend:
-    build: ./frontend
-    ports:
-      - "80:80"
-    depends_on:
-      - backend
 
-  backend:
-    build: ./backend
+services:
+  schichtplan:
+    build: 
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
       - "3001:3001"
+      - "3000:3000"
     environment:
-      - DATABASE_URL=file:./dev.db
-      - JWT_SECRET=your-secret-key
+      - NODE_ENV=production
+      - DATABASE_URL=file:./prod.db
+      - JWT_SECRET=your-production-secret-key-change-this
+      - PYTHON_PATH=/usr/bin/python3
+    volumes:
+      - app_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  # Später: Database service hinzufügen
+volumes:
+  app_data:

@@ -6,7 +6,11 @@
     "dev": "npm run build && npx tsx src/server.ts",
     "build": "tsc", 
     "start": "node dist/server.js",
-    "prestart": "npm run build"
+    "prestart": "npm run build",
+    "test": "jest",
+    "test:python": "python3 -c \"from ortools.sat.python import cp_model; print('OR-Tools OK')\"",
+    "docker:build": "docker build -t schichtplan-backend .",
+    "docker:run": "docker run -p 3001:3001 schichtplan-backend"
   },
   "dependencies": {
     "@types/bcrypt": "^6.0.0",

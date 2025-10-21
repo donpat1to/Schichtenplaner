@@ -102,7 +102,6 @@ export const AVAILABILITY_PREFERENCES = {
 } as const;
 
 // Default availability for new employees (all shifts unavailable as level 3)
-// UPDATED: Now uses shiftId instead of timeSlotId + dayOfWeek
 export function createDefaultAvailabilities(employeeId: string, planId: string, shiftIds: string[]): Omit<EmployeeAvailability, 'id'>[] {
   const availabilities: Omit<EmployeeAvailability, 'id'>[] = [];
   
@@ -120,7 +119,6 @@ export function createDefaultAvailabilities(employeeId: string, planId: string, 
 }
 
 // Create complete manager availability for all days (default: only Mon-Tue available)
-// NOTE: This function might need revision based on new schema requirements
 export function createManagerDefaultSchedule(managerId: string, planId: string, timeSlotIds: string[]): Omit<ManagerAvailability, 'id'>[] {
   const assignments: Omit<ManagerAvailability, 'id'>[] = [];
   
