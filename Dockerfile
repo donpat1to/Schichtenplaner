@@ -30,10 +30,12 @@ COPY backend/src/ ./src/
 RUN npm run build
 
 # Verify Python and OR-Tools installation
-RUN python - <<'EOF'
-import ortools
-import ortools.sat.python.cp_model
+RUN <<'PYCODE'
+python - <<'EOF'
+from ortools.sat.python import cp_model
+print("OR-Tools installed successfully")
 EOF
+PYCODE
 
 # Frontend build stage
 FROM node:20-alpine AS frontend-builder
