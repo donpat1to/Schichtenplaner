@@ -30,7 +30,7 @@ RUN npm ci
 
 # Copy backend source
 COPY backend/src/ ./src/
-COPY backend/python-scripts/ ./python-scripts/
+#COPY backend/python-scripts/ ./python-scripts/
 
 # Build backend
 RUN npm run build
@@ -75,7 +75,7 @@ RUN npm install -g pm2
 COPY --from=backend-builder /app/backend/package*.json ./
 COPY --from=backend-builder /app/backend/dist/ ./dist/
 COPY --from=backend-builder /app/backend/node_modules/ ./node_modules/
-COPY --from=backend-builder /app/backend/python-scripts/ ./python-scripts/
+# COPY --from=backend-builder /app/backend/python-scripts/ ./python-scripts/
 
 # Copy frontend built files  
 COPY --from=frontend-builder /app/frontend/build/ ./frontend-build/
