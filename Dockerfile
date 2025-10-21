@@ -30,7 +30,6 @@ RUN npm ci
 
 # Copy backend source
 COPY backend/src/ ./src/
-#COPY backend/python-scripts/ ./python-scripts/
 
 # Build backend
 RUN npm run build
@@ -63,10 +62,10 @@ FROM node:20-alpine
 WORKDIR /app
 
 # Install Python and OR-Tools for production
-RUN apk add --no-cache \
-    python \
-    py3-pip \
-    && pip3 install ortools
+#RUN apk add --no-cache \
+#    python \
+#    py3-pip \
+#    && pip3 install ortools
 
 # Install PM2 for process management
 RUN npm install -g pm2
@@ -91,8 +90,8 @@ RUN addgroup -g 1001 -S nodejs && \
 USER schichtplan
 
 # Verify installations
-RUN python --version && \
-    python -c "from ortools.sat.python import cp_model; print('OR-Tools verified')"
+#RUN python --version && \
+#    python -c "from ortools.sat.python import cp_model; print('OR-Tools verified')"
 
 EXPOSE 3000 3002
 
