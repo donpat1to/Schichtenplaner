@@ -24,6 +24,7 @@ database/*.db-journal
 # Logs
 logs
 *.log
+src/python-scripts/progress_data/*
 
 # Runtime data
 pids
