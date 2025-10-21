@@ -8,7 +8,7 @@
     "start": "node dist/server.js",
     "prestart": "npm run build",
     "test": "jest",
-    "test:python": "python3 -c \"from ortools.sat.python import cp_model; print('OR-Tools OK')\"",
+    "test:python": "python -c \"from ortools.sat.python import cp_model; print('OR-Tools OK')\"",
     "docker:build": "docker build -t schichtplan-backend .",
     "docker:run": "docker run -p 3001:3001 schichtplan-backend"
   },
@@ -28,6 +28,7 @@
     "@types/express": "^4.17.17",
     "@types/jsonwebtoken": "^9.0.2",
     "@types/uuid": "^9.0.2",
+    "@types/jest": "^29.5.0",
     "ts-node": "^10.9.0",
     "typescript": "^5.0.0",
     "tsx": "^4.0.0"
