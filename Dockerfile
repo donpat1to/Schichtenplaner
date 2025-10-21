@@ -3,24 +3,17 @@ FROM node:20-alpine AS backend-builder
 
 WORKDIR /app/backend
 
-# Install Python and required build tools for OR-Tools
+# Install only what's absolutely necessary
 RUN apk add --no-cache \
     python3 \
     py3-pip \
-    build-base \
-    python3-dev \
-    cmake \
-    make \
-    g++ \
-    linux-headers
+    build-base
 
-# Install python package which provides 'python' command
-RUN apk add --no-cache python3 py3-pip && \
-    ln -s /usr/bin/python3 /usr/bin/python
+# Install ortools directly
+RUN pip3 install --no-cache-dir ortools
 
-# Upgrade pip and install Python dependencies
-RUN python3 -m pip install --upgrade pip && \
-    python3 -m pip install ortools
+# Create symlink so python3 is callable as python
+RUN ln -sf /usr/bin/python3 /usr/bin/python
 
 # Copy backend files
 COPY backend/package*.json ./
