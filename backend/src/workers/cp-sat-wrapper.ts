@@ -8,6 +8,17 @@ import { SolverOptions, Solution, Assignment } from '../models/scheduling.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+export interface ProgressStep {
+  timestamp: number;
+  objective: number;
+  bound: number;
+  solution_count: number;
+}
+
+export interface SolutionWithProgress extends Solution {
+  progress?: ProgressStep[];
+}
+
 export class CPModel {
   private modelData: any;
   
@@ -86,7 +97,7 @@ export class CPSolver {
     
     console.log('Using Python script at:', pythonScriptPath);
     
-    const modelData = model.export();
+  const modelData = model.export();
   
     return new Promise((resolve, reject) => {
       const pythonProcess = spawn('python', [pythonScriptPath], {
@@ -103,6 +114,10 @@ export class CPSolver {
 
       pythonProcess.stderr.on('data', (data) => {
         stderr += data.toString();
+        // 🆕 Real-time progress monitoring from stderr
+        if (data.toString().includes('Progress:')) {
+          console.log('Python Progress:', data.toString().trim());
+        }
       });
 
       pythonProcess.on('close', (code) => {
@@ -116,15 +131,16 @@ export class CPSolver {
         }
 
         try {
-          console.log('Python raw output:', stdout.substring(0, 500)); // Debug log
+          console.log('Python raw output:', stdout.substring(0, 500));
           
           const result = JSON.parse(stdout);
           
-          // ENHANCED: Better solution parsing
-          const solution: Solution = {
+          // Enhanced solution parsing with progress data
+          const solution: SolutionWithProgress = {
             success: result.success || false,
             assignments: result.assignments || [],
             violations: result.violations || [],
+            progress: result.progress || [], // 🆕 Parse progress data
             metadata: {
               solveTime: result.metadata?.solveTime || 0,
               constraintsAdded: result.metadata?.constraintsAdded || 0,
@@ -133,8 +149,8 @@ export class CPSolver {
             },
             variables: result.variables || {}
           };
-          
-          console.log(`Python solver result: success=${solution.success}, assignments=${solution.assignments.length}`);
+
+          console.log(`Python solver result: success=${solution.success}, assignments=${solution.assignments.length}, progress_steps=${solution.progress?.length}`);
           
           resolve(solution);
         } catch (parseError) {

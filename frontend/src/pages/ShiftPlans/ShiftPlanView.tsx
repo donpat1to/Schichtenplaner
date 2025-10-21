@@ -771,19 +771,6 @@ const ShiftPlanView: React.FC = () => {
             </ul>
           </div>
         )}
-
-        {/* Timetable Structure Info - SAME AS AVAILABILITYMANAGER */}
-        <div style={{
-          backgroundColor: '#d1ecf1',
-          border: '1px solid #bee5eb',
-          padding: '10px 15px',
-          margin: '10px',
-          borderRadius: '4px',
-          fontSize: '12px'
-        }}>
-          <strong>Struktur-Info:</strong> {allTimeSlots.length} Zeitslots × {days.length} Tage = {allTimeSlots.length * days.length} Zellen
-        </div>
-
         <div style={{ overflowX: 'auto' }}>
           <table style={{
             width: '100%',
@@ -797,7 +784,7 @@ const ShiftPlanView: React.FC = () => {
                   textAlign: 'left',
                   border: '1px solid #dee2e6',
                   fontWeight: 'bold',
-                  minWidth: '200px'
+                  minWidth: '120px'
                 }}>
                   Schicht (Zeit)
                 </th>
@@ -850,7 +837,7 @@ const ShiftPlanView: React.FC = () => {
                           color: '#ccc',
                           fontStyle: 'italic'
                         }}>
-                          Kein Shift
+                          Keine Schicht
                         </td>
                       );
                     }
@@ -977,23 +964,6 @@ const ShiftPlanView: React.FC = () => {
           </table>
         </div>
 
-        {/* Summary Statistics - SAME AS AVAILABILITYMANAGER */}
-        <div style={{
-          backgroundColor: '#f8f9fa',
-          padding: '15px',
-          borderTop: '1px solid #dee2e6',
-          fontSize: '12px',
-          color: '#666'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <strong>Zusammenfassung:</strong> {allTimeSlots.length} Zeitslots × {days.length} Tage = {allTimeSlots.length * days.length} mögliche Shifts
-            </div>
-            <div>
-              <strong>Validierungsfehler:</strong> {validation.errors.length}
-            </div>
-          </div>
-        </div>
       </div>
     );
   };
@@ -1069,50 +1039,6 @@ const ShiftPlanView: React.FC = () => {
         </div>
       </div>
 
-      {/* Debug Info - Enhanced */}
-      <div style={{
-        backgroundColor: validation.errors.length > 0 ? '#fff3cd' : (allTimeSlots.length === 0 ? '#f8d7da' : '#d1ecf1'),
-        border: `1px solid ${validation.errors.length > 0 ? '#ffeaa7' : (allTimeSlots.length === 0 ? '#f5c6cb' : '#bee5eb')}`,
-        borderRadius: '6px',
-        padding: '15px',
-        marginBottom: '20px'
-      }}>
-        <h4 style={{ 
-          margin: '0 0 10px 0', 
-          color: validation.errors.length > 0 ? '#856404' : (allTimeSlots.length === 0 ? '#721c24' : '#0c5460') 
-        }}>
-          {validation.errors.length > 0 ? '⚠️ VALIDIERUNGSPROBLEME' : 
-          allTimeSlots.length === 0 ? '❌ KEINE SHIFTS GEFUNDEN' : '✅ PLAN-DATEN GELADEN'}
-        </h4>
-        <div style={{ fontSize: '12px', fontFamily: 'monospace' }}>
-          <div><strong>Ausgewählter Plan:</strong> {shiftPlan.name}</div>
-          <div><strong>Plan ID:</strong> {shiftPlan.id}</div>
-          <div><strong>Einzigartige Zeitslots:</strong> {allTimeSlots.length}</div>
-          <div><strong>Verwendete Tage:</strong> {days.length} ({days.map(d => d.name).join(', ')})</div>
-          <div><strong>Shift Patterns:</strong> {shiftPlan.shifts?.length || 0}</div>
-          <div><strong>Scheduled Shifts:</strong> {scheduledShifts.length}</div>
-          <div><strong>Geladene Verfügbarkeiten:</strong> {availabilities.length}</div>
-          <div><strong>Aktive Mitarbeiter:</strong> {employees.length}</div>
-          {assignmentResult && (
-            <div><strong>Assignment Keys:</strong> {Object.keys(assignmentResult.assignments).length}</div>
-          )}
-        </div>
-
-        {/* Show shift pattern vs scheduled shift matching */}
-        {shiftPlan.shifts && scheduledShifts.length > 0 && (
-          <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #bee5eb' }}>
-            <strong>Shift Matching:</strong>
-            <div style={{ fontSize: '11px' }}>
-              • {shiftPlan.shifts.length} Patterns → {scheduledShifts.length} Scheduled Shifts
-              {assignmentResult && (
-                <div>• {Object.keys(assignmentResult.assignments).length} Assignment Keys</div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Rest of the component remains the same... */}
       {/* Availability Status - only show for drafts */}
       {shiftPlan.status === 'draft' && (
         <div style={{

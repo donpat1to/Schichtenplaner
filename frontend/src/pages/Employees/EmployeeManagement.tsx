@@ -190,7 +190,7 @@ const EmployeeManagement: React.FC = () => {
             onClick={handleCreateEmployee}
             style={{
               padding: '12px 24px',
-              backgroundColor: '#27ae60',
+              backgroundColor: '#51258f',
               color: 'white',
               border: 'none',
               borderRadius: '6px',

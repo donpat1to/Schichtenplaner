@@ -1,0 +1,38 @@
+{
+  "timestamp": "2025-10-21T11:16:16.813066",
+  "success": true,
+  "metadata": {
+    "solveTime": 0.0158702,
+    "constraintsAdded": 217,
+    "variablesCreated": 90,
+    "optimal": true
+  },
+  "progress": [
+    {
+      "timestamp": 0.008541107177734375,
+      "objective": 1050.0,
+      "bound": 2000.0,
+      "solution_count": 1
+    },
+    {
+      "timestamp": 0.00941777229309082,
+      "objective": 1250.0,
+      "bound": 1300.0,
+      "solution_count": 2
+    },
+    {
+      "timestamp": 0.009499549865722656,
+      "objective": 1300.0,
+      "bound": 1300.0,
+      "solution_count": 3
+    }
+  ],
+  "solution_summary": {
+    "assignments_count": 15,
+    "violations_count": 0,
+    "variables_count": 90,
+    "constraints_count": 217,
+    "solve_time": 0.0158702,
+    "optimal": true
+  }
+}

@@ -397,14 +397,6 @@ const Settings: React.FC = () => {
                       />
                     </div>
                   </div>
-                  <div style={{ marginTop: '1rem', padding: '1rem', background: '#f8f9fa', borderRadius: '8px' }}>
-                    <div style={{ fontSize: '0.9rem', color: '#666' }}>
-                      <strong>Vorschau:</strong> {getFullName() || '(Kein Name)'}
-                    </div>
-                    <div style={{ fontSize: '0.8rem', color: '#888', marginTop: '0.5rem' }}>
-                      E-Mail: {currentUser.email}
-                    </div>
-                  </div>
                 </div>
               </div>
 

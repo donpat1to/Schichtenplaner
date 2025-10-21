@@ -74,7 +74,7 @@ const ShiftPlanList: React.FC = () => {
           <Link to="/shift-plans/new">
             <button style={{ 
               padding: '10px 20px', 
-              backgroundColor: '#3498db', 
+              backgroundColor: '#51258f', 
               color: 'white', 
               border: 'none', 
               borderRadius: '4px',

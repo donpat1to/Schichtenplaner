@@ -343,30 +343,53 @@ const Dashboard: React.FC = () => {
 
   return (
     <div>
-      {/* Willkommens-Bereich */}
-      <div style={{ 
-        backgroundColor: '#e8f4fd', 
-        padding: '25px', 
-        borderRadius: '8px',
-        marginBottom: '30px',
-        border: '1px solid #b6d7e8',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
-      }}>
-        <div>
-          <h1 style={{ margin: '0 0 10px 0', color: '#2c3e50' }}>
-            Willkommen zurück, {user?.firstname} {user?.lastname} ! 👋
-          </h1>
-          <p style={{ margin: 0, color: '#546e7a', fontSize: '16px' }}>
-            {new Date().toLocaleDateString('de-DE', { 
-              weekday: 'long', 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric' 
-            })}
-          </p>
-        </div>
+      {/* Minimalist Welcome Section */}
+      <div
+        style={{
+          width: '100vw',
+          position: 'relative',
+          left: '50%',
+          right: '50%',
+          marginLeft: '-50vw',
+          marginRight: '-50vw',
+          background: `
+            radial-gradient(ellipse farthest-corner at center 53%,
+              #d9b9f3ff 10%, 
+              #ddc5f1ff 22%, 
+              #e9d4f8ff 32%, 
+              #FBFAF6 55%)
+          `,
+          textAlign: 'center',
+          padding: '10vh 0',
+          color: '#161718',
+          fontFamily: "'Poppins', 'Inter', 'Manrope', sans-serif",
+        }}
+      >
+        <h1
+          style={{
+            fontSize: '3rem',
+            fontWeight: 100,
+            letterSpacing: '0.08em',
+            marginBottom: '0.5rem',
+            opacity: 0.995,
+            filter: 'blur(0.2px)',
+          }}
+        >
+          Willkommen
+        </h1>
+
+        <p
+          style={{
+            fontSize: '1.1rem',
+            color: '#3e2069',
+            letterSpacing: '0.05em',
+            fontWeight: 300,
+            opacity: 0.85,
+            transition: 'color 0.3s ease',
+          }}
+        >
+          {user?.firstname} {user?.lastname}
+        </p>
       </div>
 
       {/* Quick Actions - Nur für Admins/Instandhalter */}
@@ -483,7 +506,7 @@ const Dashboard: React.FC = () => {
                 }}>
                   <div style={{
                     width: `${progress.percentage}%`,
-                    backgroundColor: progress.percentage > 0 ? '#3498db' : '#95a5a6',
+                    backgroundColor: progress.percentage > 0 ? '#854eca' : '#95a5a6',
                     height: '8px',
                     borderRadius: '10px',
                     transition: 'width 0.3s ease'

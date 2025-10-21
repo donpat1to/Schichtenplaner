@@ -372,18 +372,6 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
           </div>
         )}
 
-        {/* Timetable Structure Info */}
-        <div style={{
-          backgroundColor: '#d1ecf1',
-          border: '1px solid #bee5eb',
-          padding: '10px 15px',
-          margin: '10px',
-          borderRadius: '4px',
-          fontSize: '12px'
-        }}>
-          <strong>Struktur-Info:</strong> {sortedTimeSlots.length} Zeitslots × {days.length} Tage = {sortedTimeSlots.length * days.length} Zellen
-        </div>
-
         <div style={{ overflowX: 'auto' }}>
           <table style={{
             width: '100%',
@@ -397,7 +385,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                   textAlign: 'left',
                   border: '1px solid #dee2e6',
                   fontWeight: 'bold',
-                  minWidth: '200px'
+                  minWidth: '120px'
                 }}>
                   Zeitslot
                 </th>
@@ -559,13 +547,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <strong>Zusammenfassung:</strong> {sortedTimeSlots.length} Zeitslots × {days.length} Tage = {sortedTimeSlots.length * days.length} mögliche Shifts
-            </div>
-            <div>
               <strong>Aktive Verfügbarkeiten:</strong> {availabilities.filter(a => a.preferenceLevel !== 3).length}
-            </div>
-            <div>
-              <strong>Validierungsfehler:</strong> {validationErrors.length}
             </div>
           </div>
         </div>
@@ -667,69 +649,8 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         borderBottom: '2px solid #f0f0f0',
         paddingBottom: '15px'
       }}>
-        📅 Verfügbarkeit verwalten (Shift-ID basiert)
+        📅 Verfügbarkeit verwalten
       </h2>
-
-      {/* Debug-Info */}
-      <div style={{
-        backgroundColor: !selectedPlan ? '#f8d7da' : (shiftsCount === 0 ? '#fff3cd' : '#d1ecf1'),
-        border: `1px solid ${!selectedPlan ? '#f5c6cb' : (shiftsCount === 0 ? '#ffeaa7' : '#bee5eb')}`,
-        borderRadius: '6px',
-        padding: '15px',
-        marginBottom: '20px'
-      }}>
-        <h4 style={{ 
-          margin: '0 0 10px 0', 
-          color: !selectedPlan ? '#721c24' : (shiftsCount === 0 ? '#856404' : '#0c5460') 
-        }}>
-          {!selectedPlan ? '❌ KEIN PLAN AUSGEWÄHLT' : 
-           shiftsCount === 0 ? '⚠️ KEINE SHIFTS GEFUNDEN' : '✅ PLAN-DATEN GELADEN'}
-        </h4>
-        <div style={{ fontSize: '12px', fontFamily: 'monospace' }}>
-          <div><strong>Ausgewählter Plan:</strong> {selectedPlan?.name || 'Keiner'}</div>
-          <div><strong>Plan ID:</strong> {selectedPlanId || 'Nicht gesetzt'}</div>
-          <div><strong>Geladene Pläne:</strong> {shiftPlans.length}</div>
-          <div><strong>Einzigartige Shifts:</strong> {shiftsCount}</div>
-          <div><strong>Geladene Verfügbarkeiten:</strong> {availabilities.length}</div>
-          {selectedPlan && (
-            <>
-              <div><strong>Verwendete Tage:</strong> {days.length} ({days.map(d => d.name).join(', ')})</div>
-              <div><strong>Gesamte Shifts im Plan:</strong> {selectedPlan.shifts?.length || 0}</div>
-            </>
-          )}
-        </div>
-
-        {/* Show existing preferences */}
-        {availabilities.length > 0 && (
-          <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #bee5eb' }}>
-            <strong>Vorhandene Präferenzen:</strong>
-            {availabilities.slice(0, 5).map(avail => {
-              // SICHERHEITSCHECK: Stelle sicher, dass shiftId existiert
-              if (!avail.shiftId) {
-                return (
-                  <div key={avail.id} style={{ fontSize: '11px', color: 'red' }}>
-                    • UNGÜLTIG: Keine Shift-ID
-                  </div>
-                );
-              }
-              
-              const shift = selectedPlan?.shifts?.find(s => s.id === avail.shiftId);
-              const shiftIdDisplay = avail.shiftId ? avail.shiftId.substring(0, 8) + '...' : 'KEINE ID';
-              
-              return (
-                <div key={avail.id} style={{ fontSize: '11px' }}>
-                  • Shift {shiftIdDisplay} (Day {shift?.dayOfWeek || '?'}): Level {avail.preferenceLevel}
-                </div>
-              );
-            })}
-            {availabilities.length > 5 && (
-              <div style={{ fontSize: '11px', fontStyle: 'italic' }}>
-                ... und {availabilities.length - 5} weitere
-              </div>
-            )}
-          </div>
-        )}
-      </div>
 
       {/* Employee Info */}
       <div style={{ marginBottom: '20px' }}>
@@ -738,9 +659,6 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         </h3>
         <p style={{ margin: 0, color: '#7f8c8d' }}>
           <strong>Email:</strong> {employee.email}
-        </p>
-        <p style={{ margin: '5px 0 0 0', color: '#7f8c8d' }}>
-          Legen Sie die Verfügbarkeit für {employeeFullName} fest (basierend auf Shift-IDs).
         </p>
       </div>
 
