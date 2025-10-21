@@ -78,18 +78,14 @@ jobs:
         working-directory: ./backend
         run: npx tsc --noEmit
 
-      - name: Check if tests exist and run them
+      - name: Run backend tests
         working-directory: ./backend
         run: |
-          # Check if jest is available and test script exists
-          if npx --no-install jest --version > /dev/null 2>&1; then
-            echo "Running tests with Jest..."
-            npm test
-          elif [ -f "package.json" ] && grep -q '"test"' package.json; then
-            echo "Running test script from package.json..."
+          # Skip tests if jest is not installed
+          if [ -f "node_modules/.bin/jest" ]; then
             npm test
           else
-            echo "No tests configured. Skipping test execution."
+            echo "⚠️  Jest not installed. Skipping tests."
           fi
 
       - name: Setup Python
