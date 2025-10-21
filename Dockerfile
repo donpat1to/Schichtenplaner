@@ -10,7 +10,7 @@ RUN apk add --no-cache \
     build-base
 
 # Install ortools directly
-RUN pip3 install --no-cache-dir ortools
+RUN pip install --no-cache-dir ortools
 
 # Create symlink so python3 is callable as python
 RUN ln -sf /usr/bin/python3 /usr/bin/python
