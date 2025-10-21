@@ -1,0 +1,19 @@
+{
+  "timestamp": "2025-10-21T14:40:00.354343",
+  "success": false,
+  "metadata": {
+    "solveTime": 0.0013928,
+    "constraintsAdded": 248,
+    "variablesCreated": 99,
+    "optimal": false
+  },
+  "progress": [],
+  "solution_summary": {
+    "assignments_count": 0,
+    "violations_count": 0,
+    "variables_count": 99,
+    "constraints_count": 248,
+    "solve_time": 0.0013928,
+    "optimal": false
+  }
+}
