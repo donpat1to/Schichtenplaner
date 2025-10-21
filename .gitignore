@@ -1,4 +1,54 @@
 # Dependencies
+backend/node_modules/
+frontend/node_modules/
+
+/.pnp
+.pnp.js
+
+# Testing
+/coverage
+
+# Production
+/build
+
+# Misc
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+
+----
+# Dependencies
 node_modules/
 npm-debug.log*
 yarn-debug.log*
@@ -24,7 +74,9 @@ database/*.db-journal
 # Logs
 logs
 *.log
-src/python-scripts/progress_data/*
+
+# Privat
+backend/src/python-scripts/progress_data/*.json
 
 # Runtime data
 pids
