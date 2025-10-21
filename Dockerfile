@@ -3,14 +3,15 @@ FROM node:20-alpine AS backend-builder
 
 WORKDIR /app/backend
 
-# Install only what's absolutely necessary
+# Install ortools from Alpine packages (if available)
 RUN apk add --no-cache \
     python3 \
     py3-pip \
-    build-base
+    build-base \
+    python3-dev
 
-# Install ortools directly
-RUN pip install --no-cache-dir ortools
+# Try Alpine package first, then pip as fallback
+RUN apk add py3-ortools 2>/dev/null || pip3 install --break-system-packages --no-cache-dir ortools
 
 # Create symlink so python3 is callable as python
 RUN ln -sf /usr/bin/python3 /usr/bin/python
