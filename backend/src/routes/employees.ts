@@ -19,7 +19,7 @@ const router = express.Router();
 router.use(authMiddleware);
 
 // Employee CRUD Routes
-router.get('/', requireRole(['admin']), getEmployees);
+router.get('/', authMiddleware, getEmployees);
 router.get('/:id', requireRole(['admin', 'instandhalter']), getEmployee);
 router.post('/', requireRole(['admin']), createEmployee);
 router.put('/:id', requireRole(['admin']), updateEmployee);

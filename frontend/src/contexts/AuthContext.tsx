@@ -135,10 +135,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const hasRole = (roles: string[]): boolean => {
-    if (!user) return false;
-    return roles.length != 0;
+    if (!user || !user.roles || user.roles.length === 0) return false;
+    
+    // Check if user has at least one of the required roles
+    return roles.some(requiredRole => 
+      user.roles!.includes(requiredRole)
+    );
   };
-
+  
   useEffect(() => {
     const initializeAuth = async () => {
       console.log('🚀 Initializing authentication...');
