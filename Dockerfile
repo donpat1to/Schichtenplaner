@@ -23,6 +23,9 @@ COPY backend/src/ ./src/
 # Build backend
 RUN npm run build
 
+# Copy database files manually (tsc doesn't copy non-TS files)
+RUN cp -r src/database/ dist/database/
+
 # Verify Python and OR-Tools installation
 RUN python -c "from ortools.sat.python import cp_model; print('OR-Tools installed successfully')"
 
