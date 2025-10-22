@@ -70,7 +70,7 @@ COPY --from=backend-builder /app/backend/node_modules/ ./node_modules/
 COPY --from=frontend-builder /app/frontend/build/ ./frontend-build/
 
 # Copy PM2 configuration
-COPY ecosystem.config.js ./
+COPY ecosystem.config.cjs ./
 
 # Create a non-root user
 RUN addgroup -g 1001 -S nodejs && \
