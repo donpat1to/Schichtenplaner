@@ -41,11 +41,6 @@ app.get('/api/health', (req: any, res: any) => {
 // 🆕 STATIC FILE SERVING FÜR FRONTEND
 app.use(express.static(path.join(__dirname, '../../frontend-build')));
 
-// 🆕 FALLBACK FÜR CLIENT-SIDE ROUTING
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../../frontend-build/index.html'));
-});
-
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Unhandled error:', err);
