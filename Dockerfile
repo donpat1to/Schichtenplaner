@@ -47,15 +47,9 @@ COPY frontend/public/ ./public/
 RUN npm run build
 
 # Production stage
-FROM node:20-alpine
+FROM node:20-bullseye
 
 WORKDIR /app
-
-# Install Python and OR-Tools for production
-#RUN apk add --no-cache \
-#    python \
-#    py3-pip \
-#    && pip3 install ortools
 
 # Install PM2 for process management
 RUN npm install -g pm2
@@ -64,7 +58,6 @@ RUN npm install -g pm2
 COPY --from=backend-builder /app/backend/package*.json ./
 COPY --from=backend-builder /app/backend/dist/ ./dist/
 COPY --from=backend-builder /app/backend/node_modules/ ./node_modules/
-# COPY --from=backend-builder /app/backend/python-scripts/ ./python-scripts/
 
 # Copy frontend built files  
 COPY --from=frontend-builder /app/frontend/build/ ./frontend-build/
