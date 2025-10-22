@@ -1,10 +1,18 @@
 import sqlite3 from 'sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const dbPath = path.join(__dirname, '../../database/schichtplan.db');
+
+const dbPath = process.env.DB_PATH || '/app/data/schichtplan.db';
+
+// Stelle sicher, dass das Verzeichnis existiert
+const dbDir = path.dirname(dbPath);
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
 
 class Database {
   private db: sqlite3.Database;

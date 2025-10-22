@@ -56,6 +56,9 @@ WORKDIR /app
 # Install PM2 for process management
 RUN npm install -g pm2
 
+# In der Production Stage, füge diese Zeile hinzu:
+ENV DB_PATH=/app/data/schichtplan.db
+
 # Copy backend built files
 COPY --from=backend-builder /app/backend/package*.json ./
 COPY --from=backend-builder /app/backend/dist/ ./dist/
