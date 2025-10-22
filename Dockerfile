@@ -49,7 +49,7 @@ COPY frontend/public/ ./public/
 RUN npm run build
 
 # Production stage
-FROM node:20-alpine
+FROM node:20-bookworm
 
 WORKDIR /app
 
