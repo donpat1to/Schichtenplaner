@@ -17,12 +17,12 @@ COPY backend/tsconfig.json ./
 # Install backend dependencies
 RUN npm ci
 
-# Copy backend source
+# Copy backend source and database files
 COPY backend/src/ ./src/
+COPY backend/database/ ./database/
 
 # Build backend
 RUN npm run build
-
 
 # Verify Python and OR-Tools installation
 RUN python -c "from ortools.sat.python import cp_model; print('OR-Tools installed successfully')"
@@ -58,6 +58,7 @@ RUN npm install -g pm2
 COPY --from=backend-builder /app/backend/package*.json ./
 COPY --from=backend-builder /app/backend/dist/ ./dist/
 COPY --from=backend-builder /app/backend/node_modules/ ./node_modules/
+COPY --from=backend-builder /app/backend/database/ ./dist/database/
 
 # Copy frontend built files  
 COPY --from=frontend-builder /app/frontend/build/ ./frontend-build/
@@ -71,10 +72,6 @@ RUN addgroup -g 1001 -S nodejs && \
   chown -R schichtplan:nodejs /app
 
 USER schichtplan
-
-# Verify installations
-#RUN python --version && \
-#    python -c "from ortools.sat.python import cp_model; print('OR-Tools verified')"
 
 EXPOSE 3000 3002
 
