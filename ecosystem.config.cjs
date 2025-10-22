@@ -1,3 +1,4 @@
+// ecosystem.config.cjs
 module.exports = {
   apps: [
     {
@@ -14,7 +15,7 @@ module.exports = {
       time: true
     },
     {
-      name: 'frontend', 
+      name: 'frontend',
       script: 'npx',
       args: 'serve -s frontend-build -l 3000',
       instances: 1,
@@ -23,7 +24,7 @@ module.exports = {
         NODE_ENV: 'production'
       },
       error_file: './logs/frontend-err.log',
-      out_file: './logs/frontend-out.log', 
+      out_file: './logs/frontend-out.log',
       time: true
     }
   ]
