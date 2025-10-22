@@ -1,6 +1,7 @@
 // backend/src/server.ts
 import express from 'express';
-import cors from 'cors';
+import { fileURLToPath } from 'url';
+import path from 'path';
 import { initializeDatabase } from './scripts/initializeDatabase.js';
 
 // Route imports
@@ -11,12 +12,17 @@ import setupRoutes from './routes/setup.js';
 import scheduledShifts from './routes/scheduledShifts.js';
 import schedulingRoutes from './routes/scheduling.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
 const PORT = 3002;
 
-// CORS und Middleware
-app.use(cors());
+// Middleware
 app.use(express.json());
+
+// Serviere statische Frontend-Dateien
+app.use(express.static(path.join(__dirname, '../../frontend-build')));
 
 // API Routes
 app.use('/api/setup', setupRoutes);

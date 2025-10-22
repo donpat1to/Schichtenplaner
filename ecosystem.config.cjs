@@ -2,7 +2,7 @@
 module.exports = {
   apps: [
     {
-      name: 'backend',
+      name: 'schichtplaner',
       script: './dist/server.js',
       instances: 1,
       exec_mode: 'fork',
@@ -10,21 +10,8 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 3002
       },
-      error_file: './logs/backend-err.log',
-      out_file: './logs/backend-out.log',
-      time: true
-    },
-    {
-      name: 'frontend',
-      script: 'npx',
-      args: 'serve -s frontend-build -l 3000',
-      instances: 1,
-      exec_mode: 'fork',
-      env: {
-        NODE_ENV: 'production'
-      },
-      error_file: './logs/frontend-err.log',
-      out_file: './logs/frontend-out.log',
+      error_file: './logs/app-err.log',
+      out_file: './logs/app-out.log',
       time: true
     }
   ]
