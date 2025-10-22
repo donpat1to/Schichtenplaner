@@ -20,6 +20,7 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3002/api';
 
 interface AuthProviderProps {
   children: ReactNode;
@@ -48,7 +49,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const checkSetupStatus = async (): Promise<void> => {
     try {
       console.log('🔍 Checking setup status...');
-      const response = await fetch('http://localhost:3002/api/setup/status');
+      const response = await fetch(`${API_BASE_URL}/setup/status`);
       if (!response.ok) {
         throw new Error('Setup status check failed');
       }
@@ -72,7 +73,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return;
       }
 
-      const response = await fetch('http://localhost:3002/api/auth/me', {
+      const response = await fetch(`${API_BASE_URL}/auth/me`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -104,7 +105,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       console.log('🔐 Attempting login for:', credentials.email);
       
-      const response = await fetch('http://localhost:3002/api/auth/login', {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
