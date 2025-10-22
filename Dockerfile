@@ -23,7 +23,7 @@ COPY backend/src/ ./src/
 # Build backend
 RUN npm run build
 
-# Copy database files manually (tsc doesn't copy non-TS files)
+# Copy database files manually
 RUN cp -r src/database/ dist/database/
 
 # Verify Python and OR-Tools installation
