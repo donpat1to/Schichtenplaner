@@ -70,9 +70,9 @@ COPY --from=frontend-builder /app/frontend/build/ ./frontend-build/
 # Copy PM2 configuration
 COPY ecosystem.config.cjs ./
 
-# Create a non-root user and group
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S schichtplan -u 1001 -G nodejs && \
+# Create a non-root user and group - DEBIAN STYLE
+RUN groupadd -r -g 1001 nodejs && \
+    useradd -r -u 1001 -s /bin/bash -g nodejs schichtplan && \
     chown -R schichtplan:nodejs /app && \
     chmod 755 /app && \
     chmod 775 /app/data
