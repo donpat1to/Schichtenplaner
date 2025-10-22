@@ -8,7 +8,30 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export async function initializeDatabase(): Promise<void> {
-  const schemaPath = path.join(__dirname, '../database/schema.sql');
+  const possiblePaths = [
+    path.join(__dirname, '../database/schema.sql'),
+    path.join(__dirname, '../../database/schema.sql'),
+    path.join(process.cwd(), 'database/schema.sql'),
+    path.join(process.cwd(), 'src/database/schema.sql'),
+    path.join(process.cwd(), 'dist/database/schema.sql')
+  ];
+
+  let schemaPath: string | null = null;
+
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      schemaPath = p;
+      break;
+    }
+  }
+
+  if (!schemaPath) {
+    throw new Error(
+      `❌ schema.sql not found in any of the tested paths:\n${possiblePaths.join('\n')}`
+    );
+  }
+
+  console.log(`✅ Using schema at: ${schemaPath}`);
   const schema = fs.readFileSync(schemaPath, 'utf8');
   
   try {
