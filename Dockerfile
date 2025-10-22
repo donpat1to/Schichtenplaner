@@ -56,8 +56,8 @@ WORKDIR /app
 # Install PM2 for process management
 RUN npm install -g pm2
 
-# In der Production Stage, füge diese Zeile hinzu:
-ENV DB_PATH=/app/data/schichtplan.db
+# Create data directory for SQLite database with proper permissions
+RUN mkdir -p /app/data
 
 # Copy backend built files
 COPY --from=backend-builder /app/backend/package*.json ./
@@ -70,10 +70,12 @@ COPY --from=frontend-builder /app/frontend/build/ ./frontend-build/
 # Copy PM2 configuration
 COPY ecosystem.config.cjs ./
 
-# Create a non-root user
+# Create a non-root user and group
 RUN addgroup -g 1001 -S nodejs && \
-  adduser -S schichtplan -u 1001 && \
-  chown -R schichtplan:nodejs /app
+    adduser -S schichtplan -u 1001 -G nodejs && \
+    chown -R schichtplan:nodejs /app && \
+    chmod 755 /app && \
+    chmod 775 /app/data
 
 USER schichtplan
 
