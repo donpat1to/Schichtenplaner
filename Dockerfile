@@ -77,6 +77,9 @@ RUN groupadd -g 1001 nodejs && \
     chmod 755 /app && \
     chmod 775 /app/data
 
+# Set PM2 to use app directory instead of home directory
+ENV PM2_HOME=/app/.pm2
+
 USER schichtplan
 
 EXPOSE 3000 3002
