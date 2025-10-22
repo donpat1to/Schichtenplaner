@@ -3,9 +3,8 @@ name: CI/CD Pipeline
 on:
   workflow_dispatch:
   push:
-    branches: [ main, master, development ]
-  pull_request:
-    branches: [ main, master, development ]
+    branches: [ "development", "main", "staging" ]
+    tags: [ "v*.*.*" ]
 
 env:
   REGISTRY: ghcr.io
@@ -165,7 +164,7 @@ jobs:
 
       - name: Display pushed images
         run: |
-          echo "✅ Docker images pushed successfully!"
-          echo "📦 Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
-          echo "🏷️  Tags: ${{ steps.meta.outputs.tags }}"
-          echo "🚀 New version: ${{ needs.set-tag.outputs.tag_name }}"
+          echo "Docker images pushed successfully!"
+          echo "- Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          echo "- Tags: ${{ steps.meta.outputs.tags }}"
+          echo "- New version: ${{ needs.set-tag.outputs.tag_name }}"
