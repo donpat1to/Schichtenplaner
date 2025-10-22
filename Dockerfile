@@ -5,7 +5,7 @@ WORKDIR /app/backend
 
 # Install Python + OR-Tools
 RUN apt-get update && apt-get install -y python3 python3-pip build-essential \
- && pip install --no-cache-dir ortools
+  && pip install --no-cache-dir ortools
 
 # Create symlink so python3 is callable as python
 RUN ln -sf /usr/bin/python3 /usr/bin/python
@@ -26,9 +26,6 @@ RUN npm run build
 
 # Verify Python and OR-Tools installation
 RUN python -c "from ortools.sat.python import cp_model; print('OR-Tools installed successfully')"
-
-#RUN python3 -c "from ortools.sat.python import cp_model; print('OR-Tools installed successfully')"
-
 
 # Frontend build stage
 FROM node:20-bullseye AS frontend-builder
@@ -77,8 +74,8 @@ COPY ecosystem.config.js ./
 
 # Create a non-root user
 RUN addgroup -g 1001 -S nodejs && \
-    adduser -S schichtplan -u 1001 && \
-    chown -R schichtplan:nodejs /app
+  adduser -S schichtplan -u 1001 && \
+  chown -R schichtplan:nodejs /app
 
 USER schichtplan
 
