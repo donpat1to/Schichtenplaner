@@ -46,7 +46,7 @@ COPY frontend/public/ ./public/
 RUN npm run build
 
 # Production stage
-FROM node:20-bullseye
+FROM node:20-alpine
 
 WORKDIR /app
 
