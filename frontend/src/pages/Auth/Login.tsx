@@ -87,7 +87,7 @@ const Login: React.FC = () => {
             onChange={(e) => setEmail(e.target.value)}
             required
             style={{
-              width: '100%',
+              width: '94.5%',
               padding: '10px',
               border: '1px solid #ddd',
               borderRadius: '4px',
@@ -107,7 +107,7 @@ const Login: React.FC = () => {
             onChange={(e) => setPassword(e.target.value)}
             required
             style={{
-              width: '100%',
+              width: '94.5%',
               padding: '10px',
               border: '1px solid #ddd',
               borderRadius: '4px',
@@ -123,7 +123,7 @@ const Login: React.FC = () => {
           style={{
             width: '100%',
             padding: '12px',
-            backgroundColor: loading ? '#ccc' : '#007bff',
+            backgroundColor: loading ? '#ccc' : '#51258f',
             color: 'white',
             border: 'none',
             borderRadius: '4px',
