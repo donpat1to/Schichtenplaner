@@ -1,0 +1,23 @@
+{
+  "name": "schichtenplaner-monorepo",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend", 
+    "premium"
+  ],
+  "scripts": {
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "build:all": "npm run build:premium && npm run build:backend && npm run build:frontend",
+    "build:premium": "cd premium && npm run build",
+    "build:backend": "cd backend && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "type-check": "npm run type-check:all",
+    "type-check:all": "cd premium && npx tsc --noEmit && cd ../backend && npx tsc --noEmit && cd ../frontend && npx tsc --noEmit",
+    "clean": "rm -rf premium/dist backend/dist frontend/dist"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}

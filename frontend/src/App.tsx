@@ -1,4 +1,4 @@
-// frontend/src/App.tsx - KORRIGIERT MIT LAYOUT
+// frontend/src/App.tsx - UPDATED WITH FOOTER LINKS
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -15,6 +15,15 @@ import EmployeeManagement from './pages/Employees/EmployeeManagement';
 import Settings from './pages/Settings/Settings';
 import Help from './pages/Help/Help';
 import Setup from './pages/Setup/Setup';
+
+// Footer Link Pages
+import Contact from '../../premium/frontendPRO/src/componentsPRO/FooterLinksPro/Contact/Contact';
+import FAQ from './components/Layout/FooterLinks/FAQ/FAQ';
+import Privacy from '../../premium/frontendPRO/src/componentsPRO/FooterLinksPro/Privacy/Privacy';
+import Imprint from '../../premium/frontendPRO/src/componentsPRO/FooterLinksPro/Imprint/Imprint';
+import Terms from '../../premium/frontendPRO/src/componentsPRO/FooterLinksPro/Terms/Terms';
+import About from './components/Layout/FooterLinks/About/About';
+import Features from './components/Layout/FooterLinks/Features/Features';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[] }> = ({ 
@@ -49,6 +58,22 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[] }> 
   return <Layout>{children}</Layout>;
 };
 
+// Public Route Component (without Layout for footer pages)
+const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: '40px' }}>
+        <div>⏳ Lade Anwendung...</div>
+      </div>
+    );
+  }
+
+  // If user is logged in, show with layout, otherwise without
+  return user ? <Layout>{children}</Layout> : <>{children}</>;
+};
+
 // Main App Content
 const AppContent: React.FC = () => {
   const { loading, needsSetup, user } = useAuth();
@@ -80,6 +105,7 @@ const AppContent: React.FC = () => {
   console.log('✅ Showing protected routes for user:', user.email);
   return (
     <Routes>
+      {/* Protected Routes (require login) */}
       <Route path="/" element={
         <ProtectedRoute>
           <Dashboard />
@@ -120,7 +146,48 @@ const AppContent: React.FC = () => {
           <Help />
         </ProtectedRoute>
       } />
+
+      {/* Public Footer Link Pages (accessible without login, but show layout if logged in) */}
+      <Route path="/contact" element={
+        <PublicRoute>
+          <Contact />
+        </PublicRoute>
+      } />
+      <Route path="/faq" element={
+        <PublicRoute>
+          <FAQ />
+        </PublicRoute>
+      } />
+      <Route path="/privacy" element={
+        <PublicRoute>
+          <Privacy />
+        </PublicRoute>
+      } />
+      <Route path="/imprint" element={
+        <PublicRoute>
+          <Imprint />
+        </PublicRoute>
+      } />
+      <Route path="/terms" element={
+        <PublicRoute>
+          <Terms />
+        </PublicRoute>
+      } />
+      <Route path="/about" element={
+        <PublicRoute>
+          <About />
+        </PublicRoute>
+      } />
+      <Route path="/features" element={
+        <PublicRoute>
+          <Features />
+        </PublicRoute>
+      } />
+
+      {/* Auth Routes */}
       <Route path="/login" element={<Login />} />
+      
+      {/* Catch-all Route */}
       <Route path="*" element={
         <ProtectedRoute>
           <Dashboard />

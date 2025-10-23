@@ -110,3 +110,8 @@ Thumbs.db
 
 # Optional eslint cache
 .eslintcache
+
+# Ignore contents of premium folder in public repo
+premium/*
+!premium/README-PREMIUM.md
+!premium/.gitkeep
