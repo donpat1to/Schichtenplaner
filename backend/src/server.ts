@@ -3,6 +3,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { initializeDatabase } from './scripts/initializeDatabase.js';
+import fs from 'fs';
 
 // Route imports
 import authRoutes from './routes/auth.js';
@@ -39,7 +40,51 @@ app.get('/api/health', (req: any, res: any) => {
 });
 
 // 🆕 STATIC FILE SERVING FÜR FRONTEND
-app.use(express.static(path.join(__dirname, '../../frontend-build')));
+const frontendBuildPath = path.join(__dirname, '../../frontend-build');
+console.log('📁 Frontend build path:', frontendBuildPath);
+
+// Überprüfe ob das Verzeichnis existiert
+if (fs.existsSync(frontendBuildPath)) {
+  console.log('✅ Frontend build directory exists');
+  const files = fs.readdirSync(frontendBuildPath);
+  console.log('📄 Files in frontend-build:', files);
+  
+  // Serviere statische Dateien
+  app.use(express.static(frontendBuildPath));
+  
+  console.log('✅ Static file serving configured');
+} else {
+  console.log('❌ Frontend build directory NOT FOUND:', frontendBuildPath);
+}
+
+app.get('/', (req, res) => {
+  const indexPath = path.join(frontendBuildPath, 'index.html');
+  console.log('📄 Serving index.html from:', indexPath);
+  
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    console.error('❌ index.html not found at:', indexPath);
+    res.status(404).send('Frontend not found - index.html missing');
+  }
+});
+
+app.get('*', (req, res) => {
+  // Ignoriere API Routes
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'API endpoint not found' });
+  }
+  
+  const indexPath = path.join(frontendBuildPath, 'index.html');
+  console.log('🔄 Client-side routing for:', req.path, '-> index.html');
+  
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    console.error('❌ index.html not found for client-side routing');
+    res.status(404).json({ error: 'Frontend application not found' });
+  }
+});
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
