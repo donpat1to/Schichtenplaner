@@ -1,17 +1,20 @@
-// frontend/src/pages/Auth/Login.tsx - KORRIGIERT
-import React, { useState, useEffect } from 'react';
+// frontend/src/pages/Auth/Login.tsx - UPDATED PASSWORD SECTION
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
-import { employeeService } from '../../services/employeeService';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { login, user } = useAuth();
   const { showNotification } = useNotification();
   const navigate = useNavigate();
+  
+  const holdTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const passwordInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (user) {
@@ -19,6 +22,47 @@ const Login: React.FC = () => {
       navigate('/');
     }
   }, [user, navigate]);
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (holdTimeoutRef.current) {
+        clearTimeout(holdTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleMouseDown = () => {
+    // Start timeout to show password after a brief delay (300ms)
+    holdTimeoutRef.current = setTimeout(() => {
+      setShowPassword(true);
+    }, 300);
+  };
+
+  const handleMouseUp = () => {
+    // Clear the timeout if user releases before delay completes
+    if (holdTimeoutRef.current) {
+      clearTimeout(holdTimeoutRef.current);
+      holdTimeoutRef.current = null;
+    }
+    // Always hide password on release
+    setShowPassword(false);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    e.preventDefault(); // Prevent context menu on mobile
+    handleMouseDown();
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    e.preventDefault();
+    handleMouseUp();
+  };
+
+  // Prevent context menu on long press
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,7 +79,6 @@ const Login: React.FC = () => {
         message: `Willkommen zurück!`
       });
       
-      // Navigiere zur Startseite
       navigate('/');
       
     } catch (error: any) {
@@ -50,7 +93,6 @@ const Login: React.FC = () => {
     }
   };
 
-  // Wenn bereits eingeloggt, zeige Ladeanzeige
   if (user) {
     return (
       <div style={{ textAlign: 'center', padding: '40px' }}>
@@ -101,20 +143,53 @@ const Login: React.FC = () => {
           <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
             Passwort
           </label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            style={{
-              width: '94.5%',
-              padding: '10px',
-              border: '1px solid #ddd',
-              borderRadius: '4px',
-              fontSize: '16px'
-            }}
-            placeholder="Ihr Passwort"
-          />
+          <div style={{ position: 'relative' }}>
+            <input
+              ref={passwordInputRef}
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              style={{
+                width: '94.5%',
+                padding: '10px',
+                paddingRight: '10px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '16px'
+              }}
+              placeholder="Ihr Passwort"
+            />
+            <button
+              type="button"
+              onMouseDown={handleMouseDown}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp} // Handle mouse leaving while pressed
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
+              onTouchCancel={handleTouchEnd} // Handle touch cancellation
+              onContextMenu={handleContextMenu}
+              style={{
+                position: 'absolute',
+                right: '10px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '1px',
+                borderRadius: '1px',
+                backgroundColor: showPassword ? '#e0e0e0' : 'transparent',
+                transition: 'background-color 0.2s',
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
+                touchAction: 'manipulation'
+              }}
+              title="Gedrückt halten zum Anzeigen des Passworts"
+            >
+              {showPassword ? '👁' : '👁'}
+            </button>
+          </div>
         </div>
 
         <button
