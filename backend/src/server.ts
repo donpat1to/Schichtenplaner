@@ -40,7 +40,7 @@ app.get('/api/health', (req: any, res: any) => {
 });
 
 // 🆕 STATIC FILE SERVING FÜR FRONTEND
-const frontendBuildPath = path.join(__dirname, '../../frontend-build');
+const frontendBuildPath = path.join(__dirname, '../frontend-build');
 console.log('📁 Frontend build path:', frontendBuildPath);
 
 // Überprüfe ob das Verzeichnis existiert
