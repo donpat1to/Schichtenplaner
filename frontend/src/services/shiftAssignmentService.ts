@@ -6,8 +6,6 @@ import { AssignmentResult, ScheduleRequest } from '../models/scheduling';
 
 const API_BASE_URL = '/api';
 
-
-
 // Helper function to get auth headers
 const getAuthHeaders = () => {
   const token = localStorage.getItem('token');

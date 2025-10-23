@@ -3,7 +3,7 @@ import { authService } from './authService';
 import { ShiftPlan, CreateShiftPlanRequest, ScheduledShift, CreateShiftFromTemplateRequest } from '../models/ShiftPlan';
 import { TEMPLATE_PRESETS } from '../models/defaults/shiftPlanDefaults';  
 
-const API_BASE = 'http://localhost:3002/api/shift-plans';
+const API_BASE_URL = '/api/shift-plans';
 
 // Helper function to get auth headers
 const getAuthHeaders = () => {
@@ -25,7 +25,7 @@ const handleResponse = async (response: Response) => {
 
 export const shiftPlanService = {
   async getShiftPlans(): Promise<ShiftPlan[]> {
-    const response = await fetch(API_BASE, {
+    const response = await fetch(API_BASE_URL, {
       headers: {
         'Content-Type': 'application/json',
         ...authService.getAuthHeaders()
@@ -50,7 +50,7 @@ export const shiftPlanService = {
   },
 
   async getShiftPlan(id: string): Promise<ShiftPlan> {
-    const response = await fetch(`${API_BASE}/${id}`, {
+    const response = await fetch(`${API_BASE_URL}/${id}`, {
       headers: {
         'Content-Type': 'application/json',
         ...authService.getAuthHeaders()
@@ -69,7 +69,7 @@ export const shiftPlanService = {
   },
 
   async createShiftPlan(plan: CreateShiftPlanRequest): Promise<ShiftPlan> {
-    const response = await fetch(API_BASE, {
+    const response = await fetch(API_BASE_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -90,7 +90,7 @@ export const shiftPlanService = {
   },
 
   async updateShiftPlan(id: string, plan: Partial<ShiftPlan>): Promise<ShiftPlan> {
-    const response = await fetch(`${API_BASE}/${id}`, {
+    const response = await fetch(`${API_BASE_URL}/${id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -111,7 +111,7 @@ export const shiftPlanService = {
   },
 
   async deleteShiftPlan(id: string): Promise<void> {
-    const response = await fetch(`${API_BASE}/${id}`, {
+    const response = await fetch(`${API_BASE_URL}/${id}`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
@@ -130,7 +130,7 @@ export const shiftPlanService = {
 
   // Get specific template or plan
   getTemplate: async (id: string): Promise<ShiftPlan> => {
-    const response = await fetch(`${API_BASE}/${id}`, {
+    const response = await fetch(`${API_BASE_URL}/${id}`, {
       headers: getAuthHeaders()
     });
     return handleResponse(response);
@@ -142,7 +142,7 @@ export const shiftPlanService = {
         console.log('🔄 Attempting to regenerate scheduled shifts...');
         
         // You'll need to add this API endpoint to your backend
-        const response = await fetch(`${API_BASE}/${planId}/regenerate-shifts`, {
+        const response = await fetch(`${API_BASE_URL}/${planId}/regenerate-shifts`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -162,7 +162,7 @@ export const shiftPlanService = {
 
   // Create new plan
   createPlan: async (data: CreateShiftPlanRequest): Promise<ShiftPlan> => {
-    const response = await fetch(`${API_BASE}`, {
+    const response = await fetch(`${API_BASE_URL}`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(data),
@@ -177,7 +177,7 @@ export const shiftPlanService = {
     endDate: string;
     isTemplate?: boolean;
   }): Promise<ShiftPlan> => {
-    const response = await fetch(`${API_BASE}/from-preset`, {
+    const response = await fetch(`${API_BASE_URL}/from-preset`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(data),
@@ -204,7 +204,7 @@ export const shiftPlanService = {
     try {
       console.log('🔄 Clearing assignments for plan:', planId);
       
-      const response = await fetch(`${API_BASE}/${planId}/clear-assignments`, {
+      const response = await fetch(`${API_BASE_URL}/${planId}/clear-assignments`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

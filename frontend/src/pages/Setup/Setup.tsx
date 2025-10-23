@@ -2,6 +2,8 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 
+const API_BASE_URL = '/api';
+
 const Setup: React.FC = () => {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
@@ -73,7 +75,7 @@ const Setup: React.FC = () => {
 
       console.log('🚀 Sending setup request...', payload);
 
-      const response = await fetch('http://localhost:3002/api/setup/admin', {
+      const response = await fetch(`${API_BASE_URL}/setup/admin`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
