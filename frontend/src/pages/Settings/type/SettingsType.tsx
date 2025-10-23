@@ -1,4 +1,5 @@
-  export const styles = {
+// frontend/src/pages/Settings/type/SettingsType.tsx - CORRECTED
+export const styles = {
     container: {
       display: 'flex',
       minHeight: 'calc(100vh - 120px)',
@@ -121,11 +122,17 @@
       display: 'flex',
       flexDirection: 'column' as const,
       gap: '0.5rem',
+      width: '100%',
     },
     fieldLabel: {
       fontSize: '0.9rem',
       fontWeight: 600,
       color: '#161718',
+      width: '100%',
+    },
+    fieldInputContainer: {
+      position: 'relative' as const,
+      width: '100%',
     },
     fieldInput: {
       padding: '0.875rem 1rem',
@@ -135,6 +142,20 @@
       background: '#FBFAF6',
       transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
       color: '#161718',
+      width: '100%',
+      boxSizing: 'border-box' as const,
+    },
+    fieldInputWithIcon: {
+      padding: '0.875rem 1rem',
+      border: '1.5px solid #e8e8e8',
+      borderRadius: '8px',
+      fontSize: '0.95rem',
+      background: '#FBFAF6',
+      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+      color: '#161718',
+      width: '100%',
+      paddingRight: '40px',
+      boxSizing: 'border-box' as const,
     },
     fieldInputDisabled: {
       padding: '0.875rem 1rem',
@@ -144,11 +165,29 @@
       background: 'rgba(26, 19, 37, 0.05)',
       color: '#666',
       cursor: 'not-allowed',
+      width: '100%',
+      boxSizing: 'border-box' as const,
     },
     fieldHint: {
       fontSize: '0.8rem',
       color: '#888',
       marginTop: '0.25rem',
+      width: '100%',
+    },
+    passwordToggleButton: {
+      position: 'absolute' as const,
+      right: '10px',
+      top: '50%',
+      transform: 'translateY(-50%)',
+      background: 'none',
+      border: 'none',
+      cursor: 'pointer',
+      padding: '5px',
+      borderRadius: '4px',
+      transition: 'background-color 0.2s',
+      userSelect: 'none' as const,
+      WebkitUserSelect: 'none' as const,
+      touchAction: 'manipulation' as const,
     },
     actions: {
       display: 'flex',

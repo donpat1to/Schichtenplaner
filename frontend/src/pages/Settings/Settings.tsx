@@ -1,5 +1,5 @@
-// frontend/src/pages/Settings/Settings.tsx
-import React, { useState, useEffect } from 'react';
+// frontend/src/pages/Settings/Settings.tsx - UPDATED WITH NEW STYLES
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { employeeService } from '../../services/employeeService';
 import { useNotification } from '../../contexts/NotificationContext';
@@ -27,6 +27,16 @@ const Settings: React.FC = () => {
     confirmPassword: ''
   });
 
+  // Password visibility states
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Refs for timeout management
+  const currentPasswordTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const newPasswordTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const confirmPasswordTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     if (currentUser) {
       setProfileForm({
@@ -35,6 +45,17 @@ const Settings: React.FC = () => {
       });
     }
   }, [currentUser]);
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      [currentPasswordTimeoutRef, newPasswordTimeoutRef, confirmPasswordTimeoutRef].forEach(ref => {
+        if (ref.current) {
+          clearTimeout(ref.current);
+        }
+      });
+    };
+  }, []);
 
   const handleProfileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -50,6 +71,67 @@ const Settings: React.FC = () => {
       ...prev,
       [name]: value
     }));
+  };
+
+  // Password visibility handlers for current password
+  const handleCurrentPasswordMouseDown = () => {
+    currentPasswordTimeoutRef.current = setTimeout(() => {
+      setShowCurrentPassword(true);
+    }, 300);
+  };
+
+  const handleCurrentPasswordMouseUp = () => {
+    if (currentPasswordTimeoutRef.current) {
+      clearTimeout(currentPasswordTimeoutRef.current);
+      currentPasswordTimeoutRef.current = null;
+    }
+    setShowCurrentPassword(false);
+  };
+
+  // Password visibility handlers for new password
+  const handleNewPasswordMouseDown = () => {
+    newPasswordTimeoutRef.current = setTimeout(() => {
+      setShowNewPassword(true);
+    }, 300);
+  };
+
+  const handleNewPasswordMouseUp = () => {
+    if (newPasswordTimeoutRef.current) {
+      clearTimeout(newPasswordTimeoutRef.current);
+      newPasswordTimeoutRef.current = null;
+    }
+    setShowNewPassword(false);
+  };
+
+  // Password visibility handlers for confirm password
+  const handleConfirmPasswordMouseDown = () => {
+    confirmPasswordTimeoutRef.current = setTimeout(() => {
+      setShowConfirmPassword(true);
+    }, 300);
+  };
+
+  const handleConfirmPasswordMouseUp = () => {
+    if (confirmPasswordTimeoutRef.current) {
+      clearTimeout(confirmPasswordTimeoutRef.current);
+      confirmPasswordTimeoutRef.current = null;
+    }
+    setShowConfirmPassword(false);
+  };
+
+  // Touch event handlers
+  const handleTouchStart = (setter: () => void) => (e: React.TouchEvent) => {
+    e.preventDefault();
+    setter();
+  };
+
+  const handleTouchEnd = (cleanup: () => void) => (e: React.TouchEvent) => {
+    e.preventDefault();
+    cleanup();
+  };
+
+  // Prevent context menu
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
   };
 
   const handleProfileUpdate = async (e: React.FormEvent) => {
@@ -179,11 +261,6 @@ const Settings: React.FC = () => {
       />
     );
   }
-
-  // Get full name for display
-  const getFullName = () => {
-    return `${currentUser.firstname || ''} ${currentUser.lastname || ''}`.trim();
-  };
 
   return (
     <div style={styles.container}>
@@ -443,77 +520,137 @@ const Settings: React.FC = () => {
             
             <form onSubmit={handlePasswordUpdate} style={{ marginTop: '2rem' }}>
               <div style={styles.formGridCompact}>
+                {/* Current Password Field */}
                 <div style={styles.field}>
                   <label style={styles.fieldLabel}>
                     Aktuelles Passwort *
                   </label>
-                  <input
-                    type="password"
-                    name="currentPassword"
-                    value={passwordForm.currentPassword}
-                    onChange={handlePasswordChange}
-                    required
-                    style={styles.fieldInput}
-                    placeholder="Aktuelles Passwort"
-                    onFocus={(e) => {
-                      e.target.style.borderColor = '#1a1325';
-                      e.target.style.boxShadow = '0 0 0 3px rgba(26, 19, 37, 0.1)';
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '#e8e8e8';
-                      e.target.style.boxShadow = 'none';
-                    }}
-                  />
+                  <div style={styles.fieldInputContainer}>
+                    <input
+                      type={showCurrentPassword ? 'text' : 'password'}
+                      name="currentPassword"
+                      value={passwordForm.currentPassword}
+                      onChange={handlePasswordChange}
+                      required
+                      style={styles.fieldInputWithIcon}
+                      placeholder="Aktuelles Passwort"
+                      onFocus={(e) => {
+                        e.target.style.borderColor = '#1a1325';
+                        e.target.style.boxShadow = '0 0 0 3px rgba(26, 19, 37, 0.1)';
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.borderColor = '#e8e8e8';
+                        e.target.style.boxShadow = 'none';
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onMouseDown={handleCurrentPasswordMouseDown}
+                      onMouseUp={handleCurrentPasswordMouseUp}
+                      onMouseLeave={handleCurrentPasswordMouseUp}
+                      onTouchStart={handleTouchStart(handleCurrentPasswordMouseDown)}
+                      onTouchEnd={handleTouchEnd(handleCurrentPasswordMouseUp)}
+                      onTouchCancel={handleTouchEnd(handleCurrentPasswordMouseUp)}
+                      onContextMenu={handleContextMenu}
+                      style={{
+                        ...styles.passwordToggleButton,
+                        backgroundColor: showCurrentPassword ? 'rgba(26, 19, 37, 0.1)' : 'transparent'
+                      }}
+                      title="Gedrückt halten zum Anzeigen des Passworts"
+                    >
+                      {showCurrentPassword ? '👁' : '👁'}
+                    </button>
+                  </div>
                 </div>
 
+                {/* New Password Field */}
                 <div style={styles.field}>
                   <label style={styles.fieldLabel}>
                     Neues Passwort *
                   </label>
-                  <input
-                    type="password"
-                    name="newPassword"
-                    value={passwordForm.newPassword}
-                    onChange={handlePasswordChange}
-                    required
-                    minLength={6}
-                    style={styles.fieldInput}
-                    placeholder="Mindestens 6 Zeichen"
-                    onFocus={(e) => {
-                      e.target.style.borderColor = '#1a1325';
-                      e.target.style.boxShadow = '0 0 0 3px rgba(26, 19, 37, 0.1)';
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '#e8e8e8';
-                      e.target.style.boxShadow = 'none';
-                    }}
-                  />
+                  <div style={styles.fieldInputContainer}>
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      name="newPassword"
+                      value={passwordForm.newPassword}
+                      onChange={handlePasswordChange}
+                      required
+                      minLength={6}
+                      style={styles.fieldInputWithIcon}
+                      placeholder="Mindestens 6 Zeichen"
+                      onFocus={(e) => {
+                        e.target.style.borderColor = '#1a1325';
+                        e.target.style.boxShadow = '0 0 0 3px rgba(26, 19, 37, 0.1)';
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.borderColor = '#e8e8e8';
+                        e.target.style.boxShadow = 'none';
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onMouseDown={handleNewPasswordMouseDown}
+                      onMouseUp={handleNewPasswordMouseUp}
+                      onMouseLeave={handleNewPasswordMouseUp}
+                      onTouchStart={handleTouchStart(handleNewPasswordMouseDown)}
+                      onTouchEnd={handleTouchEnd(handleNewPasswordMouseUp)}
+                      onTouchCancel={handleTouchEnd(handleNewPasswordMouseUp)}
+                      onContextMenu={handleContextMenu}
+                      style={{
+                        ...styles.passwordToggleButton,
+                        backgroundColor: showNewPassword ? 'rgba(26, 19, 37, 0.1)' : 'transparent'
+                      }}
+                      title="Gedrückt halten zum Anzeigen des Passworts"
+                    >
+                      {showNewPassword ? '👁' : '👁'}
+                    </button>
+                  </div>
                   <div style={styles.fieldHint}>
                     Das Passwort muss mindestens 6 Zeichen lang sein.
                   </div>
                 </div>
 
+                {/* Confirm Password Field */}
                 <div style={styles.field}>
                   <label style={styles.fieldLabel}>
                     Neues Passwort bestätigen *
                   </label>
-                  <input
-                    type="password"
-                    name="confirmPassword"
-                    value={passwordForm.confirmPassword}
-                    onChange={handlePasswordChange}
-                    required
-                    style={styles.fieldInput}
-                    placeholder="Passwort wiederholen"
-                    onFocus={(e) => {
-                      e.target.style.borderColor = '#1a1325';
-                      e.target.style.boxShadow = '0 0 0 3px rgba(26, 19, 37, 0.1)';
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '#e8e8e8';
-                      e.target.style.boxShadow = 'none';
-                    }}
-                  />
+                  <div style={styles.fieldInputContainer}>
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      name="confirmPassword"
+                      value={passwordForm.confirmPassword}
+                      onChange={handlePasswordChange}
+                      required
+                      style={styles.fieldInputWithIcon}
+                      placeholder="Passwort wiederholen"
+                      onFocus={(e) => {
+                        e.target.style.borderColor = '#1a1325';
+                        e.target.style.boxShadow = '0 0 0 3px rgba(26, 19, 37, 0.1)';
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.borderColor = '#e8e8e8';
+                        e.target.style.boxShadow = 'none';
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onMouseDown={handleConfirmPasswordMouseDown}
+                      onMouseUp={handleConfirmPasswordMouseUp}
+                      onMouseLeave={handleConfirmPasswordMouseUp}
+                      onTouchStart={handleTouchStart(handleConfirmPasswordMouseDown)}
+                      onTouchEnd={handleTouchEnd(handleConfirmPasswordMouseUp)}
+                      onTouchCancel={handleTouchEnd(handleConfirmPasswordMouseUp)}
+                      onContextMenu={handleContextMenu}
+                      style={{
+                        ...styles.passwordToggleButton,
+                        backgroundColor: showConfirmPassword ? 'rgba(26, 19, 37, 0.1)' : 'transparent'
+                      }}
+                      title="Gedrückt halten zum Anzeigen des Passworts"
+                    >
+                      {showConfirmPassword ? '👁' : '👁'}
+                    </button>
+                  </div>
                 </div>
               </div>
 
