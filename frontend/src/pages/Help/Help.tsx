@@ -1,80 +1,45 @@
 // frontend/src/pages/Help/Help.tsx
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 
 const Help: React.FC = () => {
-  const [currentStage, setCurrentStage] = useState(0);
-  const [isAnimating, setIsAnimating] = useState(false);
+  const businessRules = [
+    { rule: "Mitarbeiter werden nur Schichten zugewiesen, für die sie sich eingetragen haben", critical: true },
+    { rule: "Maximal 1 Schicht pro Tag pro Mitarbeiter", critical: true },
+    { rule: "Schichten haben Mindest- und Maximalkapazitäten", critical: true },
+    { rule: "Trainees benötigen erfahrene Begleitung in jeder Schicht", critical: true },
+    { rule: "Mitarbeiter, die nicht alleine arbeiten können, müssen Begleitung haben", critical: true },
+    { rule: "Vertragslimits: Klein=1 Schicht/Woche, Groß=2 Schichten/Woche", critical: true },
+    { rule: "Manager werden automatisch ihren bevorzugten Schichten zugewiesen", critical: false }
+  ];
 
-  const algorithmStages = [
+  const schedulingStages = [
     {
-      title: "📊 Phase A: Reguläre Mitarbeiterplanung",
-      description: "Zuweisung aller Mitarbeiter außer Manager",
-      steps: [
-        "Grundabdeckung: Mindestens 1 Mitarbeiter pro Schicht",
-        "Erfahrene Mitarbeiter werden bevorzugt",
-        "Verhindere 'Neu allein' Situationen",
-        "Fülle Schichten bis zur Zielbesetzung"
-      ],
-      color: "#3498db"
+      title: "1. Verfügbarkeitsprüfung",
+      description: "Nur Mitarbeiter, die sich für Schichten eingetragen haben (Verfügbarkeit 1 oder 2), werden berücksichtigt."
     },
     {
-      title: "👑 Phase B: Manager-Einfügung",
-      description: "Manager wird seinen bevorzugten Schichten zugewiesen",
-      steps: [
-        "Manager wird festen Schichten zugewiesen",
-        "Erfahrene Mitarbeiter werden zu Manager-Schichten hinzugefügt",
-        "Bei Problemen: Austausch oder Bewegung von Mitarbeitern",
-        "Fallback: Nicht-erfahrene als Backup"
-      ],
-      color: "#e74c3c"
+      title: "2. Modellaufbau",
+      description: "Das System erstellt ein mathematisches Modell mit allen Variablen und Constraints."
     },
     {
-      title: "🔧 Phase C: Reparatur & Validierung",
-      description: "Probleme erkennen und automatisch beheben",
-      steps: [
-        "Überbesetzte erfahrene Mitarbeiter identifizieren",
-        "Mitarbeiter-Pool für Neuverteilung erstellen",
-        "Priorisierte Zuweisung zu Problem-Schichten",
-        "Finale Validierung aller Geschäftsregeln"
-      ],
-      color: "#2ecc71"
+      title: "3. CP-SAT Optimierung", 
+      description: "Google's Constraint Programming Solver findet die beste Zuordnung unter allen Regeln."
     },
     {
-      title: "✅ Finale Prüfung",
-      description: "Zusammenfassung und Freigabe",
-      steps: [
-        "Reparatur-Bericht generieren",
-        "Kritische vs. nicht-kritische Probleme klassifizieren",
-        "Veröffentlichungsstatus bestimmen",
-        "Benutzerfreundliche Zusammenfassung anzeigen"
-      ],
-      color: "#f39c12"
+      title: "4. Manager-Zuweisung",
+      description: "Manager werden automatisch ihren Wunschschichten (Verfügbarkeit 1) zugeordnet."
+    },
+    {
+      title: "5. Validierung",
+      description: "Die Lösung wird auf Regelverletzungen geprüft und ein Bericht generiert."
     }
   ];
 
-  const businessRules = [
-    { rule: "Manager darf nicht allein arbeiten", critical: true },
-    { rule: "Erfahrene mit canWorkAlone: false dürfen nicht allein arbeiten", critical: true },
-    { rule: "Keine leeren Schichten", critical: true },
-    { rule: "Keine 'Neu allein' Situationen", critical: true },
-    { rule: "Manager sollte mit erfahrenem Mitarbeiter arbeiten", critical: false },
-    { rule: "Vertragslimits einhalten", critical: true },
-    { rule: "Nicht zu viele erfahrene Mitarbeiter in einer Schicht", critical: false }
+  const preferenceLevels = [
+    { level: 1, label: "Bevorzugt", description: "Mitarbeiter möchte diese Schicht unbedingt arbeiten", color: "#27ae60" },
+    { level: 2, label: "Verfügbar", description: "Mitarbeiter ist verfügbar für diese Schicht", color: "#f39c12" },
+    { level: 3, label: "Nicht verfügbar", description: "Mitarbeiter kann diese Schicht nicht arbeiten", color: "#e74c3c" }
   ];
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (isAnimating) {
-        setCurrentStage((prev) => (prev + 1) % algorithmStages.length);
-      }
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [isAnimating]);
-
-  const toggleAnimation = () => {
-    setIsAnimating(!isAnimating);
-  };
 
   return (
     <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
@@ -89,7 +54,7 @@ const Help: React.FC = () => {
         boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
         border: '1px solid #e0e0e0'
       }}>
-        <h2 style={{ color: '#2c3e50', marginBottom: '20px' }}>📋 Validierungs Regeln</h2>
+        <h2 style={{ color: '#2c3e50', marginBottom: '20px' }}>📋 Geschäftsregeln</h2>
         <div style={{ display: 'grid', gap: '10px' }}>
           {businessRules.map((rule, index) => (
             <div
@@ -120,14 +85,14 @@ const Help: React.FC = () => {
                 color: rule.critical ? '#e74c3c' : '#f39c12',
                 fontWeight: 'bold'
               }}>
-                {rule.critical ? 'KRITISCH' : 'WARNUNG'}
+                {rule.critical ? 'HART' : 'WEICH'}
               </span>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Algorithm Explanation */}
+      {/* Scheduling Process */}
       <div style={{ 
         backgroundColor: 'white', 
         borderRadius: '12px', 
@@ -136,45 +101,125 @@ const Help: React.FC = () => {
         boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
         border: '1px solid #e0e0e0'
       }}>
-        <h2 style={{ color: '#2c3e50', marginBottom: '20px' }}>🎯 Wie der Algorithmus funktioniert</h2>
+        <h2 style={{ color: '#2c3e50', marginBottom: '20px' }}>⚙️ Scheduling-Prozess</h2>
         
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
-          <div>
-            <h4 style={{ color: '#3498db' }}>🏗️ Phasen-basierter Ansatz</h4>
-            <p>Der Algorithmus arbeitet in klar definierten Phasen, um komplexe Probleme schrittweise zu lösen und Stabilität zu gewährleisten.</p>
-          </div>
-        </div>        
+        <div style={{ display: 'grid', gap: '15px' }}>
+          {schedulingStages.map((stage, index) => (
+            <div key={index} style={{
+              padding: '20px',
+              backgroundColor: '#f8f9fa',
+              borderRadius: '8px',
+              border: '2px solid #e9ecef',
+              display: 'flex',
+              alignItems: 'flex-start'
+            }}>
+              <div style={{
+                backgroundColor: '#3498db',
+                color: 'white',
+                borderRadius: '50%',
+                width: '30px',
+                height: '30px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 'bold',
+                marginRight: '15px',
+                flexShrink: 0
+              }}>
+                {index + 1}
+              </div>
+              <div>
+                <h4 style={{ color: '#2c3e50', margin: '0 0 8px 0' }}>{stage.title}</h4>
+                <p style={{ color: '#6c757d', margin: 0 }}>{stage.description}</p>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
+      {/* Preference Levels */}
       <div style={{ 
-          marginTop: '25px',
-          padding: '20px',
-          backgroundColor: '#e8f4fd',
-          borderRadius: '8px',
-          border: '1px solid #b8d4f0'
-        }}>
-          <h4 style={{ color: '#2980b9', marginTop: 0 }}>💡 Tipps für beste Ergebnisse</h4>
-          <ul style={{ margin: 0, paddingLeft: '20px' }}>
-            <li>Stellen Sie sicher, dass alle Mitarbeiter ihre Verfügbarkeit eingetragen haben</li>
-            <li>Überprüfen Sie die Vertragstypen (klein = 1 Schicht/Woche, groß = 2 Schichten/Woche)</li>
-            <li>Markieren Sie erfahrene Mitarbeiter, die alleine arbeiten können</li>
-            <li>Planen Sie Manager-Verfügbarkeit im Voraus</li>
-          </ul>
-        </div>
-
-      <style>{`
-        @keyframes pulse {
-          0% { transform: scale(1); }
-          50% { transform: scale(1.02); }
-          100% { transform: scale(1); }
-        }
+        backgroundColor: 'white', 
+        borderRadius: '12px', 
+        padding: '30px', 
+        marginTop: '20px',
+        boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+        border: '1px solid #e0e0e0'
+      }}>
+        <h2 style={{ color: '#2c3e50', marginBottom: '20px' }}>🎯 Verfügbarkeits-Level</h2>
         
-        @keyframes glow {
-          0% { box-shadow: 0 0 5px rgba(52, 152, 219, 0.5); }
-          50% { box-shadow: 0 0 20px rgba(52, 152, 219, 0.8); }
-          100% { box-shadow: 0 0 5px rgba(52, 152, 219, 0.5); }
-        }
-      `}</style>
+        <div style={{ display: 'grid', gap: '12px' }}>
+          {preferenceLevels.map((pref) => (
+            <div key={pref.level} style={{
+              padding: '15px',
+              backgroundColor: `${pref.color}15`,
+              border: `2px solid ${pref.color}`,
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center'
+            }}>
+              <div style={{
+                backgroundColor: pref.color,
+                color: 'white',
+                borderRadius: '6px',
+                padding: '8px 12px',
+                fontWeight: 'bold',
+                marginRight: '15px',
+                minWidth: '120px',
+                textAlign: 'center'
+              }}>
+                Level {pref.level}: {pref.label}
+              </div>
+              <span style={{ color: '#2c3e50' }}>{pref.description}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Tips */}
+      <div style={{ 
+        marginTop: '25px',
+        padding: '25px',
+        backgroundColor: '#e8f4fd',
+        borderRadius: '12px',
+        border: '2px solid #b8d4f0'
+      }}>
+        <h3 style={{ color: '#2980b9', marginTop: 0 }}>💡 Best Practices für erfolgreiches Scheduling</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '15px', marginTop: '15px' }}>
+          <div>
+            <h4 style={{ color: '#2980b9' }}>Vor dem Scheduling</h4>
+            <ul style={{ margin: 0, paddingLeft: '20px', color: '#2c3e50' }}>
+              <li>Stellen Sie sicher, dass alle Mitarbeiter ihre Verfügbarkeit eingetragen haben</li>
+              <li>Überprüfen Sie die Mitarbeiterprofile (Trainee/Erfahren, Alleinarbeit möglich)</li>
+              <li>Bestätigen Sie die Vertragstypen und Schichtanforderungen</li>
+            </ul>
+          </div>
+          <div>
+            <h4 style={{ color: '#2980b9' }}>Nach dem Scheduling</h4>
+            <ul style={{ margin: 0, paddingLeft: '20px', color: '#2c3e50' }}>
+              <li>Prüfen Sie den Lösungsbericht auf Verletzungen</li>
+              <li>Kontrollieren Sie unterbesetzte Schichten</li>
+              <li>Validieren Sie Trainee-Betreuung und Alleinarbeits-Regeln</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* Technical Info */}
+      <div style={{ 
+        marginTop: '25px',
+        padding: '20px',
+        backgroundColor: '#fff3cd',
+        borderRadius: '8px',
+        border: '1px solid #ffeaa7'
+      }}>
+        <h4 style={{ color: '#856404', marginTop: 0 }}>🔧 Technische Informationen</h4>
+        <p style={{ color: '#856404', margin: 0 }}>
+          <strong>Lösungsalgorithmus:</strong> Google OR-Tools CP-SAT Solver • 
+          <strong> Fallback:</strong> TypeScript-basierter Solver • 
+          <strong> Maximale Laufzeit:</strong> 105 Sekunden
+        </p>
+      </div>
     </div>
   );
 };

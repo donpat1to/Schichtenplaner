@@ -119,7 +119,7 @@ const Login: React.FC = () => {
       }}>
         <h2 style={{ textAlign: 'center', marginBottom: '30px' }}>Anmeldung</h2>
         
-        <div style={{ marginBottom: '20px' }}>
+        <div style={{ marginBottom: '20px', width: '100%' }}>
           <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
             E-Mail
           </label>
@@ -139,7 +139,7 @@ const Login: React.FC = () => {
           />
         </div>
 
-        <div style={{ marginBottom: '30px' }}>
+        <div style={{ marginBottom: '30px', width: '100%' }}>
           <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
             Passwort
           </label>
