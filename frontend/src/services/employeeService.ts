@@ -1,7 +1,7 @@
 // frontend/src/services/employeeService.ts
 import { Employee, CreateEmployeeRequest, UpdateEmployeeRequest, EmployeeAvailability } from '../models/Employee';
 
-const API_BASE_URL = 'http://localhost:3002/api';
+const API_BASE_URL = '/api';
 
 const getAuthHeaders = () => {
   const token = localStorage.getItem('token');

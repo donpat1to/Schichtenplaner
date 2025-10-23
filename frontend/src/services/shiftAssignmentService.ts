@@ -4,7 +4,7 @@ import { Employee, EmployeeAvailability } from '../models/Employee';
 import { authService } from './authService';
 import { AssignmentResult, ScheduleRequest } from '../models/scheduling';
 
-const API_BASE_URL = 'http://localhost:3002/api';
+const API_BASE_URL = '/api';
 
 
 
