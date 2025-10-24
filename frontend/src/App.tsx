@@ -1,4 +1,4 @@
-// frontend/src/App.tsx - UPDATED WITH FOOTER LINKS
+// frontend/src/App.tsx - ONE-REPO SAFE WITHOUT DYNAMIC IMPORTS
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -16,16 +16,67 @@ import Settings from './pages/Settings/Settings';
 import Help from './pages/Help/Help';
 import Setup from './pages/Setup/Setup';
 
-// Footer Link Pages
+// Free Footer Link Pages (always available)
 import FAQ from './components/Layout/FooterLinks/FAQ/FAQ';
 import About from './components/Layout/FooterLinks/About/About';
 import Features from './components/Layout/FooterLinks/Features/Features';
 
-// PREMIUM Footer Link Pages
-import { Contact } from '@premium-frontend/componentsPRO/FooterLinksPro/Contact/Contact';
-import { Privacy } from '@premium-frontend/componentsPRO/FooterLinksPro/Privacy/Privacy';
-import Imprint from '../../premium/frontendPRO/src/componentsPRO/FooterLinksPro/Imprint/Imprint';
-import Terms from '../../premium/frontendPRO/src/componentsPRO/FooterLinksPro/Terms/Terms';
+// Feature flag from environment
+const ENABLE_PRO = process.env.ENABLE_PRO === 'true';
+
+// Community fallback components (always available)
+const CommunityContact: React.FC = () => (
+  <div style={{ padding: '40px 20px', maxWidth: '800px', margin: '0 auto' }}>
+    <h1>📞 Kontakt</h1>
+    <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '30px', marginTop: '20px' }}>
+      <h2 style={{ color: '#2c3e50' }}>Community Edition</h2>
+      <p>Kontaktfunktionen sind in der Premium Edition verfügbar.</p>
+      <p>
+        <a href="/features" style={{ color: '#3498db' }}>
+          ➡️ Zu den Features
+        </a>
+      </p>
+    </div>
+  </div>
+);
+
+const CommunityLegalPage: React.FC<{ title: string }> = ({ title }) => (
+  <div style={{ padding: '40px 20px', maxWidth: '800px', margin: '0 auto' }}>
+    <h1>📄 {title}</h1>
+    <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '30px', marginTop: '20px' }}>
+      <h2 style={{ color: '#2c3e50' }}>Community Edition</h2>
+      <p>Rechtliche Dokumentation ist in der Premium Edition verfügbar.</p>
+      <p>
+        <a href="/features" style={{ color: '#3498db' }}>
+          ➡️ Erfahren Sie mehr über Premium
+        </a>
+      </p>
+    </div>
+  </div>
+);
+
+// Conditional Premium Components
+let PremiumContact: React.FC = CommunityContact;
+let PremiumPrivacy: React.FC = () => <CommunityLegalPage title="Datenschutz" />;
+let PremiumImprint: React.FC = () => <CommunityLegalPage title="Impressum" />;
+let PremiumTerms: React.FC = () => <CommunityLegalPage title="AGB" />;
+
+// Load premium components only when ENABLE_PRO is true
+if (ENABLE_PRO) {
+  try {
+    // Use require with type assertions to avoid dynamic import issues
+    const premiumModule = require('@premium-frontend/components/FooterLinks');
+    
+    if (premiumModule.Contact) PremiumContact = premiumModule.Contact;
+    if (premiumModule.Privacy) PremiumPrivacy = premiumModule.Privacy;
+    if (premiumModule.Imprint) PremiumImprint = premiumModule.Imprint;
+    if (premiumModule.Terms) PremiumTerms = premiumModule.Terms;
+    
+    console.log('✅ Premium components loaded successfully');
+  } catch (error) {
+    console.warn('⚠️ Premium components not available, using community fallbacks:', error);
+  }
+}
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[] }> = ({ 
@@ -72,7 +123,6 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     );
   }
 
-  // If user is logged in, show with layout, otherwise without
   return user ? <Layout>{children}</Layout> : <>{children}</>;
 };
 
@@ -81,6 +131,7 @@ const AppContent: React.FC = () => {
   const { loading, needsSetup, user } = useAuth();
 
   console.log('🏠 AppContent rendering - loading:', loading, 'needsSetup:', needsSetup, 'user:', user);
+  console.log('🎯 Premium features enabled:', ENABLE_PRO);
 
   // Während des Ladens
   if (loading) {
@@ -108,93 +159,31 @@ const AppContent: React.FC = () => {
   return (
     <Routes>
       {/* Protected Routes (require login) */}
-      <Route path="/" element={
-        <ProtectedRoute>
-          <Dashboard />
-        </ProtectedRoute>
-      } />
-      <Route path="/shift-plans" element={
-        <ProtectedRoute>
-          <ShiftPlanList />
-        </ProtectedRoute>
-      } />
-      <Route path="/shift-plans/new" element={
-        <ProtectedRoute roles={['admin', 'maintenance']}>
-          <ShiftPlanCreate />
-        </ProtectedRoute>
-      } />
-      <Route path="/shift-plans/:id/edit" element={
-        <ProtectedRoute roles={['admin', 'maintenance']}>
-          <ShiftPlanEdit />
-        </ProtectedRoute>
-      } />
-      <Route path="/shift-plans/:id" element={
-        <ProtectedRoute>
-          <ShiftPlanView />
-        </ProtectedRoute>
-      } />
-      <Route path="/employees" element={
-        <ProtectedRoute roles={['admin', 'maintenance']}>
-          <EmployeeManagement />
-        </ProtectedRoute>
-      } />
-      <Route path="/settings" element={
-        <ProtectedRoute>
-          <Settings />
-        </ProtectedRoute>
-      } />
-      <Route path="/help" element={
-        <ProtectedRoute>
-          <Help />
-        </ProtectedRoute>
-      } />
+      <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+      <Route path="/shift-plans" element={<ProtectedRoute><ShiftPlanList /></ProtectedRoute>} />
+      <Route path="/shift-plans/new" element={<ProtectedRoute roles={['admin', 'maintenance']}><ShiftPlanCreate /></ProtectedRoute>} />
+      <Route path="/shift-plans/:id/edit" element={<ProtectedRoute roles={['admin', 'maintenance']}><ShiftPlanEdit /></ProtectedRoute>} />
+      <Route path="/shift-plans/:id" element={<ProtectedRoute><ShiftPlanView /></ProtectedRoute>} />
+      <Route path="/employees" element={<ProtectedRoute roles={['admin', 'maintenance']}><EmployeeManagement /></ProtectedRoute>} />
+      <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+      <Route path="/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
 
-      {/* Public Footer Link Pages (accessible without login, but show layout if logged in) */}
-      <Route path="/contact" element={
-        <PublicRoute>
-          <Contact />
-        </PublicRoute>
-      } />
-      <Route path="/faq" element={
-        <PublicRoute>
-          <FAQ />
-        </PublicRoute>
-      } />
-      <Route path="/privacy" element={
-        <PublicRoute>
-          <Privacy />
-        </PublicRoute>
-      } />
-      <Route path="/imprint" element={
-        <PublicRoute>
-          <Imprint />
-        </PublicRoute>
-      } />
-      <Route path="/terms" element={
-        <PublicRoute>
-          <Terms />
-        </PublicRoute>
-      } />
-      <Route path="/about" element={
-        <PublicRoute>
-          <About />
-        </PublicRoute>
-      } />
-      <Route path="/features" element={
-        <PublicRoute>
-          <Features />
-        </PublicRoute>
-      } />
+      {/* Public Footer Link Pages (always available) */}
+      <Route path="/faq" element={<PublicRoute><FAQ /></PublicRoute>} />
+      <Route path="/about" element={<PublicRoute><About /></PublicRoute>} />
+      <Route path="/features" element={<PublicRoute><Features /></PublicRoute>} />
+
+      {/* PREMIUM Footer Link Pages (conditionally available) */}
+      <Route path="/contact" element={<PublicRoute><PremiumContact /></PublicRoute>} />
+      <Route path="/privacy" element={<PublicRoute><PremiumPrivacy /></PublicRoute>} />
+      <Route path="/imprint" element={<PublicRoute><PremiumImprint /></PublicRoute>} />
+      <Route path="/terms" element={<PublicRoute><PremiumTerms /></PublicRoute>} />
 
       {/* Auth Routes */}
       <Route path="/login" element={<Login />} />
       
       {/* Catch-all Route */}
-      <Route path="*" element={
-        <ProtectedRoute>
-          <Dashboard />
-        </ProtectedRoute>
-      } />
+      <Route path="*" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
     </Routes>
   );
 };

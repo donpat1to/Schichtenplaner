@@ -1,21 +1,22 @@
+// frontend/tsconfig.json - SO FUNKTIONIERT ES
 {
-  "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "lib": [
-      "ES2022",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "skipLibCheck": true,
-    "moduleResolution": "bundler"
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "paths": {
+      "@premium-frontend/*": ["../premium/frontendPRO/src/*"]
+    }
   },
   "include": [
     "src/**/*"
-  ],
-  "references": [
-    { "path": "../premium" }
   ]
 }

@@ -8,8 +8,10 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),
-      '@premium-frontend': resolve(__dirname, '../premium/frontendPRO/src'),
-      '@premium-backend': resolve(__dirname, '../premium/backendPRO/src')
+      '@premium-frontend': resolve(__dirname, '../premium/frontendPRO/src')
     }
+  },
+  define: {
+    'process.env.ENABLE_PRO': JSON.stringify(process.env.ENABLE_PRO === 'true')
   }
 });

@@ -22,10 +22,11 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "vite",
+    "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview",
-    "type-check": "tsc --noEmit"
+    "build:community": "vite build",
+    "build:commercial": "git submodule update --init --recursive && ENABLE_PRO=true vite build",
+    "preview": "vite preview"
   },
   "devDependencies": {
     "@types/react": "^18.0.27",
