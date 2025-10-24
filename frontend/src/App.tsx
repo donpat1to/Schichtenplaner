@@ -20,40 +20,10 @@ import Setup from './pages/Setup/Setup';
 import FAQ from './components/Layout/FooterLinks/FAQ/FAQ';
 import About from './components/Layout/FooterLinks/About/About';
 import Features from './components/Layout/FooterLinks/Features/Features';
+import { CommunityContact, CommunityLegalPage } from './components/Layout/FooterLinks/CommunityLinks/communityLinks';
 
 // Feature flag from environment
-const ENABLE_PRO = process.env.ENABLE_PRO === 'true';
-
-// Community fallback components (always available)
-const CommunityContact: React.FC = () => (
-  <div style={{ padding: '40px 20px', maxWidth: '800px', margin: '0 auto' }}>
-    <h1>📞 Kontakt</h1>
-    <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '30px', marginTop: '20px' }}>
-      <h2 style={{ color: '#2c3e50' }}>Community Edition</h2>
-      <p>Kontaktfunktionen sind in der Premium Edition verfügbar.</p>
-      <p>
-        <a href="/features" style={{ color: '#3498db' }}>
-          ➡️ Zu den Features
-        </a>
-      </p>
-    </div>
-  </div>
-);
-
-const CommunityLegalPage: React.FC<{ title: string }> = ({ title }) => (
-  <div style={{ padding: '40px 20px', maxWidth: '800px', margin: '0 auto' }}>
-    <h1>📄 {title}</h1>
-    <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '30px', marginTop: '20px' }}>
-      <h2 style={{ color: '#2c3e50' }}>Community Edition</h2>
-      <p>Rechtliche Dokumentation ist in der Premium Edition verfügbar.</p>
-      <p>
-        <a href="/features" style={{ color: '#3498db' }}>
-          ➡️ Erfahren Sie mehr über Premium
-        </a>
-      </p>
-    </div>
-  </div>
-);
+const ENABLE_PRO = process.env.REACT_APP_ENABLE_PRO === 'true';
 
 // Conditional Premium Components
 let PremiumContact: React.FC = CommunityContact;
@@ -66,7 +36,7 @@ if (ENABLE_PRO) {
   try {
     // Use require with type assertions to avoid dynamic import issues
     const premiumModule = require('@premium-frontend/components/FooterLinks');
-    
+
     if (premiumModule.Contact) PremiumContact = premiumModule.Contact;
     if (premiumModule.Privacy) PremiumPrivacy = premiumModule.Privacy;
     if (premiumModule.Imprint) PremiumImprint = premiumModule.Imprint;

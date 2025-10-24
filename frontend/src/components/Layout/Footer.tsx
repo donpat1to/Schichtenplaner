@@ -182,20 +182,6 @@ const Footer: React.FC = () => {
           >
             Funktionen
           </a>
-          <a 
-            href="/pricing" 
-            style={styles.footerLink}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = '#FBFAF6';
-              e.currentTarget.style.transform = 'translateX(4px)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = 'rgba(251, 250, 246, 0.7)';
-              e.currentTarget.style.transform = 'translateX(0)';
-            }}
-          >
-            Preise
-          </a>
         </div>
       </div>
       

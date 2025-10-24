@@ -1,7 +1,5 @@
 {
   "name": "schichtplan-backend",
-  "license": "SEE LICENSE IN LICENSE.md",
-  "author": "Patrick <dev.patrick@inca-vikingo.de>",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
