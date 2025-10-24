@@ -9,6 +9,7 @@
     "jsx": "react-jsx",
     "noEmit": true,
     "allowImportingTsExtensions": true,
+    "skipLibCheck": true,
     "moduleResolution": "bundler"
   },
   "include": [

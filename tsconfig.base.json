@@ -34,8 +34,13 @@
     "forceConsistentCasingInFileNames": true,
     
     /* COMPATIBILITY */
-    "isolatedModules": true
+    "isolatedModules": true,
+
+    "types": ["vite/client", "node"]
   },
+  "include": [
+    "/premium/**/*"
+  ],
   "exclude": [
     "node_modules",
     "dist",

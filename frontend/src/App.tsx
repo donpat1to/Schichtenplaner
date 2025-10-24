@@ -17,13 +17,15 @@ import Help from './pages/Help/Help';
 import Setup from './pages/Setup/Setup';
 
 // Footer Link Pages
-import Contact from '../../premium/frontendPRO/src/componentsPRO/FooterLinksPro/Contact/Contact';
 import FAQ from './components/Layout/FooterLinks/FAQ/FAQ';
-import Privacy from '../../premium/frontendPRO/src/componentsPRO/FooterLinksPro/Privacy/Privacy';
-import Imprint from '../../premium/frontendPRO/src/componentsPRO/FooterLinksPro/Imprint/Imprint';
-import Terms from '../../premium/frontendPRO/src/componentsPRO/FooterLinksPro/Terms/Terms';
 import About from './components/Layout/FooterLinks/About/About';
 import Features from './components/Layout/FooterLinks/Features/Features';
+
+// PREMIUM Footer Link Pages
+import { Contact } from '@premium-frontend/componentsPRO/FooterLinksPro/Contact/Contact';
+import { Privacy } from '@premium-frontend/componentsPRO/FooterLinksPro/Privacy/Privacy';
+import Imprint from '../../premium/frontendPRO/src/componentsPRO/FooterLinksPro/Imprint/Imprint';
+import Terms from '../../premium/frontendPRO/src/componentsPRO/FooterLinksPro/Terms/Terms';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[] }> = ({ 
