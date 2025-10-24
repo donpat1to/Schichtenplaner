@@ -23,7 +23,7 @@ import Features from './components/Layout/FooterLinks/Features/Features';
 import { CommunityContact, CommunityLegalPage } from './components/Layout/FooterLinks/CommunityLinks/communityLinks';
 
 // Feature flag from environment
-const ENABLE_PRO = process.env.REACT_APP_ENABLE_PRO === 'true';
+const ENABLE_PRO = process.env.ENABLE_PRO === 'true';
 
 // Conditional Premium Components
 let PremiumContact: React.FC = CommunityContact;
