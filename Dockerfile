@@ -29,7 +29,7 @@ RUN cp -r src/database/ dist/database/
 # Verify Python and OR-Tools installation
 RUN python -c "from ortools.sat.python import cp_model; print('OR-Tools installed successfully')"
 
-# Frontend build stage
+# Frontend build stage - UPDATED FOR VITE
 FROM node:20-bullseye AS frontend-builder
 
 WORKDIR /app/frontend
@@ -37,15 +37,17 @@ WORKDIR /app/frontend
 # Copy frontend files
 COPY frontend/package*.json ./
 COPY frontend/tsconfig.json ./
+COPY frontend/vite.config.ts ./
+COPY frontend/index.html ./
 
 # Install frontend dependencies
-RUN npm install --legacy-peer-deps
+RUN npm ci
 
 # Copy frontend source
 COPY frontend/src/ ./src/
 COPY frontend/public/ ./public/
 
-# Build frontend
+# Build frontend with Vite
 RUN npm run build
 
 # Production stage
@@ -64,8 +66,8 @@ COPY --from=backend-builder /app/backend/package*.json ./
 COPY --from=backend-builder /app/backend/dist/ ./dist/
 COPY --from=backend-builder /app/backend/node_modules/ ./node_modules/
 
-# Copy frontend built files  
-COPY --from=frontend-builder /app/frontend/build/ ./frontend-build/
+# Copy frontend built files - UPDATED FOR VITE (uses 'dist' instead of 'build')
+COPY --from=frontend-builder /app/frontend/dist/ ./frontend-build/
 
 # Copy PM2 configuration
 COPY ecosystem.config.cjs ./

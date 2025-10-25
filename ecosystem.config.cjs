@@ -1,18 +1,17 @@
 // ecosystem.config.cjs
 module.exports = {
-  apps: [
-    {
-      name: 'schichtplaner',
-      script: './dist/server.js',
-      instances: 1,
-      exec_mode: 'fork',
-      env: {
-        NODE_ENV: 'production',
-        PORT: 3002
-      },
-      error_file: './logs/app-err.log',
-      out_file: './logs/app-out.log',
-      time: true
-    }
-  ]
+  apps: [{
+    name: 'schichtplan-app',
+    script: './dist/server.js',
+    instances: 1,
+    env: {
+      NODE_ENV: 'production',
+      PORT: 3002,
+      FRONTEND_BUILD_PATH: './frontend-build'
+    },
+    error_file: './logs/err.log',
+    out_file: './logs/out.log',
+    log_file: './logs/combined.log',
+    time: true
+  }]
 };

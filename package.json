@@ -7,15 +7,9 @@
     "premium"
   ],
   "scripts": {
-    "dev:frontend": "cd frontend && npm run dev",
-    "dev:backend": "cd backend && npm run dev",
-    "build:all": "npm run build:premium && npm run build:backend && npm run build:frontend",
-    "build:premium": "cd premium && npm run build",
-    "build:backend": "cd backend && npm run build",
-    "build:frontend": "cd frontend && npm run build",
-    "type-check": "npm run type-check:all",
-    "type-check:all": "cd premium && npx tsc --noEmit && cd ../backend && npx tsc --noEmit && cd ../frontend && npx tsc --noEmit",
-    "clean": "rm -rf premium/dist backend/dist frontend/dist"
+    "docker:build": "docker build -t schichtplan-app .",
+    "docker:run": "docker run -p 3002:3002 schichtplan-app",
+    "build:all": "cd backend && npm run build && cd ../frontend && npm run build"
   },
   "devDependencies": {
     "typescript": "^5.3.3"

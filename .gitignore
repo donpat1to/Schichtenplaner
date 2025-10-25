@@ -115,3 +115,24 @@ Thumbs.db
 premium/*
 !premium/README-PREMIUM.md
 !premium/.gitkeep
+
+.git
+.gitignore
+node_modules
+npm-debug.log
+README.md
+.env
+.nyc_output
+coverage
+.cache
+dist
+build
+logs
+*.tsbuildinfo
+
+# Frontend specific
+frontend/dist
+frontend/.vite
+
+# Backend specific  
+backend/dist

@@ -16,11 +16,21 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tag_name: ${{ steps.set_tag.outputs.tag_name }}
+      is_main_branch: ${{ steps.branch_check.outputs.is_main }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Fetch all history for tags
+
+      - name: Check if main branch
+        id: branch_check
+        run: |
+          if [[ "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_REF}" == "refs/heads/master" ]]; then
+            echo "is_main_branch=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_main_branch=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Determine next semantic version tag
         id: set_tag
@@ -139,6 +149,8 @@ jobs:
             type=sha
             # Add the dynamically generated semantic version
             ${{ needs.set-tag.outputs.tag_name }}
+            # Add latest tag for main branch
+            ${{ needs.set-tag.outputs.is_main_branch == 'true' && 'latest' }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -168,3 +180,4 @@ jobs:
           echo "- Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
           echo "- Tags: ${{ steps.meta.outputs.tags }}"
           echo "- New version: ${{ needs.set-tag.outputs.tag_name }}"
+          echo "- Is main branch: ${{ needs.set-tag.outputs.is_main_branch }}"

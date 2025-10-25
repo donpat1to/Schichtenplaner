@@ -1,4 +1,4 @@
-// frontend/src/App.tsx - ONE-REPO SAFE WITHOUT DYNAMIC IMPORTS
+// src/App.tsx - UPDATED FOR VITE
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -22,8 +22,8 @@ import About from './components/Layout/FooterLinks/About/About';
 import Features from './components/Layout/FooterLinks/Features/Features';
 import { CommunityContact, CommunityLegalPage } from './components/Layout/FooterLinks/CommunityLinks/communityLinks';
 
-// Feature flag from environment
-const ENABLE_PRO = process.env.ENABLE_PRO === 'true';
+// Vite environment variables (use import.meta.env instead of process.env)
+const ENABLE_PRO = import.meta.env.ENABLE_PRO === 'true';
 
 // Conditional Premium Components
 let PremiumContact: React.FC = CommunityContact;
