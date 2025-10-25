@@ -39,7 +39,7 @@ COPY frontend/package*.json ./
 COPY frontend/tsconfig.json ./
 
 # Install frontend dependencies
-RUN npm ci
+RUN npm install --legacy-peer-deps
 
 # Copy frontend source
 COPY frontend/src/ ./src/
