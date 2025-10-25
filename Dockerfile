@@ -63,7 +63,7 @@ RUN mkdir -p /app/data
 
 # Copy backend built files
 COPY --from=backend-builder /app/backend/dist/ ./dist/
-COPY --from=backend-builder /app/backend/node_modules/ ./node_modules/
+COPY --from=backend-builder /app/node_modules/ ./node_modules/
 COPY --from=backend-builder /app/backend/package.json ./
 
 # Copy frontend built files  
