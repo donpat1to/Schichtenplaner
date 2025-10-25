@@ -1,7 +1,7 @@
 # Multi-stage build for combined frontend + backend
 FROM node:20-bullseye AS backend-builder
 
-WORKDIR /app
+WORKDIR /app/backend
 
 # Install Python + OR-Tools
 RUN apt-get update && apt-get install -y python3 python3-pip build-essential \
@@ -10,22 +10,21 @@ RUN apt-get update && apt-get install -y python3 python3-pip build-essential \
 # Create symlink so python3 is callable as python
 RUN ln -sf /usr/bin/python3 /usr/bin/python
 
-# Copy ALL package files (root + backend)
-COPY package*.json ./
-COPY backend/package.json ./backend/
+# Copy backend files
+COPY backend/package*.json ./
+COPY backend/tsconfig.json ./
 
-# Install dependencies using workspaces
-RUN npm ci --workspace=backend
+# Install backend dependencies
+RUN npm ci
 
 # Copy backend source
-COPY backend/src/ ./backend/src/
-COPY backend/tsconfig.json ./backend/
+COPY backend/src/ ./src/
 
 # Build backend
-RUN npm run build --workspace=backend
+RUN npm run build
 
 # Copy database files manually
-RUN cp -r backend/src/database/ backend/dist/database/
+RUN cp -r src/database/ dist/database/
 
 # Verify Python and OR-Tools installation
 RUN python -c "from ortools.sat.python import cp_model; print('OR-Tools installed successfully')"
@@ -33,22 +32,21 @@ RUN python -c "from ortools.sat.python import cp_model; print('OR-Tools installe
 # Frontend build stage
 FROM node:20-bullseye AS frontend-builder
 
-WORKDIR /app
+WORKDIR /app/frontend
 
-# Copy ALL package files (root + frontend)
-COPY package*.json ./
-COPY frontend/package.json ./frontend/
+# Copy frontend files
+COPY frontend/package*.json ./
+COPY frontend/tsconfig.json ./
 
-# Install dependencies using workspaces
-RUN npm ci --workspace=frontend
+# Install frontend dependencies
+RUN npm ci
 
 # Copy frontend source
-COPY frontend/src/ ./frontend/src/
-COPY frontend/public/ ./frontend/public/
-COPY frontend/tsconfig.json ./frontend/
+COPY frontend/src/ ./src/
+COPY frontend/public/ ./public/
 
 # Build frontend
-RUN npm run build --workspace=frontend
+RUN npm run build
 
 # Production stage
 FROM node:20-bookworm
@@ -62,9 +60,9 @@ RUN npm install -g pm2
 RUN mkdir -p /app/data
 
 # Copy backend built files
+COPY --from=backend-builder /app/backend/package*.json ./
 COPY --from=backend-builder /app/backend/dist/ ./dist/
-COPY --from=backend-builder /app/node_modules/ ./node_modules/
-COPY --from=backend-builder /app/backend/package.json ./
+COPY --from=backend-builder /app/backend/node_modules/ ./node_modules/
 
 # Copy frontend built files  
 COPY --from=frontend-builder /app/frontend/build/ ./frontend-build/
