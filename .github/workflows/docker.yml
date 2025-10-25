@@ -78,9 +78,7 @@ jobs:
 
       - name: Install backend dependencies
         working-directory: ./backend
-        run: |
-          # Try npm ci first, if it fails use npm install
-          npm ci || (echo "package-lock.json out of sync, using npm install..." && npm install)
+        run: npm install
 
       - name: Run TypeScript check
         working-directory: ./backend
