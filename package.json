@@ -9,7 +9,7 @@
   "scripts": {
     "docker:build": "docker build -t schichtplan-app .",
     "docker:run": "docker run -p 3002:3002 schichtplan-app",
-    "build:all": "cd backend && npm run build && cd ../frontend && npm run build"
+    "build:all": "npm run build --workspace=backend && npm run build --workspace=frontend"
   },
   "devDependencies": {
     "typescript": "^5.3.3"
