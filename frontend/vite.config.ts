@@ -8,7 +8,14 @@ export default defineConfig({
   server: {
     port: 3003,
     host: true,
-    open: true
+    open: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3002',
+        changeOrigin: true,
+        secure: false,
+      }
+    }
   },
   build: {
     outDir: 'dist',

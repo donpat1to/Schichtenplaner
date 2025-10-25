@@ -10,18 +10,26 @@ RUN apt-get update && apt-get install -y python3 python3-pip build-essential \
 # Create symlink so python3 is callable as python
 RUN ln -sf /usr/bin/python3 /usr/bin/python
 
-# Copy backend files
-COPY backend/package*.json ./
-COPY backend/tsconfig.json ./
+# Copy root package files
+COPY package*.json ./
+COPY tsconfig.base.json ./
+
+# Copy workspace package files
+COPY backend/package*.json ./backend/
+COPY frontend/package*.json ./frontend/
 
 # Install backend dependencies
 RUN npm ci
 
-# Copy backend source
-COPY backend/src/ ./src/
+# Copy source code
+COPY backend/ ./backend/
+COPY frontend/ ./frontend/
 
 # Build backend
-RUN npm run build
+RUN npm run build --workspace=backend
+
+# Build frontend  
+RUN npm run build --workspace=frontend
 
 # Copy database files manually
 RUN cp -r src/database/ dist/database/
