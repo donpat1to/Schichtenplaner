@@ -139,12 +139,12 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-        tags: |
-          type=ref,event=branch
-          type=semver,pattern={{version}}
-          type=sha
-          ${{ needs.set-tag.outputs.tag_name }}
-          ${{ fromJSON(needs.set-tag.outputs.is_main_branch) && 'latest' }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=sha
+            ${{ needs.set-tag.outputs.tag_name }}
+            ${{ fromJSON(needs.set-tag.outputs.is_main_branch) && 'latest' || ''}}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
