@@ -21,15 +21,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all history for tags
+          fetch-depth: 0
 
       - name: Check if main branch
         id: branch_check
         run: |
-          if [[ "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_REF}" == "refs/heads/master" ]]; then
-            echo "is_main_branch=true" >> $GITHUB_OUTPUT
+          if [[ "${{ github.ref }}" == "refs/heads/main" || "${{ github.ref }}" == "refs/heads/master" ]]; then
+            echo "is_main=true" >> $GITHUB_OUTPUT
           else
-            echo "is_main_branch=false" >> $GITHUB_OUTPUT
+            echo "is_main=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Determine next semantic version tag
@@ -39,24 +39,31 @@ jobs:
 
           # Find latest tag matching vX.Y.Z
           latest_tag=$(git tag --list 'v*.*.*' --sort=-v:refname | head -n 1)
+          echo "Latest tag found: $latest_tag"
+          
           if [[ -z "$latest_tag" ]]; then
             major=0
             minor=0
             patch=0
+            echo "No existing tags found, starting from v0.0.0"
           else
             version="${latest_tag#v}"
             IFS='.' read -r major minor patch <<< "$version"
+            echo "Parsed version: major=$major, minor=$minor, patch=$patch"
           fi
 
-          if [[ "${GITHUB_REF}" == "refs/heads/main" || "${GITHUB_REF}" == "refs/heads/master" ]]; then
+          if [[ "${{ github.ref }}" == "refs/heads/main" || "${{ github.ref }}" == "refs/heads/master" ]]; then
             major=$((major + 1))
             minor=0
             patch=0
-          elif [[ "${GITHUB_REF}" == "refs/heads/development" ]]; then
+            echo "Main branch - major version bump"
+          elif [[ "${{ github.ref }}" == "refs/heads/development" ]]; then
             minor=$((minor + 1))
             patch=0
+            echo "Development branch - minor version bump"
           else
             patch=$((patch + 1))
+            echo "Other branch - patch version bump"
           fi
 
           new_tag="v${major}.${minor}.${patch}"
@@ -87,7 +94,6 @@ jobs:
       - name: Run backend tests
         working-directory: ./backend
         run: |
-          # Skip tests if jest is not installed
           if [ -f "node_modules/.bin/jest" ]; then
             npm test
           else
@@ -140,11 +146,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=sha
-            ${{ needs.set-tag.outputs.tag_name }}
-            ${{ fromJSON(needs.set-tag.outputs.is_main_branch) && 'latest' || ''}}
+            type=raw,value=${{ needs.set-tag.outputs.tag_name }}
+            type=raw,value=latest,enable=${{ fromJSON(needs.set-tag.outputs.is_main_branch) }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
