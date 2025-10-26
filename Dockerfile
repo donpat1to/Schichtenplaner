@@ -13,6 +13,7 @@ RUN ln -sf /usr/bin/python3 /usr/bin/python
 # Copy root package files first
 COPY package*.json ./
 COPY tsconfig.base.json ./
+COPY ecosystem.config.cjs ./
 
 # Install root dependencies
 RUN npm install
