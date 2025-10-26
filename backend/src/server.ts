@@ -41,6 +41,8 @@ app.get('/api/health', (req: any, res: any) => {
 
 // 🆕 FIXED STATIC FILE SERVING
 // Use absolute path that matches Docker container structure
+const frontendBuildPathEnv = process.env.FRONTEND_BUILD_PATH;
+console.log('📁 Frontend build path from the env', frontendBuildPathEnv);
 const frontendBuildPath = path.resolve('/app/frontend-build');
 console.log('📁 Frontend build path:', frontendBuildPath);
 console.log('📁 Current __dirname:', __dirname);
