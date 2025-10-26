@@ -39,26 +39,53 @@ app.get('/api/health', (req: any, res: any) => {
   });
 });
 
-// 🆕 STATIC FILE SERVING FÜR FRONTEND
-const frontendBuildPath = process.env.FRONTEND_BUILD_PATH || '../frontend-build';
+// 🆕 FIXED STATIC FILE SERVING
+// Use absolute path that matches Docker container structure
+const frontendBuildPath = path.resolve('/app/frontend-build');
 console.log('📁 Frontend build path:', frontendBuildPath);
+console.log('📁 Current __dirname:', __dirname);
 
-// Überprüfe ob das Verzeichnis existiert
-if (fs.existsSync(frontendBuildPath)) {
-  console.log('✅ Frontend build directory exists');
-  const files = fs.readdirSync(frontendBuildPath);
-  console.log('📄 Files in frontend-build:', files);
-  
+// Check multiple possible locations for frontend build
+const possiblePaths = [
+  '/app/frontend-build', // Docker production path
+  path.join(__dirname, '../../frontend-build'), // Relative from dist
+  path.join(process.cwd(), 'frontend-build'), // From current working directory
+];
+
+let actualFrontendPath = null;
+for (const testPath of possiblePaths) {
+  if (fs.existsSync(testPath)) {
+    actualFrontendPath = testPath;
+    console.log('✅ Found frontend build at:', testPath);
+    break;
+  }
+}
+
+if (actualFrontendPath) {
   // Serviere statische Dateien
-  app.use(express.static(frontendBuildPath));
+  app.use(express.static(actualFrontendPath));
+  
+  // List files for debugging
+  try {
+    const files = fs.readdirSync(actualFrontendPath);
+    console.log('📄 Files in frontend-build:', files);
+  } catch (err) {
+    console.log('❌ Could not read frontend-build directory:', err);
+  }
   
   console.log('✅ Static file serving configured');
 } else {
-  console.log('❌ Frontend build directory NOT FOUND:', frontendBuildPath);
+  console.log('❌ Frontend build directory NOT FOUND in any location');
+  console.log('❌ Checked paths:', possiblePaths);
 }
 
+// Root route
 app.get('/', (req, res) => {
-  const indexPath = path.join(frontendBuildPath, 'index.html');
+  if (!actualFrontendPath) {
+    return res.status(500).send('Frontend build not found');
+  }
+  
+  const indexPath = path.join(actualFrontendPath, 'index.html');
   console.log('📄 Serving index.html from:', indexPath);
   
   if (fs.existsSync(indexPath)) {
@@ -69,19 +96,30 @@ app.get('/', (req, res) => {
   }
 });
 
+// Client-side routing fallback
 app.get('*', (req, res) => {
   // Ignoriere API Routes
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({ error: 'API endpoint not found' });
   }
   
-  const indexPath = path.join(frontendBuildPath, 'index.html');
-  console.log('🔄 Client-side routing for:', req.path, '-> index.html');
+  if (!actualFrontendPath) {
+    return res.status(500).json({ error: 'Frontend application not available' });
+  }
+  
+  const indexPath = path.join(actualFrontendPath, 'index.html');
+  console.log('🔄 Client-side routing for:', req.path, '->', indexPath);
   
   if (fs.existsSync(indexPath)) {
-    res.sendFile(indexPath);
+    // Use absolute path with res.sendFile
+    res.sendFile(indexPath, (err) => {
+      if (err) {
+        console.error('Error sending index.html:', err);
+        res.status(500).send('Error loading application');
+      }
+    });
   } else {
-    console.error('❌ index.html not found for client-side routing');
+    console.error('❌ index.html not found for client-side routing at:', indexPath);
     res.status(404).json({ error: 'Frontend application not found' });
   }
 });
