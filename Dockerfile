@@ -42,19 +42,26 @@ RUN npm install -g pm2
 RUN mkdir -p /app/data
 COPY --from=builder /app/backend/dist/ ./dist/
 COPY --from=builder /app/backend/package*.json ./
+
 COPY --from=builder /app/node_modules/ ./node_modules/
 COPY --from=builder /app/frontend/dist/ ./frontend-build/
+
 COPY --from=builder /app/ecosystem.config.cjs ./
+
 COPY --from=builder /app/backend/src/database/ ./dist/database/
 COPY --from=builder /app/backend/src/database/ ./database/
+
 RUN groupadd -g 1001 nodejs && \
     useradd -m -u 1001 -s /bin/bash -g nodejs schichtplan && \
     chown -R schichtplan:nodejs /app && \
     chmod 755 /app && \
     chmod 775 /app/data
+
 ENV PM2_HOME=/app/.pm2
 USER schichtplan
 EXPOSE 3002
+
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3002/api/health || exit 1
+  
 CMD ["pm2-runtime", "ecosystem.config.cjs"]
