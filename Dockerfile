@@ -16,7 +16,7 @@ COPY tsconfig.base.json ./
 COPY ecosystem.config.cjs ./
 
 # Install root dependencies
-RUN npm install
+RUN npm install --only=production
 
 # Copy workspace files
 COPY backend/ ./backend/
@@ -27,19 +27,22 @@ RUN npm install --workspace=backend
 RUN npm install --workspace=frontend
 
 # Build backend first
-RUN npm run build --workspace=backend
+RUN npm run build --only=production --workspace=backend
 
 # Build frontend
-RUN npm run build --workspace=frontend
+RUN npm run build --only=production --workspace=frontend
 
 # Verify Python and OR-Tools installation
 RUN python -c "from ortools.sat.python import cp_model; print('OR-Tools installed successfully')"
 
 # Production stage (same as above)
 FROM node:20-bookworm
+
 WORKDIR /app
+
 RUN npm install -g pm2
 RUN mkdir -p /app/data
+
 COPY --from=builder /app/backend/dist/ ./dist/
 COPY --from=builder /app/backend/package*.json ./
 
