@@ -143,10 +143,8 @@ jobs:
             type=ref,event=branch
             type=semver,pattern={{version}}
             type=sha
-            # Add the dynamically generated semantic version
             ${{ needs.set-tag.outputs.tag_name }}
-            # Add latest tag for main branch
-            ${{ needs.set-tag.outputs.is_main_branch == 'true' && 'latest' }}
+            ${{ fromJSON(needs.set-tag.outputs.is_main_branch) && 'latest' }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
