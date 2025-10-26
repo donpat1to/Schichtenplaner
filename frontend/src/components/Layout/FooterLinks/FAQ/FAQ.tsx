@@ -35,7 +35,7 @@ const FAQ: React.FC = () => {
     },
     {
       question: "Wie lange dauert die Planungserstellung?",
-      answer: "Typischerweise 30-105 Sekunden, abhängig von der Anzahl der Mitarbeiter und Schichten."
+      answer: "Typischerweise maximal 105 Sekunden, abhängig von der Anzahl der Mitarbeiter und Schichten."
     }
   ];
 

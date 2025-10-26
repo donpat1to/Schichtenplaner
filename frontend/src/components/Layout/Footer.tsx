@@ -10,12 +10,12 @@ const Footer: React.FC = () => {
       borderTop: '1px solid rgba(251, 250, 246, 0.1)',
     },
     footerContent: {
-      maxWidth: '1200px',
+      maxWidth: '1500px',
       margin: '0 auto',
       padding: '3rem 2rem 2rem',
       display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-      gap: '3rem',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
+      gap: '1rem',
     },
     footerSection: {
       display: 'flex',
