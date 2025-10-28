@@ -1,6 +1,5 @@
 // backend/src/routes/setup.ts
 import express from 'express';
-import bcrypt from 'bcryptjs';
 import { checkSetupStatus, setupAdmin } from '../controllers/setupController.js';
 
 const router = express.Router();

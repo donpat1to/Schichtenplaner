@@ -1,5 +1,5 @@
 // backend/src/controllers/employeeController.ts
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcryptjs';
 import { db } from '../services/databaseService.js';

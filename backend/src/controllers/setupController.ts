@@ -1,7 +1,6 @@
 // backend/src/controllers/setupController.ts
 import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
-import { v4 as uuidv4 } from 'uuid';
 import { randomUUID } from 'crypto';
 import { db } from '../services/databaseService.js';
 

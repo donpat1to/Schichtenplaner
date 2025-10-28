@@ -2,8 +2,8 @@
 import { parentPort, workerData } from 'worker_threads';
 import { CPModel, CPSolver } from './cp-sat-wrapper.js';
 import { ShiftPlan, Shift } from '../models/ShiftPlan.js';
-import { Employee, EmployeeAvailability } from '../models/Employee.js';
-import { Availability, Constraint, Violation, SolverOptions, Solution, Assignment } from '../models/scheduling.js';
+import { Employee } from '../models/Employee.js';
+import { Availability, Constraint } from '../models/scheduling.js';
 
 interface WorkerData {
   shiftPlan: ShiftPlan;

@@ -5,10 +5,9 @@ import { db } from '../services/databaseService.js';
 import { 
   CreateShiftPlanRequest, 
   UpdateShiftPlanRequest,
-  ShiftPlan
 } from '../models/ShiftPlan.js';
 import { AuthRequest } from '../middleware/auth.js';
-import { createPlanFromPreset, TEMPLATE_PRESETS } from '../models/defaults/shiftPlanDefaults.js';
+import { TEMPLATE_PRESETS } from '../models/defaults/shiftPlanDefaults.js';
 
 async function getPlanWithDetails(planId: string) {
   const plan = await db.get<any>(`

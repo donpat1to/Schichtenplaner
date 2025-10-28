@@ -2,8 +2,7 @@
 import { Worker } from 'worker_threads';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { Employee, EmployeeAvailability } from '../models/Employee.js';
-import { ShiftPlan, ScheduledShift } from '../models/ShiftPlan.js';
+import { ShiftPlan } from '../models/ShiftPlan.js';
 import { ScheduleRequest, ScheduleResult, Availability, Constraint } from '../models/scheduling.js';
 
 const __filename = fileURLToPath(import.meta.url);
