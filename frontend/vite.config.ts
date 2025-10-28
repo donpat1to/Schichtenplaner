@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
   const clientEnv = {
     NODE_ENV: mode,
     ENABLE_PRO: env.ENABLE_PRO || 'false',
-    VITE_APP_TITLE: env.VITE_APP_TITLE || 'Shift Planning App',
+    VITE_APP_TITLE: env.APP_TITLE || 'Shift Planning App',
     VITE_API_URL: isProduction ? '/api' : 'http://localhost:3002/api',
   }
 

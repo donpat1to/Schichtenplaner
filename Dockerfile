@@ -35,14 +35,19 @@ RUN npm run build --workspace=frontend
 # Verify Python and OR-Tools installation
 RUN python -c "from ortools.sat.python import cp_model; print('OR-Tools installed successfully')"
 
-# Production stage (same as above)
+# Production stage
 FROM node:20-bookworm
 
 WORKDIR /app
 
+# Install system dependencies including gettext-base for envsubst
+RUN apt-get update && apt-get install -y gettext-base && \
+    rm -rf /var/lib/apt/lists/*
+
 RUN npm install -g pm2
 RUN mkdir -p /app/data
 
+# Copy application files
 COPY --from=builder /app/backend/dist/ ./dist/
 COPY --from=builder /app/backend/package*.json ./
 
@@ -54,6 +59,14 @@ COPY --from=builder /app/ecosystem.config.cjs ./
 COPY --from=builder /app/backend/src/database/ ./dist/database/
 COPY --from=builder /app/backend/src/database/ ./database/
 
+# Copy init script and env template
+COPY docker-init.sh /usr/local/bin/
+COPY .env.template ./
+
+# Set execute permissions for init script
+RUN chmod +x /usr/local/bin/docker-init.sh
+
+# Create user and set permissions
 RUN groupadd -g 1001 nodejs && \
     useradd -m -u 1001 -s /bin/bash -g nodejs schichtplan && \
     chown -R schichtplan:nodejs /app && \
@@ -61,10 +74,13 @@ RUN groupadd -g 1001 nodejs && \
     chmod 775 /app/data
 
 ENV PM2_HOME=/app/.pm2
+
+# Set entrypoint to init script and keep existing cmd
+ENTRYPOINT ["/usr/local/bin/docker-init.sh"]
+CMD ["pm2-runtime", "ecosystem.config.cjs"]
+
 USER schichtplan
 EXPOSE 3002
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3002/api/health || exit 1
-  
-CMD ["pm2-runtime", "ecosystem.config.cjs"]

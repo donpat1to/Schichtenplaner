@@ -26,7 +26,7 @@ const isDevelopment = process.env.NODE_ENV === 'development';
 if (process.env.NODE_ENV === 'production') {
   console.info('Checking for JWT_SECRET');
   const JWT_SECRET = process.env.JWT_SECRET;
-  if (!JWT_SECRET || JWT_SECRET === 'your-secret-key') {
+  if (!JWT_SECRET || JWT_SECRET === 'your-secret-key-please-change') {
     console.error('❌ Fatal: JWT_SECRET not set or using default value');
     process.exit(1);
   }
