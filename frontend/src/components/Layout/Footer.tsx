@@ -1,4 +1,4 @@
-// frontend/src/components/Layout/Footer.tsx - ELEGANT WHITE DESIGN
+// frontend/src/components/Layout/Footer.tsx
 import React from 'react';
 
 const Footer: React.FC = () => {

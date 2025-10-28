@@ -1,4 +1,4 @@
-// frontend/src/components/PillNav/PillNav.tsx - ELEGANT WHITE DESIGN
+// frontend/src/components/PillNav/PillNav.tsx
 import React, { useEffect, useRef } from 'react';
 
 export interface PillNavItem {

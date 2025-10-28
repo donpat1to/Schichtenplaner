@@ -1,4 +1,4 @@
-// frontend/src/components/Layout/Navigation.tsx - ELEGANT WHITE DESIGN
+// frontend/src/components/Layout/Navigation.tsx
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import PillNav from '../PillNav/PillNav';

@@ -1,4 +1,4 @@
-// frontend/src/design/DesignSystem.tsx
+// frontend/src/design/DesignSystem.txt
 export const designTokens = {
   colors: {
     // Primary Colors

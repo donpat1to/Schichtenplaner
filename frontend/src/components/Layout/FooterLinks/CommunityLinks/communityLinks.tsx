@@ -1,3 +1,4 @@
+// frontend/src/components/Layout/FooterLinks/CommunityLinks/communityLinks.tsx
 import React from 'react';
 
 export const CommunityContact: React.FC = () => (

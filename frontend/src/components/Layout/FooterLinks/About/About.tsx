@@ -1,4 +1,4 @@
-// frontend/src/pages/About/About.tsx
+// frontend/src/components/Layout/FooterLinks/About/About.tsx
 import React from 'react';
 
 const About: React.FC = () => {

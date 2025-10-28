@@ -1,4 +1,4 @@
-// frontend/src/components/Layout/Layout.tsx - ELEGANT WHITE DESIGN
+// frontend/src/components/Layout/Layout.tsx
 import React from 'react';
 import Navigation from './Navigation';
 import Footer from './Footer';

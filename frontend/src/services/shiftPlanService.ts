@@ -1,6 +1,6 @@
 // frontend/src/services/shiftPlanService.ts
 import { authService } from './authService';
-import { ShiftPlan, CreateShiftPlanRequest, ScheduledShift, CreateShiftFromTemplateRequest } from '../models/ShiftPlan';
+import { ShiftPlan, CreateShiftPlanRequest } from '../models/ShiftPlan';
 import { TEMPLATE_PRESETS } from '../models/defaults/shiftPlanDefaults';  
 
 const API_BASE_URL = '/api/shift-plans';

@@ -1,4 +1,4 @@
-// frontend/src/pages/FAQ/FAQ.tsx
+// frontend/src/components/Layout/FooterLinks/FAQ/FAQ.tsx
 import React, { useState } from 'react';
 
 const FAQ: React.FC = () => {
