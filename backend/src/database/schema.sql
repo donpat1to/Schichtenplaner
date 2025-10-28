@@ -1,3 +1,8 @@
+PRAGMA journal_mode = WAL;
+PRAGMA foreign_keys = ON;
+PRAGMA secure_delete = ON;
+PRAGMA auto_vacuum = INCREMENTAL;
+
 -- Employee Types
 CREATE TABLE IF NOT EXISTS employee_types (
   type TEXT PRIMARY KEY,
@@ -149,9 +154,3 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_shifts_required_employees ON scheduled_
 CREATE INDEX IF NOT EXISTS idx_shift_assignments_employee ON shift_assignments(employee_id);
 CREATE INDEX IF NOT EXISTS idx_shift_assignments_shift ON shift_assignments(scheduled_shift_id);
 CREATE INDEX IF NOT EXISTS idx_employee_availability_employee_plan ON employee_availability(employee_id, plan_id);
-
-PRAGMA journal_mode = WAL;
-PRAGMA synchronous = NORMAL;
-PRAGMA foreign_keys = ON;
-PRAGMA secure_delete = ON;
-PRAGMA auto_vacuum = INCREMENTAL;

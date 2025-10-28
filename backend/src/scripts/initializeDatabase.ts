@@ -36,19 +36,6 @@ export async function initializeDatabase(): Promise<void> {
   
   try {
     console.log('Starting database initialization...');
-
-        // ✅ Set PRAGMA statements FIRST, before any transactions
-    await db.run('PRAGMA journal_mode = WAL;');
-    await db.run('PRAGMA synchronous = NORMAL;');
-    await db.run('PRAGMA foreign_keys = ON;');
-    await db.run('PRAGMA secure_delete = ON;');
-    await db.run('PRAGMA auto_vacuum = INCREMENTAL;');
-
-    
-    // ❌ REMOVE this line - synchronous cannot be changed in transaction
-    // await db.run('PRAGMA synchronous = NORMAL;');
-    
-    console.log('✅ Database PRAGMA settings configured');
     
     try {
       const existingAdmin = await db.get<{ count: number }>(
