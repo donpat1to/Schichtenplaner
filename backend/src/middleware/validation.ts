@@ -284,7 +284,7 @@ export const validateCreateFromPreset = [
   body('presetName')
     .isLength({ min: 1 })
     .withMessage('Preset name is required')
-    .isIn(['standardWeek', 'extendedWeek', 'weekendFocused', 'morningOnly', 'eveningOnly'])
+    .isIn(['standardWeek', 'extendedWeek', 'weekendFocused', 'morningOnly', 'eveningOnly', 'ZEBRA_STANDARD'])
     .withMessage('Invalid preset name'),
   
   body('name')
@@ -444,7 +444,7 @@ export const handleValidationErrors = (req: Request, res: Response, next: NextFu
     const errorMessages = errors.array().map(error => ({
       field: error.type === 'field' ? error.path : error.type,
       message: error.msg,
-      value: error
+      value: error.msg
     }));
     
     return res.status(400).json({

@@ -185,7 +185,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
         // Password change logic remains the same
         if (showPasswordSection && passwordForm.newPassword && hasRole(['admin'])) {
           if (passwordForm.newPassword.length < 6) {
-            throw new Error('Das neue Passwort muss mindestens 6 Zeichen lang sein');
+            throw new Error('Das Passwort muss mindestens 6 Zeichen lang sein, Zahlen und Groß- / Kleinbuchstaben enthalten');
           }
           if (passwordForm.newPassword !== passwordForm.confirmPassword) {
             throw new Error('Die Passwörter stimmen nicht überein');
@@ -351,10 +351,10 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                     borderRadius: '4px',
                     fontSize: '16px'
                   }}
-                  placeholder="Mindestens 6 Zeichen"
+                  placeholder="Mindestens 6 Zeichen, Zahlen, Groß- / Kleinzeichen"
                 />
                 <div style={{ fontSize: '12px', color: '#7f8c8d', marginTop: '5px' }}>
-                  Das Passwort muss mindestens 6 Zeichen lang sein.
+                  Das Passwort muss mindestens 6 Zeichen lang sein, Zahlen und Groß- / Kleinbuchstaben enthalten.
                 </div>
               </div>
             )}
@@ -672,7 +672,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
                         borderRadius: '4px',
                         fontSize: '16px'
                       }}
-                      placeholder="Mindestens 6 Zeichen"
+                      placeholder="Mindestens 6 Zeichen, Zahlen, Groß- / Kleinzeichen"
                     />
                   </div>
 
