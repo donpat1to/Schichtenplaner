@@ -93,7 +93,7 @@ if (frontendBuildPath) {
 }
 
 // Root route
-app.get('/', (req, res) => {
+app.get('/', apiLimiter, (req, res) => {
   if (!frontendBuildPath) {
     return res.status(500).send('Frontend build not found');
   }
@@ -110,7 +110,7 @@ app.get('/', (req, res) => {
 });
 
 // Client-side routing fallback
-app.get('*', (req, res) => {
+app.get('*', apiLimiter, (req, res) => {
   // Ignoriere API Routes
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({ error: 'API endpoint not found' });
@@ -137,10 +137,32 @@ app.get('*', (req, res) => {
   }
 });
 
+// Production error handling - don't leak stack traces
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('Error:', err);
+  
+  if (process.env.NODE_ENV === 'production') {
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: 'Something went wrong'
+    });
+  } else {
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: err.message,
+      stack: err.stack
+    });
+  }
+});
+
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Unhandled error:', err);
   res.status(500).json({ error: 'Internal server error' });
+});
+
+app.use('*', (req, res) => {
+  res.status(404).json({ error: 'Endpoint not found' });
 });
 
 // Initialize the application
