@@ -1,9 +1,9 @@
 // backend/src/server.ts
 import express from 'express';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { initializeDatabase } from './scripts/initializeDatabase.js';
 import fs from 'fs';
+import helmet from 'helmet';
 
 // Route imports
 import authRoutes from './routes/auth.js';
@@ -12,16 +12,50 @@ import shiftPlanRoutes from './routes/shiftPlans.js';
 import setupRoutes from './routes/setup.js';
 import scheduledShifts from './routes/scheduledShifts.js';
 import schedulingRoutes from './routes/scheduling.js';
+import { authLimiter, apiLimiter } from './middleware/rateLimit.js';
 
 const app = express();
 const PORT = 3002;
+
+if (process.env.NODE_ENV === 'production') {
+  console.info('Checking for JWT_SECRET');
+  const JWT_SECRET = process.env.JWT_SECRET;
+  if (!JWT_SECRET || JWT_SECRET === 'your-secret-key') {
+    console.error('❌ Fatal: JWT_SECRET not set or using default value');
+    process.exit(1);
+  }
+}
+
+
+// Security headers
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+    },
+  },
+  crossOriginEmbedderPolicy: false // Required for Vite dev
+}));
+
+// Additional security headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  next();
+});
 
 // Middleware
 app.use(express.json());
 
 // API Routes
+app.use('/api/', apiLimiter);
+
 app.use('/api/setup', setupRoutes);
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/shift-plans', shiftPlanRoutes);
 app.use('/api/scheduled-shifts', scheduledShifts);

@@ -8,12 +8,13 @@ import {
   validateToken 
 } from '../controllers/authController.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { validateLogin, validateRegister, handleValidationErrors } from '../middleware/validation.js';
 
 const router = express.Router();
 
 // Public routes
-router.post('/login', login);
-router.post('/register', register);
+router.post('/login', validateLogin, handleValidationErrors, login);
+router.post('/register', validateRegister, handleValidationErrors, register);
 router.get('/validate', validateToken);
 
 // Protected routes (require authentication)

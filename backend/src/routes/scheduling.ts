@@ -1,9 +1,10 @@
 import express from 'express';
 import { SchedulingService } from '../services/SchedulingService.js';
+import { validateSchedulingRequest, handleValidationErrors } from '../middleware/validation.js';
 
 const router = express.Router();
 
-router.post('/generate-schedule', async (req, res) => {
+router.post('/generate-schedule', validateSchedulingRequest, handleValidationErrors, async (req: express.Request, res: express.Response) => {
   try {
     const { shiftPlan, employees, availabilities, constraints } = req.body;
     
@@ -13,18 +14,6 @@ router.post('/generate-schedule', async (req, res) => {
       availabilityCount: availabilities?.length,
       constraintCount: constraints?.length
     });
-
-    // Validate required data
-    if (!shiftPlan || !employees || !availabilities) {
-      return res.status(400).json({ 
-        error: 'Missing required data',
-        details: {
-          shiftPlan: !!shiftPlan,
-          employees: !!employees,
-          availabilities: !!availabilities
-        }
-      });
-    }
 
     const scheduler = new SchedulingService();
     const result = await scheduler.generateOptimalSchedule({

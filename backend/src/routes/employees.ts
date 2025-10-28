@@ -1,4 +1,3 @@
-// backend/src/routes/employees.ts
 import express from 'express';
 import { authMiddleware, requireRole } from '../middleware/auth.js';
 import {
@@ -12,6 +11,16 @@ import {
   changePassword,
   updateLastLogin
 } from '../controllers/employeeController.js';
+import { 
+  handleValidationErrors, 
+  validateEmployee, 
+  validateEmployeeUpdate, 
+  validateChangePassword,
+  validateId,
+  validateEmployeeId,
+  validateAvailabilities,
+  validatePagination 
+} from '../middleware/validation.js';
 
 const router = express.Router();
 
@@ -19,16 +28,18 @@ const router = express.Router();
 router.use(authMiddleware);
 
 // Employee CRUD Routes
-router.get('/', authMiddleware, getEmployees);
-router.get('/:id', requireRole(['admin', 'maintenance']), getEmployee);
-router.post('/', requireRole(['admin']), createEmployee);
-router.put('/:id', requireRole(['admin', 'maintenance']), updateEmployee);
-router.delete('/:id', requireRole(['admin']), deleteEmployee);
-router.put('/:id/password', authMiddleware, changePassword);
-router.put('/:id/last-login', authMiddleware, updateLastLogin);
+router.get('/', validatePagination, handleValidationErrors, getEmployees);
+router.get('/:id', validateId, handleValidationErrors, requireRole(['admin', 'maintenance']), getEmployee);
+router.post('/', validateEmployee, handleValidationErrors, requireRole(['admin']), createEmployee);
+router.put('/:id', validateId, validateEmployeeUpdate, handleValidationErrors, requireRole(['admin', 'maintenance']), updateEmployee);
+router.delete('/:id', validateId, handleValidationErrors, requireRole(['admin']), deleteEmployee);
+
+// Password & Login Routes
+router.put('/:id/password', validateId, validateChangePassword, handleValidationErrors, changePassword);
+router.put('/:id/last-login', validateId, handleValidationErrors, updateLastLogin);
 
 // Availability Routes
-router.get('/:employeeId/availabilities', authMiddleware, getAvailabilities);
-router.put('/:employeeId/availabilities', authMiddleware, updateAvailabilities);
+router.get('/:employeeId/availabilities', validateEmployeeId, handleValidationErrors, getAvailabilities);
+router.put('/:employeeId/availabilities', validateEmployeeId, validateAvailabilities, handleValidationErrors, updateAvailabilities);
 
 export default router;
