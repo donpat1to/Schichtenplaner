@@ -61,6 +61,7 @@ export default defineConfig(({ mode }) => {
       sourcemap: isDevelopment ? 'inline' : false,
       // Generate deterministic hashes for better caching and security
       assetsDir: 'assets',
+      base: mode === 'production' ? '/' : '/',
       rollupOptions: {
         output: {
           // Security: Use content hashes for cache busting and integrity

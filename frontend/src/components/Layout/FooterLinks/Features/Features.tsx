@@ -1,4 +1,4 @@
-// frontend/src/pages/Features/Features.tsx
+// frontend/src/components/Layou/FooterLinks/Features/Features.tsx
 import React from 'react';
 
 const Features: React.FC = () => {
