@@ -9,41 +9,42 @@ generate_secret() {
     tr -dc 'A-Za-z0-9!@#$%^&*()_+-=' < /dev/urandom | head -c $length
 }
 
-# Prüfe ob .env existiert, falls nicht erstelle sie
+# Prüfe ob .env existiert
 if [ ! -f /app/.env ]; then
     echo "📝 Erstelle .env Datei..."
     
-    # Generiere automatisch ein sicheres JWT Secret falls nicht gesetzt
+    # Verwende vorhandenes JWT_SECRET oder generiere ein neues
     if [ -z "$JWT_SECRET" ] || [ "$JWT_SECRET" = "your-secret-key-please-change" ]; then
         export JWT_SECRET=$(generate_secret 64)
-        echo "🔑 Automatisch generiertes JWT Secret wurde erstellt"
+        echo "🔑 Automatisch sicheres JWT Secret generiert"
+    else
+        echo "🔑 Verwende vorhandenes JWT Secret aus Umgebungsvariable"
     fi
     
-    # Erstelle .env aus Template
+    # Erstelle .env aus Template mit envsubst
     envsubst < /app/.env.template > /app/.env
+    echo "✅ .env Datei erstellt"
     
-    # Logge die ersten Zeilen (ohne Secrets)
-    echo "✅ .env Datei erstellt mit folgenden Einstellungen:"
-    head -n 5 /app/.env
 else
     echo "ℹ️  .env Datei existiert bereits"
     
-    # Validiere bestehende .env Datei
-    if ! grep -q "JWT_SECRET=" /app/.env; then
-        echo "❌ Fehler: JWT_SECRET nicht in .env gefunden"
-        exit 1
+    # Wenn .env existiert, aber JWT_SECRET Umgebungsvariable gesetzt ist, aktualisiere sie
+    if [ -n "$JWT_SECRET" ] && [ "$JWT_SECRET" != "your-secret-key-please-change" ]; then
+        echo "🔑 Aktualisiere JWT Secret in .env Datei"
+        # Aktualisiere nur das JWT_SECRET in der .env Datei
+        sed -i "s/^JWT_SECRET=.*/JWT_SECRET=$JWT_SECRET/" /app/.env
     fi
 fi
 
-# Sicherheitsüberprüfungen
-if grep -q "your-secret-key" /app/.env; then
-    echo "❌ FEHLER: Standard JWT Secret in .env gefunden - bitte ändern!"
+# Validiere dass JWT_SECERT nicht der Standardwert ist
+if grep -q "JWT_SECRET=your-secret-key-please-change" /app/.env; then
+    echo "❌ FEHLER: Standard JWT Secret in .env gefunden!"
+    echo "❌ Bitte setzen Sie JWT_SECRET Umgebungsvariable"
     exit 1
 fi
 
 # Setze sichere Berechtigungen
 chmod 600 /app/.env
-chown -R schichtplaner:nodejs /app
 
 echo "🔧 Starte Anwendung..."
 exec "$@"

@@ -107,7 +107,7 @@
 
 .createButton {
   padding: 10px 20px;
-  background-color: #2ecc71;
+  background-color: #51258f;
   color: white;
   border: none;
   border-radius: 4px;
@@ -116,7 +116,7 @@
 }
 
 .createButton:hover {
-  background-color: #27ae60;
+  background-color: #51258f;
 }
 
 .createButton:disabled {
