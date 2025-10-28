@@ -16,7 +16,6 @@ export default defineConfig(({ mode }) => {
     ENABLE_PRO: env.ENABLE_PRO || 'false',
     VITE_APP_TITLE: env.VITE_APP_TITLE || 'Shift Planning App',
     VITE_API_URL: isProduction ? '/api' : 'http://localhost:3002/api',
-    // Explicitly define only what's needed - no dynamic env variables
   }
 
   return {
@@ -50,15 +49,6 @@ export default defineConfig(({ mode }) => {
           target: 'http://localhost:3002',
           changeOrigin: true,
           secure: false,
-          // Additional proxy security
-          configure: (proxy, _options) => {
-            proxy.on('error', (err, _req, _res) => {
-              console.log('proxy error', err)
-            })
-            proxy.on('proxyReq', (proxyReq, req, _res) => {
-              console.log('Sending Request to the Target:', req.method, req.url)
-            })
-          }
         }
       },
       // Security: disable HMR in non-dev environments
@@ -78,10 +68,16 @@ export default defineConfig(({ mode }) => {
           entryFileNames: 'assets/[name]-[hash].js',
           assetFileNames: 'assets/[name]-[hash].[ext]',
           // Security: Manual chunks to separate vendor code
-          manualChunks: {
-            vendor: ['react', 'react-dom'],
-            router: ['react-router-dom'],
-            utils: ['lodash', 'date-fns']
+          manualChunks: (id) => {
+            if (id.includes('node_modules')) {
+              if (id.includes('react') || id.includes('react-dom')) {
+                return 'vendor-react'
+              }
+              if (id.includes('react-router-dom')) {
+                return 'vendor-router'
+              }
+              return 'vendor'
+            }
           }
         }
       },
@@ -102,14 +98,17 @@ export default defineConfig(({ mode }) => {
             'debugger'
           ],
           dead_code: true,
-          unused: true,
-          joins: true,
           if_return: true,
           comparisons: true,
           loops: true,
           hoist_funs: true,
           hoist_vars: true,
-          reduce_vars: true
+          reduce_vars: true,
+          booleans: true,
+          conditionals: true,
+          evaluate: true,
+          sequences: true,
+          unused: true
         },
         mangle: {
           // Security: Obfuscate code
