@@ -333,7 +333,7 @@ const Setup: React.FC = () => {
             disabled={loading}
             style={{
               padding: '0.75rem 2rem',
-              backgroundColor: loading ? '#6c757d' : '#007bff',
+              backgroundColor: loading ? '#6c757d' : '#51258f',
               color: 'white',
               border: 'none',
               borderRadius: '6px',
