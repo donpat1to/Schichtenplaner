@@ -22,6 +22,8 @@ const app = express();
 const PORT = 3002;
 const isDevelopment = process.env.NODE_ENV === 'development';
 
+app.set('trust proxy', true);
+
 // Security configuration
 if (process.env.NODE_ENV === 'production') {
   console.info('Checking for JWT_SECRET');
@@ -34,14 +36,20 @@ if (process.env.NODE_ENV === 'production') {
 
 // Security headers
 app.use(helmet({
-  contentSecurityPolicy: isDevelopment ? false : {
+  contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
     },
   },
+  hsts: false,
   crossOriginEmbedderPolicy: false
 }));
 
