@@ -30,7 +30,7 @@ RUN npm install --workspace=frontend
 RUN npm run build --only=production --workspace=backend
 
 # Build frontend
-RUN npm run build --only=production --workspace=frontend
+RUN npm run build --workspace=frontend
 
 # Verify Python and OR-Tools installation
 RUN python -c "from ortools.sat.python import cp_model; print('OR-Tools installed successfully')"
