@@ -20,7 +20,7 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || '/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 interface AuthProviderProps {
   children: ReactNode;
@@ -66,7 +66,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       const token = getStoredToken();
       console.log('🔄 Refreshing user, token exists:', !!token);
-      
+
       if (!token) {
         console.log('ℹ️ No token found, user not logged in');
         setUser(null);
@@ -104,7 +104,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const login = async (credentials: LoginRequest): Promise<void> => {
     try {
       console.log('🔐 Attempting login for:', credentials.email);
-      
+
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
         headers: {
@@ -120,7 +120,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       const data = await response.json();
       console.log('✅ Login successful, storing token');
-      
+
       setStoredToken(data.token);
       setUser(data.user);
     } catch (error) {
@@ -137,13 +137,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const hasRole = (roles: string[]): boolean => {
     if (!user || !user.roles || user.roles.length === 0) return false;
-    
+
     // Check if user has at least one of the required roles
-    return roles.some(requiredRole => 
+    return roles.some(requiredRole =>
       user.roles!.includes(requiredRole)
     );
   };
-  
+
   useEffect(() => {
     const initializeAuth = async () => {
       console.log('🚀 Initializing authentication...');

@@ -1,6 +1,6 @@
 // frontend/src/services/authService.ts
 import { Employee } from '../models/Employee';
-const API_BASE = process.env.REACT_APP_API_BASE_URL || '/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 export interface LoginRequest {
   email: string;
@@ -24,7 +24,7 @@ class AuthService {
   private token: string | null = null;
 
   async login(credentials: LoginRequest): Promise<AuthResponse> {
-    const response = await fetch(`${API_BASE}/auth/login`, {
+    const response = await fetch(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(credentials)
@@ -39,12 +39,11 @@ class AuthService {
     this.token = data.token;
     localStorage.setItem('token', data.token);
     localStorage.setItem('employee', JSON.stringify(data.employee));
-    
     return data;
   }
 
   async register(userData: RegisterRequest): Promise<AuthResponse> {
-    const response = await fetch(`${API_BASE}/employees`, {
+    const response = await fetch(`${API_BASE_URL}/employees`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(userData)
@@ -73,7 +72,7 @@ class AuthService {
     }
 
     try {
-      const response = await fetch(`${API_BASE}/auth/me`, {
+      const response = await fetch(`${API_BASE_URL}/auth/me`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }

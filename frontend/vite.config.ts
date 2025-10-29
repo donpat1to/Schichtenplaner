@@ -6,20 +6,20 @@ import { resolve } from 'path'
 export default defineConfig(({ mode }) => {
   const isProduction = mode === 'production'
   const isDevelopment = mode === 'development'
-  
+
   const env = loadEnv(mode, process.cwd(), '')
-  
+
   // 🆕 WICHTIG: Relative Pfade für Production
   const clientEnv = {
     NODE_ENV: mode,
     ENABLE_PRO: env.ENABLE_PRO || 'false',
     VITE_APP_TITLE: env.APP_TITLE || 'Shift Planning App',
-    VITE_API_URL: isProduction ? '/api' : 'http://localhost:3002/api',
+    VITE_API_URL: isProduction ? '/api' : '/api',
   }
 
   return {
     plugins: [react()],
-    
+
     server: {
       port: 3003,
       host: true,
@@ -32,7 +32,7 @@ export default defineConfig(({ mode }) => {
         }
       }
     },
-    
+
     build: {
       outDir: 'dist',
       sourcemap: isDevelopment,
@@ -53,7 +53,7 @@ export default defineConfig(({ mode }) => {
         }
       } : undefined,
     },
-    
+
     resolve: {
       alias: {
         '@': resolve(__dirname, './src'),
@@ -66,7 +66,7 @@ export default defineConfig(({ mode }) => {
         '@/design': resolve(__dirname, './src/design')
       }
     },
-    
+
     define: Object.keys(clientEnv).reduce((acc, key) => {
       acc[`import.meta.env.${key}`] = JSON.stringify(clientEnv[key])
       return acc
