@@ -12,8 +12,8 @@ export const validateLogin = [
     .optional()
     .isLength({ min: 8 })
     .withMessage('Password must be at least 8 characters')
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/)
-    .withMessage('Password must contain uppercase, lowercase, number and special character (@$!%*?&)'),
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?])/)
+    .withMessage('Password must contain uppercase, lowercase, number and special character'),
 ];
 
 export const validateRegister = [
@@ -33,8 +33,8 @@ export const validateRegister = [
     .optional()
     .isLength({ min: 8 })
     .withMessage('Password must be at least 8 characters')
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/)
-    .withMessage('Password must contain uppercase, lowercase, number and special character (@$!%*?&)'),
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?])/)
+    .withMessage('Password must contain uppercase, lowercase, number and special character'),
 ];
 
 // ===== EMPLOYEE VALIDATION =====
@@ -55,8 +55,8 @@ export const validateEmployee = [
     .optional()
     .isLength({ min: 8 })
     .withMessage('Password must be at least 8 characters')
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/)
-    .withMessage('Password must contain uppercase, lowercase, number and special character (@$!%*?&)'),
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?])/)
+    .withMessage('Password must contain uppercase, lowercase, number and special character'),
 
   body('employeeType')
     .isIn(['manager', 'personell', 'apprentice', 'guest'])
@@ -154,8 +154,8 @@ export const validateChangePassword = [
     .optional()
     .isLength({ min: 8 })
     .withMessage('Password must be at least 8 characters')
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/)
-    .withMessage('Password must contain uppercase, lowercase, number and special character (@$!%*?&)'),
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?])/)
+    .withMessage('Password must contain uppercase, lowercase, number and special character'),
 ];
 
 // ===== SHIFT PLAN VALIDATION =====
@@ -346,8 +346,8 @@ export const validateSetupAdmin = [
     .optional()
     .isLength({ min: 8 })
     .withMessage('Password must be at least 8 characters')
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])/)
-    .withMessage('Password must contain uppercase, lowercase, number and special character (@$!%*?&)'),
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?])/)
+    .withMessage('Password must contain uppercase, lowercase, number and special character'),
 ];
 
 // ===== SCHEDULING VALIDATION =====
