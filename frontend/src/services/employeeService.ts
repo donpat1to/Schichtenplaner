@@ -1,5 +1,6 @@
 // frontend/src/services/employeeService.ts
 import { Employee, CreateEmployeeRequest, UpdateEmployeeRequest, EmployeeAvailability } from '../models/Employee';
+import { ErrorService, ValidationError } from './errorService';
 
 const API_BASE_URL = '/api';
 
@@ -12,6 +13,23 @@ const getAuthHeaders = () => {
 };
 
 export class EmployeeService {
+  private async handleApiResponse<T>(response: Response): Promise<T> {
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const validationErrors = ErrorService.extractValidationErrors(errorData);
+      
+      if (validationErrors.length > 0) {
+        const error = new Error('Validation failed');
+        (error as any).validationErrors = validationErrors;
+        throw error;
+      }
+      
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+    
+    return response.json();
+  }
+
   async getEmployees(includeInactive: boolean = false): Promise<Employee[]> {
     console.log('🔄 Fetching employees from API...');
     
@@ -55,12 +73,7 @@ export class EmployeeService {
       body: JSON.stringify(employee),
     });
     
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to create employee');
-    }
-    
-    return response.json();
+    return this.handleApiResponse<Employee>(response);
   }
 
   async updateEmployee(id: string, employee: UpdateEmployeeRequest): Promise<Employee> {
@@ -70,12 +83,7 @@ export class EmployeeService {
       body: JSON.stringify(employee),
     });
     
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to update employee');
-    }
-    
-    return response.json();
+    return this.handleApiResponse<Employee>(response);
   }
 
   async deleteEmployee(id: string): Promise<void> {

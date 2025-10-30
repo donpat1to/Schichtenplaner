@@ -3,6 +3,8 @@ import { Employee, CreateEmployeeRequest, UpdateEmployeeRequest } from '../../..
 import { ROLE_CONFIG, EMPLOYEE_TYPE_CONFIG } from '../../../models/defaults/employeeDefaults';
 import { employeeService } from '../../../services/employeeService';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useBackendValidation } from '../../../hooks/useBackendValidation';
+import { useNotification } from '../../../contexts/NotificationContext';
 
 interface EmployeeFormProps {
   mode: 'create' | 'edit';
@@ -40,6 +42,15 @@ interface PasswordFormData {
 
 // ===== HOOK FÜR FORMULAR-LOGIK =====
 const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
+  const {
+    validationErrors,
+    getFieldError,
+    hasErrors,
+    executeWithValidation,
+    isSubmitting,
+    clearErrors
+  } = useBackendValidation();
+
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState<EmployeeFormData>({
     firstname: '',
@@ -62,6 +73,7 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
   const [showPasswordSection, setShowPasswordSection] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
 
   // Steps definition
   const steps = [
@@ -128,18 +140,15 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
     }
   }, [mode, employee]);
 
-  // ===== VALIDIERUNGS-FUNKTIONEN =====
+  // ===== SIMPLE FRONTEND VALIDATION (ONLY FOR REQUIRED FIELDS) =====
   const validateStep1 = (): boolean => {
+    // Only check for empty required fields - let backend handle everything else
     if (!formData.firstname.trim()) {
       setError('Bitte geben Sie einen Vornamen ein.');
       return false;
     }
     if (!formData.lastname.trim()) {
       setError('Bitte geben Sie einen Nachnamen ein.');
-      return false;
-    }
-    if (mode === 'create' && formData.password.length < 6) {
-      setError('Das Passwort muss mindestens 6 Zeichen lang sein.');
       return false;
     }
     return true;
@@ -167,6 +176,7 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
   // ===== NAVIGATIONS-FUNKTIONEN =====
   const goToNextStep = (): void => {
     setError('');
+    clearErrors(); // Clear previous validation errors
     
     if (!validateCurrentStep(currentStep)) {
       return;
@@ -179,6 +189,7 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
 
   const goToPrevStep = (): void => {
     setError('');
+    clearErrors(); // Clear validation errors when going back
     if (currentStep > 0) {
       setCurrentStep(prev => prev - 1);
     }
@@ -186,6 +197,7 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
 
   const handleStepChange = (stepIndex: number): void => {
     setError('');
+    clearErrors(); // Clear validation errors when changing steps
     
     // Nur erlauben, zu bereits validierten Schritten zu springen
     if (stepIndex <= currentStep + 1) {
@@ -205,6 +217,11 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
       ...prev,
       [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
     }));
+
+    // Clear field-specific error when user starts typing
+    if (validationErrors.length > 0) {
+      clearErrors();
+    }
   };
 
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -213,6 +230,11 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
       ...prev,
       [name]: value
     }));
+
+    // Clear password errors when user starts typing
+    if (validationErrors.length > 0) {
+      clearErrors();
+    }
   };
 
   const handleRoleChange = (role: string, checked: boolean) => {
@@ -275,6 +297,7 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
   const handleSubmit = async (): Promise<void> => {
     setLoading(true);
     setError('');
+    clearErrors();
 
     try {
       if (mode === 'create') {
@@ -288,7 +311,11 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
           canWorkAlone: formData.canWorkAlone,
           isTrainee: formData.isTrainee
         };
-        await employeeService.createEmployee(createData);
+        
+        // Use executeWithValidation ONLY for the API call
+        await executeWithValidation(() => 
+          employeeService.createEmployee(createData)
+        );
       } else if (employee) {
         const updateData: UpdateEmployeeRequest = {
           firstname: formData.firstname.trim(),
@@ -300,27 +327,34 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
           isActive: formData.isActive,
           isTrainee: formData.isTrainee
         };
-        await employeeService.updateEmployee(employee.id, updateData);
+        
+        // Use executeWithValidation for the update call
+        await executeWithValidation(() => 
+          employeeService.updateEmployee(employee.id, updateData)
+        );
 
-        // Password change logic
+        // Password change logic - backend will validate password requirements
         if (showPasswordSection && passwordForm.newPassword) {
-          if (passwordForm.newPassword.length < 6) {
-            throw new Error('Das Passwort muss mindestens 6 Zeichen lang sein');
-          }
           if (passwordForm.newPassword !== passwordForm.confirmPassword) {
             throw new Error('Die Passwörter stimmen nicht überein');
           }
 
-          await employeeService.changePassword(employee.id, {
-            currentPassword: '',
-            newPassword: passwordForm.newPassword
-          });
+          // Use executeWithValidation for password change too
+          await executeWithValidation(() =>
+            employeeService.changePassword(employee.id, {
+              currentPassword: '',
+              newPassword: passwordForm.newPassword
+            })
+          );
         }
       }
       
       return Promise.resolve();
     } catch (err: any) {
-      setError(err.message || `Fehler beim ${mode === 'create' ? 'Erstellen' : 'Aktualisieren'} des Mitarbeiters`);
+      // Only set error if it's not a validation error (validation errors are handled by the hook)
+      if (!err.validationErrors) {
+        setError(err.message || `Fehler beim ${mode === 'create' ? 'Erstellen' : 'Aktualisieren'} des Mitarbeiters`);
+      }
       return Promise.reject(err);
     } finally {
       setLoading(false);
@@ -331,8 +365,8 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
     switch (stepIndex) {
       case 0:
         return !!formData.firstname.trim() && 
-               !!formData.lastname.trim() && 
-               (mode === 'edit' || formData.password.length >= 6);
+               !!formData.lastname.trim();
+               // REMOVE: (mode === 'edit' || formData.password.length >= 6)
       case 1:
         return !!formData.employeeType;
       case 2:
@@ -349,11 +383,14 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
     currentStep,
     formData,
     passwordForm,
-    loading,
+    loading: loading || isSubmitting,
     error,
     steps,
     emailPreview,
     showPasswordSection,
+    validationErrors,
+    getFieldError,
+    hasErrors,
     
     // Actions
     goToNextStep,
@@ -367,6 +404,7 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
     handleContractTypeChange,
     handleSubmit,
     setShowPasswordSection,
+    clearErrors,
     
     // Helpers
     isStepCompleted
@@ -388,6 +426,8 @@ interface StepContentProps {
   showPasswordSection: boolean;
   onShowPasswordSection: (show: boolean) => void;
   hasRole: (roles: string[]) => boolean;
+  getFieldError: (fieldName: string) => string | null;
+  hasErrors: (fieldName?: string) => boolean;
 }
 
 const Step1Content: React.FC<StepContentProps> = ({ 
@@ -497,7 +537,6 @@ const Step1Content: React.FC<StepContentProps> = ({
           value={formData.password}
           onChange={onInputChange}
           required
-          minLength={6}
           style={{
             width: '100%',
             padding: '0.75rem',
@@ -505,14 +544,14 @@ const Step1Content: React.FC<StepContentProps> = ({
             borderRadius: '6px',
             fontSize: '1rem'
           }}
-          placeholder="Mindestens 6 Zeichen"
+          placeholder="Passwort eingeben"
         />
         <div style={{ 
           fontSize: '0.875rem', 
           color: '#6c757d',
           marginTop: '0.25rem'
         }}>
-          Das Passwort muss mindestens 6 Zeichen lang sein.
+          Das Passwort muss mindestens 8 Zeichen lang sein und Groß-/Kleinbuchstaben, Zahlen und Sonderzeichen enthalten.
         </div>
       </div>
     )}
@@ -524,7 +563,8 @@ const Step2Content: React.FC<StepContentProps> = ({
   onEmployeeTypeChange,
   onTraineeChange,
   onContractTypeChange,
-  hasRole
+  hasRole,
+  getFieldError
 }) => {
   const contractTypeOptions = [
     { value: 'small' as const, label: 'Kleiner Vertrag', description: '1 Schicht pro Woche' },
@@ -533,12 +573,28 @@ const Step2Content: React.FC<StepContentProps> = ({
   ];
 
   const showContractType = formData.employeeType !== 'guest';
+  const employeeTypeError = getFieldError('employeeType');
+  const contractTypeError = getFieldError('contractType');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       {/* Mitarbeiter Kategorie */}
       <div>
         <h3 style={{ margin: '0 0 1rem 0', color: '#495057' }}>👥 Mitarbeiter Kategorie</h3>
+        
+        {employeeTypeError && (
+          <div style={{ 
+            color: '#dc3545', 
+            fontSize: '0.875rem', 
+            marginBottom: '1rem',
+            padding: '0.5rem',
+            backgroundColor: '#f8d7da',
+            border: '1px solid #f5c6cb',
+            borderRadius: '4px'
+          }}>
+            {employeeTypeError}
+          </div>
+        )}
         
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           {Object.values(EMPLOYEE_TYPE_CONFIG).map(type => (
@@ -636,6 +692,20 @@ const Step2Content: React.FC<StepContentProps> = ({
       {hasRole(['admin']) && showContractType && (
         <div>
           <h3 style={{ margin: '0 0 1rem 0', color: '#0c5460' }}>📝 Vertragstyp</h3>
+          
+          {contractTypeError && (
+            <div style={{ 
+              color: '#dc3545', 
+              fontSize: '0.875rem', 
+              marginBottom: '1rem',
+              padding: '0.5rem',
+              backgroundColor: '#f8d7da',
+              border: '1px solid #f5c6cb',
+              borderRadius: '4px'
+            }}>
+              {contractTypeError}
+            </div>
+          )}
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {contractTypeOptions.map(contract => {
@@ -735,117 +805,151 @@ const Step3Content: React.FC<StepContentProps> = ({
   formData,
   onInputChange,
   onRoleChange,
-  hasRole
-}) => (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-    {/* Eigenständigkeit */}
-    <div>
-      <h3 style={{ margin: '0 0 1rem 0', color: '#495057' }}>🎯 Eigenständigkeit</h3>
-      
-      <div style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: '15px',
-        padding: '1rem',
-        border: '1px solid #e0e0e0',
-        borderRadius: '6px',
-        backgroundColor: '#fff'
-      }}>
-        <input
-          type="checkbox"
-          name="canWorkAlone"
-          id="canWorkAlone"
-          checked={formData.canWorkAlone}
-          onChange={onInputChange}
-          disabled={formData.employeeType === 'manager' || (formData.employeeType === 'personell' && formData.isTrainee)}
-          style={{ 
-            width: '20px', 
-            height: '20px',
-            opacity: (formData.employeeType === 'manager' || (formData.employeeType === 'personell' && formData.isTrainee)) ? 0.5 : 1
-          }}
-        />
-        <div style={{ flex: 1 }}>
-          <label htmlFor="canWorkAlone" style={{ 
-            fontWeight: 'bold', 
-            color: '#2c3e50', 
-            display: 'block',
-            opacity: (formData.employeeType === 'manager' || (formData.employeeType === 'personell' && formData.isTrainee)) ? 0.5 : 1
+  hasRole,
+  getFieldError
+}) => {
+  const rolesError = getFieldError('roles');
+  const canWorkAloneError = getFieldError('canWorkAlone');
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      {/* Eigenständigkeit */}
+      <div>
+        <h3 style={{ margin: '0 0 1rem 0', color: '#495057' }}>🎯 Eigenständigkeit</h3>
+        
+        {canWorkAloneError && (
+          <div style={{ 
+            color: '#dc3545', 
+            fontSize: '0.875rem', 
+            marginBottom: '1rem',
+            padding: '0.5rem',
+            backgroundColor: '#f8d7da',
+            border: '1px solid #f5c6cb',
+            borderRadius: '4px'
           }}>
-            Als ausreichend eigenständig markieren
-            {(formData.employeeType === 'manager' || (formData.employeeType === 'personell' && formData.isTrainee)) && ' (Automatisch festgelegt)'}
-          </label>
-          <div style={{ fontSize: '14px', color: '#7f8c8d' }}>
-            {formData.employeeType === 'manager' 
-              ? 'Chefs sind automatisch als eigenständig markiert.'
-              : formData.employeeType === 'personell' && formData.isTrainee
-              ? 'Auszubildende können nicht als eigenständig markiert werden.'
-              : 'Dieser Mitarbeiter kann komplexe Aufgaben eigenständig lösen und benötigt keine ständige Betreuung.'
-            }
+            {canWorkAloneError}
+          </div>
+        )}
+        
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '15px',
+          padding: '1rem',
+          border: '1px solid #e0e0e0',
+          borderRadius: '6px',
+          backgroundColor: '#fff'
+        }}>
+          <input
+            type="checkbox"
+            name="canWorkAlone"
+            id="canWorkAlone"
+            checked={formData.canWorkAlone}
+            onChange={onInputChange}
+            disabled={formData.employeeType === 'manager' || (formData.employeeType === 'personell' && formData.isTrainee)}
+            style={{ 
+              width: '20px', 
+              height: '20px',
+              opacity: (formData.employeeType === 'manager' || (formData.employeeType === 'personell' && formData.isTrainee)) ? 0.5 : 1
+            }}
+          />
+          <div style={{ flex: 1 }}>
+            <label htmlFor="canWorkAlone" style={{ 
+              fontWeight: 'bold', 
+              color: '#2c3e50', 
+              display: 'block',
+              opacity: (formData.employeeType === 'manager' || (formData.employeeType === 'personell' && formData.isTrainee)) ? 0.5 : 1
+            }}>
+              Als ausreichend eigenständig markieren
+              {(formData.employeeType === 'manager' || (formData.employeeType === 'personell' && formData.isTrainee)) && ' (Automatisch festgelegt)'}
+            </label>
+            <div style={{ fontSize: '14px', color: '#7f8c8d' }}>
+              {formData.employeeType === 'manager' 
+                ? 'Chefs sind automatisch als eigenständig markiert.'
+                : formData.employeeType === 'personell' && formData.isTrainee
+                ? 'Auszubildende können nicht als eigenständig markiert werden.'
+                : 'Dieser Mitarbeiter kann komplexe Aufgaben eigenständig lösen und benötigt keine ständige Betreuung.'
+              }
+            </div>
+          </div>
+          <div style={{
+            padding: '6px 12px',
+            backgroundColor: formData.canWorkAlone ? '#27ae60' : '#e74c3c',
+            color: 'white',
+            borderRadius: '15px',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            opacity: (formData.employeeType === 'manager' || (formData.employeeType === 'personell' && formData.isTrainee)) ? 0.7 : 1
+          }}>
+            {formData.canWorkAlone ? 'EIGENSTÄNDIG' : 'BETREUUNG'}
           </div>
         </div>
-        <div style={{
-          padding: '6px 12px',
-          backgroundColor: formData.canWorkAlone ? '#27ae60' : '#e74c3c',
-          color: 'white',
-          borderRadius: '15px',
-          fontSize: '12px',
-          fontWeight: 'bold',
-          opacity: (formData.employeeType === 'manager' || (formData.employeeType === 'personell' && formData.isTrainee)) ? 0.7 : 1
-        }}>
-          {formData.canWorkAlone ? 'EIGENSTÄNDIG' : 'BETREUUNG'}
-        </div>
       </div>
-    </div>
 
-    {/* Systemrollen (nur für Admins) */}
-    {hasRole(['admin']) && (
-      <div>
-        <h3 style={{ margin: '0 0 1rem 0', color: '#856404' }}>⚙️ Systemrollen</h3>
-        
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          {ROLE_CONFIG.map(role => (
-            <div 
-              key={role.value}
-              style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                padding: '0.75rem',
-                border: `2px solid ${formData.roles.includes(role.value) ? '#f39c12' : '#e0e0e0'}`,
-                borderRadius: '6px',
-                backgroundColor: formData.roles.includes(role.value) ? '#fef9e7' : 'white',
-                cursor: 'pointer'
-              }}
-              onClick={() => onRoleChange(role.value, !formData.roles.includes(role.value))}
-            >
-              <input
-                type="checkbox"
-                name="roles"
-                value={role.value}
-                checked={formData.roles.includes(role.value)}
-                onChange={(e) => onRoleChange(role.value, e.target.checked)}
+      {/* Systemrollen (nur für Admins) */}
+      {hasRole(['admin']) && (
+        <div>
+          <h3 style={{ margin: '0 0 1rem 0', color: '#856404' }}>⚙️ Systemrollen</h3>
+          
+          {rolesError && (
+            <div style={{ 
+              color: '#dc3545', 
+              fontSize: '0.875rem', 
+              marginBottom: '1rem',
+              padding: '0.5rem',
+              backgroundColor: '#f8d7da',
+              border: '1px solid #f5c6cb',
+              borderRadius: '4px'
+            }}>
+              {rolesError}
+            </div>
+          )}
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {ROLE_CONFIG.map(role => (
+              <div 
+                key={role.value}
                 style={{
-                  marginRight: '10px',
-                  marginTop: '2px'
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  padding: '0.75rem',
+                  border: `2px solid ${formData.roles.includes(role.value) ? '#f39c12' : '#e0e0e0'}`,
+                  borderRadius: '6px',
+                  backgroundColor: formData.roles.includes(role.value) ? '#fef9e7' : 'white',
+                  cursor: 'pointer'
                 }}
-              />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 'bold', color: '#2c3e50' }}>
-                  {role.label}
-                </div>
-                <div style={{ fontSize: '14px', color: '#7f8c8d' }}>
-                  {role.description}
+                onClick={() => onRoleChange(role.value, !formData.roles.includes(role.value))}
+              >
+                <input
+                  type="checkbox"
+                  name="roles"
+                  value={role.value}
+                  checked={formData.roles.includes(role.value)}
+                  onChange={(e) => onRoleChange(role.value, e.target.checked)}
+                  style={{
+                    marginRight: '10px',
+                    marginTop: '2px'
+                  }}
+                />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 'bold', color: '#2c3e50' }}>
+                    {role.label}
+                  </div>
+                  <div style={{ fontSize: '14px', color: '#7f8c8d' }}>
+                    {role.description}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
+          <div style={{ fontSize: '12px', color: '#7f8c8d', marginTop: '0.5rem' }}>
+            <strong>Hinweis:</strong> Ein Mitarbeiter kann mehrere Rollen haben.
+          </div>
         </div>
-        <div style={{ fontSize: '12px', color: '#7f8c8d', marginTop: '0.5rem' }}>
-          <strong>Hinweis:</strong> Ein Mitarbeiter kann mehrere Rollen haben.
-        </div>
-      </div>
-    )}
-  </div>
-);
+      )}
+    </div>
+  );
+};
 
 const Step4Content: React.FC<StepContentProps> = ({ 
   formData,
@@ -854,128 +958,161 @@ const Step4Content: React.FC<StepContentProps> = ({
   onPasswordChange,
   showPasswordSection,
   onShowPasswordSection,
-  mode
-}) => (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-    {/* Passwort ändern */}
-    <div>
-      <h3 style={{ margin: '0 0 1rem 0', color: '#856404' }}>🔒 Passwort zurücksetzen</h3>
-      
-      {!showPasswordSection ? (
-        <button
-          type="button"
-          onClick={() => onShowPasswordSection(true)}
-          style={{
-            padding: '0.75rem 1.5rem',
-            backgroundColor: '#f39c12',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontWeight: 'bold'
-          }}
-        >
-          🔑 Passwort zurücksetzen
-        </button>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', color: '#2c3e50' }}>
-              Neues Passwort *
-            </label>
-            <input
-              type="password"
-              name="newPassword"
-              value={passwordForm.newPassword}
-              onChange={onPasswordChange}
-              required
-              minLength={6}
-              style={{
-                width: '100%',
-                padding: '0.75rem',
-                border: '1px solid #ced4da',
-                borderRadius: '6px',
-                fontSize: '1rem'
-              }}
-              placeholder="Mindestens 6 Zeichen"
-            />
-          </div>
+  mode,
+  getFieldError
+}) => {
+  const newPasswordError = getFieldError('newPassword');
+  const confirmPasswordError = getFieldError('confirmPassword');
+  const isActiveError = getFieldError('isActive');
 
-          <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', color: '#2c3e50' }}>
-              Passwort bestätigen *
-            </label>
-            <input
-              type="password"
-              name="confirmPassword"
-              value={passwordForm.confirmPassword}
-              onChange={onPasswordChange}
-              required
-              style={{
-                width: '100%',
-                padding: '0.75rem',
-                border: '1px solid #ced4da',
-                borderRadius: '6px',
-                fontSize: '1rem'
-              }}
-              placeholder="Passwort wiederholen"
-            />
-          </div>
-
-          <div style={{ fontSize: '0.875rem', color: '#6c757d' }}>
-            <strong>Hinweis:</strong> Als Administrator können Sie das Passwort des Benutzers ohne Kenntnis des aktuellen Passworts zurücksetzen.
-          </div>
-
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      {/* Passwort ändern */}
+      <div>
+        <h3 style={{ margin: '0 0 1rem 0', color: '#856404' }}>🔒 Passwort zurücksetzen</h3>
+        
+        {!showPasswordSection ? (
           <button
             type="button"
-            onClick={() => onShowPasswordSection(false)}
+            onClick={() => onShowPasswordSection(true)}
             style={{
-              padding: '0.5rem 1rem',
-              backgroundColor: '#95a5a6',
+              padding: '0.75rem 1.5rem',
+              backgroundColor: '#f39c12',
               color: 'white',
               border: 'none',
-              borderRadius: '4px',
+              borderRadius: '6px',
               cursor: 'pointer',
-              alignSelf: 'flex-start'
+              fontWeight: 'bold'
             }}
           >
-            Abbrechen
+            🔑 Passwort zurücksetzen
           </button>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', color: '#2c3e50' }}>
+                Neues Passwort *
+              </label>
+              <input
+                type="password"
+                name="newPassword"
+                value={passwordForm.newPassword}
+                onChange={onPasswordChange}
+                required
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: `1px solid ${newPasswordError ? '#dc3545' : '#ced4da'}`,
+                  borderRadius: '6px',
+                  fontSize: '1rem'
+                }}
+                placeholder="Mindestens 6 Zeichen"
+              />
+              {newPasswordError && (
+                <div style={{ 
+                  color: '#dc3545', 
+                  fontSize: '0.875rem', 
+                  marginTop: '0.25rem' 
+                }}>
+                  {newPasswordError}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', color: '#2c3e50' }}>
+                Passwort bestätigen *
+              </label>
+              <input
+                type="password"
+                name="confirmPassword"
+                value={passwordForm.confirmPassword}
+                onChange={onPasswordChange}
+                required
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: `1px solid ${confirmPasswordError ? '#dc3545' : '#ced4da'}`,
+                  borderRadius: '6px',
+                  fontSize: '1rem'
+                }}
+                placeholder="Passwort wiederholen"
+              />
+              {confirmPasswordError && (
+                <div style={{ 
+                  color: '#dc3545', 
+                  fontSize: '0.875rem', 
+                  marginTop: '0.25rem' 
+                }}>
+                  {confirmPasswordError}
+                </div>
+              )}
+            </div>
+
+            <div style={{ fontSize: '0.875rem', color: '#6c757d' }}>
+              <strong>Hinweis:</strong> Als Administrator können Sie das Passwort des Benutzers ohne Kenntnis des aktuellen Passworts zurücksetzen.
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onShowPasswordSection(false)}
+              style={{
+                padding: '0.5rem 1rem',
+                backgroundColor: '#95a5a6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                alignSelf: 'flex-start'
+              }}
+            >
+              Abbrechen
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Aktiv Status */}
+      {mode === 'edit' && (
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '10px',
+          padding: '1rem',
+          border: `1px solid ${isActiveError ? '#dc3545' : '#e0e0e0'}`,
+          borderRadius: '6px',
+          backgroundColor: '#f8f9fa'
+        }}>
+          <input
+            type="checkbox"
+            name="isActive"
+            id="isActive"
+            checked={formData.isActive}
+            onChange={onInputChange}
+            style={{ width: '18px', height: '18px' }}
+          />
+          <div>
+            <label htmlFor="isActive" style={{ fontWeight: 'bold', color: '#2c3e50', display: 'block' }}>
+              Mitarbeiter ist aktiv
+            </label>
+            <div style={{ fontSize: '12px', color: '#7f8c8d' }}>
+              Inaktive Mitarbeiter können sich nicht anmelden und werden nicht für Schichten eingeplant.
+            </div>
+            {isActiveError && (
+              <div style={{ 
+                color: '#dc3545', 
+                fontSize: '0.875rem', 
+                marginTop: '0.25rem' 
+              }}>
+                {isActiveError}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
-
-    {/* Aktiv Status */}
-    {mode === 'edit' && (
-      <div style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: '10px',
-        padding: '1rem',
-        border: '1px solid #e0e0e0',
-        borderRadius: '6px',
-        backgroundColor: '#f8f9fa'
-      }}>
-        <input
-          type="checkbox"
-          name="isActive"
-          id="isActive"
-          checked={formData.isActive}
-          onChange={onInputChange}
-          style={{ width: '18px', height: '18px' }}
-        />
-        <div>
-          <label htmlFor="isActive" style={{ fontWeight: 'bold', color: '#2c3e50', display: 'block' }}>
-            Mitarbeiter ist aktiv
-          </label>
-          <div style={{ fontSize: '12px', color: '#7f8c8d' }}>
-            Inaktive Mitarbeiter können sich nicht anmelden und werden nicht für Schichten eingeplant.
-          </div>
-        </div>
-      </div>
-    )}
-  </div>
-);
+  );
+};
 
 // ===== HAUPTKOMPONENTE =====
 const EmployeeForm: React.FC<EmployeeFormProps> = ({
@@ -985,6 +1122,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
   onCancel
 }) => {
   const { hasRole } = useAuth();
+  const { showNotification } = useNotification();
   const {
     currentStep,
     formData,
@@ -994,6 +1132,9 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
     steps,
     emailPreview,
     showPasswordSection,
+    validationErrors,
+    getFieldError,
+    hasErrors,
     goToNextStep,
     goToPrevStep,
     handleStepChange,
@@ -1005,7 +1146,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
     handleContractTypeChange,
     handleSubmit,
     setShowPasswordSection,
-    isStepCompleted
+    clearErrors
   } = useEmployeeForm(mode, employee);
 
   // Inline Step Indicator Komponente (wie in Setup.tsx)
@@ -1108,7 +1249,9 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
       mode,
       showPasswordSection,
       onShowPasswordSection: setShowPasswordSection,
-      hasRole
+      hasRole,
+      getFieldError,
+      hasErrors
     };
 
     switch (currentStep) {
@@ -1128,9 +1271,17 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
   const handleFinalSubmit = async (): Promise<void> => {
     try {
       await handleSubmit();
+      // Show success notification
+      showNotification({ // Changed from addNotification to showNotification
+        type: 'success',
+        title: 'Erfolg',
+        message: mode === 'create' 
+          ? 'Mitarbeiter wurde erfolgreich erstellt' 
+          : 'Mitarbeiter wurde erfolgreich aktualisiert'
+      });
       onSuccess();
     } catch (err) {
-      // Error is already handled in handleSubmit
+      // Errors are already handled by the hook and shown as notifications
     }
   };
 
@@ -1189,20 +1340,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
         )}
       </div>
 
-      {/* Fehleranzeige */}
-      {error && (
-        <div style={{
-          backgroundColor: '#f8d7da',
-          border: '1px solid #f5c6cb',
-          color: '#721c24',
-          padding: '1rem',
-          borderRadius: '6px',
-          marginBottom: '1.5rem'
-        }}>
-          <strong>Fehler:</strong> {error}
-        </div>
-      )}
-
       {/* Schritt-Inhalt */}
       <div style={{ minHeight: '300px' }}>
         {renderStepContent()}
@@ -1237,7 +1374,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
           disabled={loading}
           style={{
             padding: '0.75rem 2rem',
-            backgroundColor: loading ? '#6c757d' : (isLastStep ? '#27ae60' : '#51258f'),
+            backgroundColor: loading ? '#6c757d' : (isLastStep ? '#51258f' : '#51258f'),
             color: 'white',
             border: 'none',
             borderRadius: '6px',

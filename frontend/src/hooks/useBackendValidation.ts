@@ -1,0 +1,89 @@
+// frontend/src/hooks/useBackendValidation.ts
+import { useState, useCallback } from 'react';
+import { ValidationError } from '../services/errorService';
+import { useNotification } from '../contexts/NotificationContext';
+
+export const useBackendValidation = () => {
+  const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { showNotification } = useNotification();
+
+  const clearErrors = useCallback(() => {
+    setValidationErrors([]);
+  }, []);
+
+  const getFieldError = useCallback((fieldName: string): string | null => {
+    const error = validationErrors.find(error => error.field === fieldName);
+    return error ? error.message : null;
+  }, [validationErrors]);
+
+  const hasErrors = useCallback((fieldName?: string): boolean => {
+    if (fieldName) {
+      return validationErrors.some(error => error.field === fieldName);
+    }
+    return validationErrors.length > 0;
+  }, [validationErrors]);
+
+  const executeWithValidation = useCallback(
+    async <T>(apiCall: () => Promise<T>): Promise<T> => {
+      setIsSubmitting(true);
+      clearErrors();
+
+      try {
+        const result = await apiCall();
+        return result;
+      } catch (error: any) {
+        if (error.validationErrors) {
+          setValidationErrors(error.validationErrors);
+          
+          // Show specific validation error messages
+          if (error.validationErrors.length > 0) {
+            // Show the first validation error as the main notification
+            const firstError = error.validationErrors[0];
+            showNotification({
+              type: 'error',
+              title: 'Validierungsfehler',
+              message: firstError.message
+            });
+
+            // If there are multiple errors, show additional notifications for each
+            if (error.validationErrors.length > 1) {
+              // Wait a bit before showing additional notifications to avoid overlap
+              setTimeout(() => {
+                error.validationErrors.slice(1).forEach((validationError: ValidationError, index: number) => {
+                  setTimeout(() => {
+                    showNotification({
+                      type: 'error',
+                      title: 'Weiterer Fehler',
+                      message: validationError.message
+                    });
+                  }, index * 300); // Stagger the notifications
+                });
+              }, 500);
+            }
+          }
+        } else {
+          // Show notification for other errors
+          showNotification({
+            type: 'error',
+            title: 'Fehler',
+            message: error.message || 'Ein unerwarteter Fehler ist aufgetreten'
+          });
+        }
+        throw error;
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [clearErrors, showNotification]
+  );
+
+  return {
+    validationErrors,
+    isSubmitting,
+    clearErrors,
+    getFieldError,
+    hasErrors,
+    executeWithValidation,
+  };
+};
