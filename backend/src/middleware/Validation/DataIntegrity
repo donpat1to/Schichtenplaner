@@ -1,0 +1,23 @@
+## Data Integrity
+
+### \[GENERAL\] API communication
+* All fetch requests include error handling
+* Failed responses throw descriptive errors
+* Token validation before protected operations
+* Automatic localStorage cleanup on logout
+
+### \[GENERAL\] data persistence
+* Employee data cached in localStorage after login
+* Token automatically retrieved from localStorage
+* Data structure normalization for scheduled shifts
+
+### \[GENERAL\] error handling
+* Network errors are caught and logged
+* HTTP errors include status codes and messages
+* Failed authentication triggers cleanup and logout
+
+## Role & Permission Notes
+* The frontend services don't explicitly restrict actions by role
+* Role-based restrictions are likely handled by the backend
+* Frontend assumes user has permissions for requested operations
+* 401 responses indicate insufficient permissions at backend level

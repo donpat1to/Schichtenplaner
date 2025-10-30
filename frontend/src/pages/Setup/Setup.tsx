@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import StepSetup, { Step } from '../../components/StepSetup/StepSetup';
 
 const API_BASE_URL = '/api';
 
@@ -33,14 +32,14 @@ const useSetup = () => {
 
   const steps: SetupStep[] = [
     {
-      id: 'password-setup',
-      title: 'Passwort erstellen',
-      subtitle: 'Legen Sie ein sicheres Passwort fest'
-    },
-    {
       id: 'profile-setup', 
       title: 'Profilinformationen',
       subtitle: 'Geben Sie Ihre persönlichen Daten ein'
+    },
+    {
+      id: 'password-setup',
+      title: 'Passwort erstellen',
+      subtitle: 'Legen Sie ein sicheres Passwort fest'
     },
     {
       id: 'confirmation',
@@ -51,24 +50,24 @@ const useSetup = () => {
 
   // ===== VALIDIERUNGS-FUNKTIONEN =====
   const validateStep1 = (): boolean => {
-    if (formData.password.length < 6) {
-      setError('Das Passwort muss mindestens 6 Zeichen lang sein.');
-      return false;
-    }
-    if (formData.password !== formData.confirmPassword) {
-      setError('Die Passwörter stimmen nicht überein.');
-      return false;
-    }
-    return true;
-  };
-
-  const validateStep2 = (): boolean => {
     if (!formData.firstname.trim()) {
       setError('Bitte geben Sie einen Vornamen ein.');
       return false;
     }
     if (!formData.lastname.trim()) {
       setError('Bitte geben Sie einen Nachnamen ein.');
+      return false;
+    }
+    return true;
+  };
+
+  const validateStep2 = (): boolean => {
+    if (formData.password.length < 6) {
+      setError('Das Passwort muss mindestens 6 Zeichen lang sein.');
+      return false;
+    }
+    if (formData.password !== formData.confirmPassword) {
+      setError('Die Passwörter stimmen nicht überein.');
       return false;
     }
     return true;
@@ -226,69 +225,6 @@ interface StepContentProps {
 
 const Step1Content: React.FC<StepContentProps> = ({ 
   formData, 
-  onInputChange 
-}) => (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-    <div>
-      <label style={{ 
-        display: 'block', 
-        marginBottom: '0.5rem', 
-        fontWeight: '600',
-        color: '#495057'
-      }}>
-        Passwort
-      </label>
-      <input
-        type="password"
-        name="password"
-        value={formData.password}
-        onChange={onInputChange}
-        style={{
-          width: '100%',
-          padding: '0.75rem',
-          border: '1px solid #ced4da',
-          borderRadius: '6px',
-          fontSize: '1rem',
-          transition: 'border-color 0.3s ease'
-        }}
-        placeholder="Mindestens 6 Zeichen"
-        required
-        autoComplete="new-password"
-      />
-    </div>
-    
-    <div>
-      <label style={{ 
-        display: 'block', 
-        marginBottom: '0.5rem', 
-        fontWeight: '600',
-        color: '#495057'
-      }}>
-        Passwort bestätigen
-      </label>
-      <input
-        type="password"
-        name="confirmPassword"
-        value={formData.confirmPassword}
-        onChange={onInputChange}
-        style={{
-          width: '100%',
-          padding: '0.75rem',
-          border: '1px solid #ced4da',
-          borderRadius: '6px',
-          fontSize: '1rem',
-          transition: 'border-color 0.3s ease'
-        }}
-        placeholder="Passwort wiederholen"
-        required
-        autoComplete="new-password"
-      />
-    </div>
-  </div>
-);
-
-const Step2Content: React.FC<StepContentProps> = ({ 
-  formData, 
   onInputChange,
   getEmailPreview 
 }) => (
@@ -374,6 +310,70 @@ const Step2Content: React.FC<StepContentProps> = ({
       }}>
         Die E-Mail wird automatisch aus Vor- und Nachname generiert
       </div>
+    </div>
+  </div>
+);
+
+
+const Step2Content: React.FC<StepContentProps> = ({ 
+  formData, 
+  onInputChange 
+}) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    <div>
+      <label style={{ 
+        display: 'block', 
+        marginBottom: '0.5rem', 
+        fontWeight: '600',
+        color: '#495057'
+      }}>
+        Passwort
+      </label>
+      <input
+        type="password"
+        name="password"
+        value={formData.password}
+        onChange={onInputChange}
+        style={{
+          width: '100%',
+          padding: '0.75rem',
+          border: '1px solid #ced4da',
+          borderRadius: '6px',
+          fontSize: '1rem',
+          transition: 'border-color 0.3s ease'
+        }}
+        placeholder="Mindestens 6 Zeichen"
+        required
+        autoComplete="new-password"
+      />
+    </div>
+    
+    <div>
+      <label style={{ 
+        display: 'block', 
+        marginBottom: '0.5rem', 
+        fontWeight: '600',
+        color: '#495057'
+      }}>
+        Passwort bestätigen
+      </label>
+      <input
+        type="password"
+        name="confirmPassword"
+        value={formData.confirmPassword}
+        onChange={onInputChange}
+        style={{
+          width: '100%',
+          padding: '0.75rem',
+          border: '1px solid #ced4da',
+          borderRadius: '6px',
+          fontSize: '1rem',
+          transition: 'border-color 0.3s ease'
+        }}
+        placeholder="Passwort wiederholen"
+        required
+        autoComplete="new-password"
+      />
     </div>
   </div>
 );
@@ -477,6 +477,83 @@ const Setup: React.FC = () => {
     }
   };
 
+  // Inline Step Indicator Komponente
+  const StepIndicator: React.FC = () => (
+    <div style={{ 
+      display: 'flex', 
+      justifyContent: 'space-between', 
+      alignItems: 'center',
+      marginBottom: '2.5rem',
+      position: 'relative',
+      width: '100%'
+    }}>
+      {/* Verbindungslinien */}
+      <div style={{
+        position: 'absolute',
+        top: '12px',
+        left: '0',
+        right: '0',
+        height: '2px',
+        backgroundColor: '#e9ecef',
+        zIndex: 1
+      }} />
+      
+      {steps.map((step, index) => {
+        const isCompleted = index < currentStep;
+        const isCurrent = index === currentStep;
+        const isClickable = index <= currentStep + 1;
+        
+        return (
+          <div 
+            key={step.id}
+            style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center',
+              zIndex: 2,
+              position: 'relative',
+              flex: 1
+            }}
+          >
+            <button
+              onClick={() => isClickable && handleStepChange(index)}
+              disabled={!isClickable}
+              style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: '50%',
+                border: '2px solid',
+                borderColor: isCompleted || isCurrent ? '#51258f' : '#e9ecef',
+                backgroundColor: isCompleted ? '#51258f' : 'white',
+                color: isCompleted ? 'white' : (isCurrent ? '#51258f' : '#6c757d'),
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                cursor: isClickable ? 'pointer' : 'not-allowed',
+                transition: 'all 0.3s ease',
+                marginBottom: '8px'
+              }}
+            >
+              {index + 1}
+            </button>
+            
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ 
+                fontSize: '14px', 
+                fontWeight: isCurrent ? '600' : '400',
+                color: isCurrent ? '#51258f' : '#6c757d'
+              }}>
+                {step.title}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div style={{ 
       minHeight: '100vh', 
@@ -533,18 +610,8 @@ const Setup: React.FC = () => {
           )}
         </div>
 
-        {/* StepSetup Komponente - nur die Steps ohne Beschreibung */}
-        <div style={{ marginBottom: '2.5rem' }}>
-          <StepSetup
-            steps={steps.map(step => ({ ...step, subtitle: undefined }))}
-            current={currentStep}
-            onChange={handleStepChange}
-            orientation="horizontal"
-            clickable={true}
-            size="md"
-            animated={true}
-          />
-        </div>
+        {/* Inline Step Indicator */}
+        <StepIndicator />
 
         {/* Fehleranzeige */}
         {error && (
