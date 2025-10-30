@@ -23,7 +23,7 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3003,
       host: true,
-      open: isDevelopment,
+      //open: isDevelopment,
       proxy: {
         '/api': {
           target: 'http://localhost:3002',
