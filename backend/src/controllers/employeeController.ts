@@ -314,6 +314,56 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
+    // Check if user is trying to remove their own admin role
+    const currentUser = req.user;
+    if (currentUser?.userId === id && roles) {
+      const currentUserRoles = await db.all<{ role: string }>(
+        'SELECT role FROM employee_roles WHERE employee_id = ?',
+        [currentUser.userId]
+      );
+      
+      const isCurrentlyAdmin = currentUserRoles.some(role => role.role === 'admin');
+      const willBeAdmin = roles.includes('admin');
+      
+      if (isCurrentlyAdmin && !willBeAdmin) {
+        res.status(400).json({ error: 'You cannot remove your own admin role' });
+        return;
+      }
+    }
+
+    // Check admin count if roles are being updated
+    if (roles) {
+      try {
+        await checkAdminCount(id, roles);
+      } catch (error: any) {
+        res.status(400).json({ error: error.message });
+        return;
+      }
+    }
+
+    // Check if trying to deactivate the last admin
+    if (isActive === false) {
+      const isEmployeeAdmin = await db.get<{ count: number }>(
+        `SELECT COUNT(*) as count FROM employee_roles WHERE employee_id = ? AND role = 'admin'`,
+        [id]
+      );
+
+      if (isEmployeeAdmin && isEmployeeAdmin.count > 0) {
+        const otherAdminCount = await db.get<{ count: number }>(
+          `SELECT COUNT(*) as count 
+           FROM employee_roles er
+           JOIN employees e ON er.employee_id = e.id
+           WHERE er.role = 'admin' AND e.is_active = 1 AND er.employee_id != ?`,
+          [id]
+        );
+
+        if (!otherAdminCount || otherAdminCount.count === 0) {
+          res.status(400).json({ error: 'Cannot deactivate the last admin user' });
+          return;
+        }
+      }
+    }
+
     // Validate employee type if provided
     if (employeeType) {
       const validEmployeeType = await db.get(
@@ -438,7 +488,15 @@ export const deleteEmployee = async (req: AuthRequest, res: Response): Promise<v
     const { id } = req.params;
     console.log('🗑️ Starting deletion process for employee ID:', id);
 
-    // UPDATED: Check if employee exists with role from employee_roles
+    const currentUser = req.user;
+
+    // Prevent self-deletion
+    if (currentUser?.userId === id) {
+      res.status(400).json({ error: 'You cannot delete yourself' });
+      return;
+    }
+
+    // Check if employee exists with role from employee_roles
     const existingEmployee = await db.get<any>(`
       SELECT 
         e.id, e.email, e.firstname, e.lastname, e.is_active,
@@ -453,6 +511,26 @@ export const deleteEmployee = async (req: AuthRequest, res: Response): Promise<v
       console.log('❌ Employee not found for deletion:', id);
       res.status(404).json({ error: 'Employee not found' });
       return;
+    }
+
+    const employeeRoles = await db.all<{ role: string }>(`
+      SELECT role FROM employee_roles WHERE employee_id = ?
+    `, [id]);
+
+    const isEmployeeAdmin = employeeRoles.some(role => role.role === 'admin');
+
+    // Check if this is the last admin
+    if (isEmployeeAdmin) {
+      const adminCount = await db.get<{ count: number }>(
+        `SELECT COUNT(*) as count 
+         FROM employee_roles 
+         WHERE role = 'admin'`
+      );
+
+      if (adminCount && adminCount.count <= 1) {
+        res.status(400).json({ error: 'Cannot delete the last admin user' });
+        return;
+      }
     }
 
     console.log('📝 Found employee to delete:', existingEmployee);
@@ -511,7 +589,6 @@ export const deleteEmployee = async (req: AuthRequest, res: Response): Promise<v
       console.error('Error during deletion transaction:', error);
       throw error;
     }
-
   } catch (error) {
     console.error('Error deleting employee:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -558,12 +635,48 @@ export const updateAvailabilities = async (req: AuthRequest, res: Response): Pro
     const { employeeId } = req.params;
     const { planId, availabilities } = req.body;
 
-    // Check if employee exists
-    const existingEmployee = await db.get('SELECT id FROM employees WHERE id = ?', [employeeId]);
+    // Check if employee exists and get contract type
+    const existingEmployee = await db.get<any>(`
+      SELECT e.*, er.role 
+      FROM employees e
+      LEFT JOIN employee_roles er ON e.id = er.employee_id
+      WHERE e.id = ?
+    `, [employeeId]);
+
     if (!existingEmployee) {
       res.status(404).json({ error: 'Employee not found' });
       return;
     }
+
+    // Check if employee is active
+    if (!existingEmployee.is_active) {
+      res.status(400).json({ error: 'Cannot set availability for inactive employee' });
+      return;
+    }
+
+    // Validate contract type requirements
+    const availableCount = availabilities.filter((avail: any) => 
+      avail.preferenceLevel === 1 || avail.preferenceLevel === 2
+    ).length;
+
+    const contractType = existingEmployee.contract_type;
+    
+    // Apply contract type minimum requirements
+    if (contractType === 'small' && availableCount < 2) {
+      res.status(400).json({ 
+        error: 'Employees with small contract must have at least 2 available shifts' 
+      });
+      return;
+    }
+
+    if (contractType === 'large' && availableCount < 3) {
+      res.status(400).json({ 
+        error: 'Employees with large contract must have at least 3 available shifts' 
+      });
+      return;
+    }
+
+    // Flexible contract has no minimum requirement
 
     await db.run('BEGIN TRANSACTION');
 
@@ -698,5 +811,37 @@ export const updateLastLogin = async (req: AuthRequest, res: Response): Promise<
   } catch (error) {
     console.error('Error updating last login:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+const checkAdminCount = async (employeeId: string, newRoles: string[]): Promise<void> => {
+  try {
+    // Count current admins excluding the employee being updated
+    const adminCountResult = await db.get<{ count: number }>(
+      `SELECT COUNT(DISTINCT employee_id) as count 
+       FROM employee_roles 
+       WHERE role = 'admin' AND employee_id != ?`,
+      [employeeId]
+    );
+
+    const currentAdminCount = adminCountResult?.count || 0;
+    
+    // Check ALL current roles for the employee
+    const currentEmployeeRoles = await db.all<{ role: string }>(
+      `SELECT role FROM employee_roles WHERE employee_id = ?`,
+      [employeeId]
+    );
+
+    const currentRoles = currentEmployeeRoles.map(role => role.role);
+    const isCurrentlyAdmin = currentRoles.includes('admin');
+    const willBeAdmin = newRoles.includes('admin');
+
+    // If removing admin role from the last admin, throw error
+    if (isCurrentlyAdmin && !willBeAdmin && currentAdminCount === 0) {
+      throw new Error('Cannot remove admin role from the last admin user');
+    }
+
+  } catch (error) {
+    throw error;
   }
 };

@@ -18,3 +18,20 @@
   - timeSlotId mapping (handles both naming conventions)
   - requiredEmployees fallback to 2 if missing
   - assignedEmployees fallback to empty array if missing
+
+## Availability
+
+### [UPDATE] availability
+* planId: required valid UUID
+* availabilities: required array with strict validation:
+  - shiftId: valid UUID
+  - preferenceLevel: 0 (unavailable), 1 (available), or 2 (preferred)
+  - notes: optional, max 500 characters
+
+## Scheduling
+
+### [ACTION: generate schedule]
+* shiftPlan: required object with id (valid UUID)
+* employees: required array with at least one employee, each with valid UUID
+* availabilities: required array
+* constraints: optional array

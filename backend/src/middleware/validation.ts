@@ -20,12 +20,16 @@ export const validateRegister = [
   body('firstname')
     .isLength({ min: 1, max: 100 })
     .withMessage('First name must be between 1-100 characters')
+    .notEmpty()
+    .withMessage('First name must not be empty')
     .trim()
     .escape(),
 
   body('lastname')
     .isLength({ min: 1, max: 100 })
     .withMessage('Last name must be between 1-100 characters')
+    .notEmpty()
+    .withMessage('Last name must not be empty')
     .trim()
     .escape(),
 
@@ -42,12 +46,16 @@ export const validateEmployee = [
   body('firstname')
     .isLength({ min: 1, max: 100 })
     .withMessage('First name must be between 1-100 characters')
+    .notEmpty()
+    .withMessage('First name must not be empty')
     .trim()
     .escape(),
 
   body('lastname')
     .isLength({ min: 1, max: 100 })
     .withMessage('Last name must be between 1-100 characters')
+    .notEmpty()
+    .withMessage('Last name must not be empty')
     .trim()
     .escape(),
 
@@ -61,6 +69,32 @@ export const validateEmployee = [
   body('employeeType')
     .isIn(['manager', 'personell', 'apprentice', 'guest'])
     .withMessage('Employee type must be manager, personell, apprentice or guest'),
+
+  body('contractType')
+    .custom((value, { req }) => {
+      const employeeType = req.body.employeeType;
+      
+      // Manager, apprentice => contractType must be flexible
+      if (['manager', 'apprentice'].includes(employeeType)) {
+        if (value !== 'flexible') {
+          throw new Error(`contractType must be 'flexible' for employeeType: ${employeeType}`);
+        }
+      }
+      // Guest => contractType must be undefined/NONE
+      else if (employeeType === 'guest') {
+        if (value !== undefined && value !== null) {
+          throw new Error(`contractType is not allowed for employeeType: ${employeeType}`);
+        }
+      }
+      // Personell => contractType must be small or large
+      else if (employeeType === 'personell') {
+        if (!['small', 'large'].includes(value)) {
+          throw new Error(`contractType must be 'small' or 'large' for employeeType: ${employeeType}`);
+        }
+      }
+      
+      return true;
+    }),
 
   body('contractType')
     .optional()
@@ -98,6 +132,8 @@ export const validateEmployeeUpdate = [
     .optional()
     .isLength({ min: 1, max: 100 })
     .withMessage('First name must be between 1-100 characters')
+    .notEmpty()
+    .withMessage('First name must not be empty')
     .trim()
     .escape(),
 
@@ -105,6 +141,8 @@ export const validateEmployeeUpdate = [
     .optional()
     .isLength({ min: 1, max: 100 })
     .withMessage('Last name must be between 1-100 characters')
+    .notEmpty()
+    .withMessage('Last name must not be empty')
     .trim()
     .escape(),
 
@@ -115,8 +153,29 @@ export const validateEmployeeUpdate = [
 
   body('contractType')
     .optional()
-    .isIn(['small', 'large', 'flexible'])
-    .withMessage('Contract type must be small, large or flexible'),
+    .custom((value, { req }) => {
+      const employeeType = req.body.employeeType;
+      if (!employeeType) return true; // Skip if employeeType not provided
+      
+      // Same validation logic as create
+      if (['manager', 'apprentice'].includes(employeeType)) {
+        if (value !== 'flexible') {
+          throw new Error(`contractType must be 'flexible' for employeeType: ${employeeType}`);
+        }
+      }
+      else if (employeeType === 'guest') {
+        if (value !== undefined && value !== null) {
+          throw new Error(`contractType is not allowed for employeeType: ${employeeType}`);
+        }
+      }
+      else if (employeeType === 'personell') {
+        if (!['small', 'large'].includes(value)) {
+          throw new Error(`contractType must be 'small' or 'large' for employeeType: ${employeeType}`);
+        }
+      }
+      
+      return true;
+    }),
 
   body('roles')
     .optional()
@@ -147,15 +206,22 @@ export const validateEmployeeUpdate = [
 export const validateChangePassword = [
   body('currentPassword')
     .optional()
-    .isLength({ min: 8 })
-    .withMessage('Current password must be at least 8 characters'),
+    .isLength({ min: 1 })
+    .withMessage('Current password is required for self-password change'),
 
   body('password')
-    .optional()
     .isLength({ min: 8 })
     .withMessage('Password must be at least 8 characters')
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?])/)
     .withMessage('Password must contain uppercase, lowercase, number and special character'),
+
+  body('confirmPassword')
+    .custom((value, { req }) => {
+      if (value !== req.body.password) {
+        throw new Error('Passwords do not match');
+      }
+      return true;
+    })
 ];
 
 // ===== SHIFT PLAN VALIDATION =====
@@ -297,14 +363,24 @@ export const validateCreateFromPreset = [
     .escape(),
 
   body('startDate')
-    .optional()
     .isISO8601()
-    .withMessage('Must be a valid date (ISO format)'),
+    .withMessage('Must be a valid date (ISO format)')
+    .custom((value, { req }) => {
+      if (req.body.endDate && new Date(value) > new Date(req.body.endDate)) {
+        throw new Error('Start date must be before end date');
+      }
+      return true;
+    }),
 
   body('endDate')
-    .optional()
     .isISO8601()
-    .withMessage('Must be a valid date (ISO format)'),
+    .withMessage('Must be a valid date (ISO format)')
+    .custom((value, { req }) => {
+      if (req.body.startDate && new Date(value) < new Date(req.body.startDate)) {
+        throw new Error('End date must be after start date');
+      }
+      return true;
+    }),
 
   body('isTemplate')
     .optional()
@@ -386,7 +462,20 @@ export const validateAvailabilities = [
 
   body('availabilities')
     .isArray()
-    .withMessage('Availabilities must be an array'),
+    .withMessage('Availabilities must be an array')
+    .custom((availabilities, { req }) => {
+      // Count available shifts (preference level 1 or 2)
+      const availableCount = availabilities.filter((avail: any) => 
+        avail.preferenceLevel === 1 || avail.preferenceLevel === 2
+      ).length;
+
+      // Basic validation - at least one available shift
+      if (availableCount === 0) {
+        throw new Error('At least one available shift is required');
+      }
+      
+      return true;
+    }),
 
   body('availabilities.*.shiftId')
     .isUUID()
