@@ -16,34 +16,42 @@
 
 ### \[ACTION: update last login\]
 * Requires employee ID
-* Fails silently if update fails (logs error but doesn't block user)
+* Fails silently if update fails (logs error but doesn`t block user)
 
 ## Employee
 
 ### \[CREATE\] Employee
-* `firstname` must not be empty
-* `lastname` must not be empty
+* `firstname` 1-100 characters and must not be empty
+* `lastname` 1-100 characters and must not be empty
 * `password` must be at least 6 characters (in create mode)
-* `employeeType` must be selected
+* `employeeType` must be `manager`, `personell`, `apprentice`, or `guest`
+* `canWorkAlone` optional boolean
+* `isTrainee` optional boolean
+* `isActive` optional boolean (default true)
 * Contract type validation:
   * `manager`, `apprentice` => `contractType` = flexible
   * `guest` => `contractType` = undefined/NONE
   * `personell` => `contractType` = small || large
 
 ### \[UPDATE\] Employee profile
-* `firstname` must not be empty
-* `lastname` must not be empty
+* `firstname` 1-100 characters and must not be empty
+* `lastname` 1-100 characters and must not be empty
+* `employeeType` must be valid type if provided
+* `contractType` must be valid type if provided
+* `roles` must be valid array of roles if provided
 * Only the employee themselves or admins can update
 
 ### \[UPDATE\] Employee password
-* `newPassword` must be at least 6 characters
+* `newPassword` optional but strict validation:
+  - Minimum 8 characters
+  - Must contain uppercase, lowercase, number and special character
 * `newPassword` must match `confirmPassword`
 * For admin password reset: no `currentPassword` required
 * For self-password change: `currentPassword` required
 
 ### \[UPDATE\] Employee roles
-* Only users with role 'admin' can modify roles
-* At least one employee must maintain 'admin' role
+* Only users with role `admin` can modify roles
+* At least one employee must maintain `admin` role
 * Users cannot remove their own admin role
 
 ### \[UPDATE\] Employee availability
@@ -56,7 +64,7 @@
 * `shiftId` must be valid and exist in the current plan
 
 ### \[ACTION: delete\] Employee
-* Only users with role 'admin' can delete employees
+* Only users with role `admin` can delete employees
 * Cannot delete yourself
 * Cannot delete the last admin user
 * User confirmation required before deletion
