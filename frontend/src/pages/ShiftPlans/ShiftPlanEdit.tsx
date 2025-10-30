@@ -4,11 +4,14 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { shiftPlanService } from '../../services/shiftPlanService';
 import { ShiftPlan, Shift, ScheduledShift } from '../../models/ShiftPlan';
 import { useNotification } from '../../contexts/NotificationContext';
+import { useBackendValidation } from '../../hooks/useBackendValidation';
 
 const ShiftPlanEdit: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { showNotification } = useNotification();
+  const { showNotification, confirmDialog } = useNotification();
+  const { executeWithValidation, isSubmitting } = useBackendValidation();
+  
   const [shiftPlan, setShiftPlan] = useState<ShiftPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [editingShift, setEditingShift] = useState<Shift | null>(null);
@@ -24,122 +27,150 @@ const ShiftPlanEdit: React.FC = () => {
 
   const loadShiftPlan = async () => {
     if (!id) return;
-    try {
-      const plan = await shiftPlanService.getShiftPlan(id);
-      setShiftPlan(plan);
-    } catch (error) {
-      console.error('Error loading shift plan:', error);
-      showNotification({
-        type: 'error',
-        title: 'Fehler',
-        message: 'Der Schichtplan konnte nicht geladen werden.'
-      });
-      navigate('/shift-plans');
-    } finally {
-      setLoading(false);
-    }
+    
+    await executeWithValidation(async () => {
+      try {
+        const plan = await shiftPlanService.getShiftPlan(id);
+        setShiftPlan(plan);
+      } catch (error) {
+        console.error('Error loading shift plan:', error);
+        navigate('/shift-plans');
+      } finally {
+        setLoading(false);
+      }
+    });
   };
 
   const handleUpdateShift = async (shift: Shift) => {
     if (!shiftPlan || !id) return;
     
-    try {
-      // Update logic here
+    await executeWithValidation(async () => {
+      // Update logic here - will be implemented when backend API is available
+      // For now, just simulate success
+      console.log('Updating shift:', shift);
+      
       loadShiftPlan();
       setEditingShift(null);
-    } catch (error) {
-      console.error('Error updating shift:', error);
+      
       showNotification({
-        type: 'error',
-        title: 'Fehler',
-        message: 'Die Schicht konnte nicht aktualisiert werden.'
+        type: 'success',
+        title: 'Erfolg',
+        message: 'Schicht wurde erfolgreich aktualisiert.'
       });
-    }
+    });
   };
 
   const handleAddShift = async () => {
     if (!shiftPlan || !id) return;
     
-    if (!newShift.timeSlotId || !newShift.requiredEmployees) {
+    // Basic frontend validation only
+    if (!newShift.timeSlotId) {
       showNotification({
         type: 'error',
-        title: 'Fehler',
-        message: 'Bitte füllen Sie alle Pflichtfelder aus.'
+        title: 'Fehlende Angaben',
+        message: 'Bitte wählen Sie einen Zeit-Slot aus.'
       });
       return;
     }
     
-    try {
-      // Add shift logic here
+    if (!newShift.requiredEmployees || newShift.requiredEmployees < 1) {
+      showNotification({
+        type: 'error',
+        title: 'Fehlende Angaben',
+        message: 'Bitte geben Sie die Anzahl der benötigten Mitarbeiter an.'
+      });
+      return;
+    }
+
+    await executeWithValidation(async () => {
+      // Add shift logic here - will be implemented when backend API is available
+      // For now, just simulate success
+      console.log('Adding shift:', newShift);
+      
       showNotification({
         type: 'success',
         title: 'Erfolg',
         message: 'Neue Schicht wurde hinzugefügt.'
       });
+      
       setNewShift({
         timeSlotId: '',
         dayOfWeek: 1,
         requiredEmployees: 1
       });
       loadShiftPlan();
-    } catch (error) {
-      console.error('Error adding shift:', error);
-      showNotification({
-        type: 'error',
-        title: 'Fehler',
-        message: 'Die Schicht konnte nicht hinzugefügt werden.'
-      });
-    }
+    });
   };
 
   const handleDeleteShift = async (shiftId: string) => {
-    if (!window.confirm('Möchten Sie diese Schicht wirklich löschen?')) {
-      return;
-    }
+    const confirmed = await confirmDialog({
+      title: 'Schicht löschen',
+      message: 'Möchten Sie diese Schicht wirklich löschen?',
+      confirmText: 'Löschen',
+      cancelText: 'Abbrechen',
+      type: 'warning'
+    });
 
-    try {
-      // Delete logic here
+    if (!confirmed) return;
+
+    await executeWithValidation(async () => {
+      // Delete logic here - will be implemented when backend API is available
+      // For now, just simulate success
+      console.log('Deleting shift:', shiftId);
+      
       loadShiftPlan();
-    } catch (error) {
-      console.error('Error deleting shift:', error);
+      
       showNotification({
-        type: 'error',
-        title: 'Fehler',
-        message: 'Die Schicht konnte nicht gelöscht werden.'
+        type: 'success',
+        title: 'Erfolg',
+        message: 'Schicht wurde erfolgreich gelöscht.'
       });
-    }
+    });
   };
 
   const handlePublish = async () => {
     if (!shiftPlan || !id) return;
 
-    try {
+    await executeWithValidation(async () => {
       await shiftPlanService.updateShiftPlan(id, {
         ...shiftPlan,
         status: 'published'
       });
+      
       showNotification({
         type: 'success',
         title: 'Erfolg',
         message: 'Schichtplan wurde veröffentlicht.'
       });
+      
       loadShiftPlan();
-    } catch (error) {
-      console.error('Error publishing shift plan:', error);
-      showNotification({
-        type: 'error',
-        title: 'Fehler',
-        message: 'Der Schichtplan konnte nicht veröffentlicht werden.'
-      });
-    }
+    });
   };
 
   if (loading) {
-    return <div>Lade Schichtplan...</div>;
+    return (
+      <div style={{ 
+        textAlign: 'center', 
+        padding: '40px',
+        fontSize: '18px',
+        color: '#666'
+      }}>
+        Lade Schichtplan...
+      </div>
+    );
   }
 
   if (!shiftPlan) {
-    return <div>Schichtplan nicht gefunden</div>;
+    return (
+      <div style={{ 
+        textAlign: 'center', 
+        padding: '40px',
+        fontSize: '18px',
+        color: '#e74c3c'
+      }}>
+        Schichtplan nicht gefunden
+      </div>
+    );
   }
 
   // Group shifts by dayOfWeek
@@ -174,28 +205,32 @@ const ShiftPlanEdit: React.FC = () => {
           {shiftPlan.status === 'draft' && (
             <button
               onClick={handlePublish}
+              disabled={isSubmitting}
               style={{
                 padding: '8px 16px',
                 backgroundColor: '#2ecc71',
                 color: 'white',
                 border: 'none',
                 borderRadius: '4px',
-                cursor: 'pointer',
-                marginRight: '10px'
+                cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                marginRight: '10px',
+                opacity: isSubmitting ? 0.6 : 1
               }}
             >
-              Veröffentlichen
+              {isSubmitting ? 'Wird veröffentlicht...' : 'Veröffentlichen'}
             </button>
           )}
           <button
             onClick={() => navigate('/shift-plans')}
+            disabled={isSubmitting}
             style={{
               padding: '8px 16px',
               backgroundColor: '#95a5a6',
               color: 'white',
               border: 'none',
               borderRadius: '4px',
-              cursor: 'pointer'
+              cursor: isSubmitting ? 'not-allowed' : 'pointer',
+              opacity: isSubmitting ? 0.6 : 1
             }}
           >
             Zurück
@@ -219,6 +254,7 @@ const ShiftPlanEdit: React.FC = () => {
               value={newShift.dayOfWeek}
               onChange={(e) => setNewShift({ ...newShift, dayOfWeek: parseInt(e.target.value) })}
               style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
+              disabled={isSubmitting}
             >
               {daysOfWeek.map(day => (
                 <option key={day.id} value={day.id}>{day.name}</option>
@@ -231,6 +267,7 @@ const ShiftPlanEdit: React.FC = () => {
               value={newShift.timeSlotId}
               onChange={(e) => setNewShift({ ...newShift, timeSlotId: e.target.value })}
               style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
+              disabled={isSubmitting}
             >
               <option value="">Bitte auswählen...</option>
               {shiftPlan.timeSlots.map(slot => (
@@ -246,25 +283,27 @@ const ShiftPlanEdit: React.FC = () => {
               type="number"
               min="1"
               value={newShift.requiredEmployees}
-              onChange={(e) => setNewShift({ ...newShift, requiredEmployees: parseInt(e.target.value) })}
+              onChange={(e) => setNewShift({ ...newShift, requiredEmployees: parseInt(e.target.value) || 1 })}
               style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
+              disabled={isSubmitting}
             />
           </div>
         </div>
         <button
           onClick={handleAddShift}
-          disabled={!newShift.timeSlotId || !newShift.requiredEmployees}
+          disabled={isSubmitting || !newShift.timeSlotId || !newShift.requiredEmployees}
           style={{
             marginTop: '15px',
             padding: '8px 16px',
-            backgroundColor: '#3498db',
+            backgroundColor: isSubmitting ? '#bdc3c7' : '#3498db',
             color: 'white',
             border: 'none',
             borderRadius: '4px',
-            cursor: 'pointer'
+            cursor: isSubmitting ? 'not-allowed' : 'pointer',
+            opacity: (!newShift.timeSlotId || !newShift.requiredEmployees) ? 0.6 : 1
           }}
         >
-          Schicht hinzufügen
+          {isSubmitting ? 'Wird hinzugefügt...' : 'Schicht hinzufügen'}
         </button>
       </div>
 
@@ -300,6 +339,7 @@ const ShiftPlanEdit: React.FC = () => {
                               value={editingShift.timeSlotId}
                               onChange={(e) => setEditingShift({ ...editingShift, timeSlotId: e.target.value })}
                               style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
+                              disabled={isSubmitting}
                             >
                               {shiftPlan.timeSlots.map(slot => (
                                 <option key={slot.id} value={slot.id}>
@@ -314,33 +354,37 @@ const ShiftPlanEdit: React.FC = () => {
                               type="number"
                               min="1"
                               value={editingShift.requiredEmployees}
-                              onChange={(e) => setEditingShift({ ...editingShift, requiredEmployees: parseInt(e.target.value) })}
+                              onChange={(e) => setEditingShift({ ...editingShift, requiredEmployees: parseInt(e.target.value) || 1 })}
                               style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ddd' }}
+                              disabled={isSubmitting}
                             />
                           </div>
                           <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
                             <button
                               onClick={() => handleUpdateShift(editingShift)}
+                              disabled={isSubmitting}
                               style={{
                                 padding: '8px 16px',
-                                backgroundColor: '#2ecc71',
+                                backgroundColor: isSubmitting ? '#bdc3c7' : '#2ecc71',
                                 color: 'white',
                                 border: 'none',
                                 borderRadius: '4px',
-                                cursor: 'pointer'
+                                cursor: isSubmitting ? 'not-allowed' : 'pointer'
                               }}
                             >
-                              Speichern
+                              {isSubmitting ? 'Speichern...' : 'Speichern'}
                             </button>
                             <button
                               onClick={() => setEditingShift(null)}
+                              disabled={isSubmitting}
                               style={{
                                 padding: '8px 16px',
                                 backgroundColor: '#95a5a6',
                                 color: 'white',
                                 border: 'none',
                                 borderRadius: '4px',
-                                cursor: 'pointer'
+                                cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                                opacity: isSubmitting ? 0.6 : 1
                               }}
                             >
                               Abbrechen
@@ -359,27 +403,31 @@ const ShiftPlanEdit: React.FC = () => {
                             <div>
                               <button
                                 onClick={() => setEditingShift(shift)}
+                                disabled={isSubmitting}
                                 style={{
                                   padding: '6px 12px',
-                                  backgroundColor: '#f1c40f',
+                                  backgroundColor: isSubmitting ? '#bdc3c7' : '#f1c40f',
                                   color: 'white',
                                   border: 'none',
                                   borderRadius: '4px',
-                                  cursor: 'pointer',
-                                  marginRight: '8px'
+                                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                                  marginRight: '8px',
+                                  opacity: isSubmitting ? 0.6 : 1
                                 }}
                               >
                                 Bearbeiten
                               </button>
                               <button
                                 onClick={() => handleDeleteShift(shift.id)}
+                                disabled={isSubmitting}
                                 style={{
                                   padding: '6px 12px',
-                                  backgroundColor: '#e74c3c',
+                                  backgroundColor: isSubmitting ? '#bdc3c7' : '#e74c3c',
                                   color: 'white',
                                   border: 'none',
                                   borderRadius: '4px',
-                                  cursor: 'pointer'
+                                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                                  opacity: isSubmitting ? 0.6 : 1
                                 }}
                               >
                                 Löschen

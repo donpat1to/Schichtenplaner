@@ -2,6 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { shiftPlanService } from '../../services/shiftPlanService';
+import { useNotification } from '../../contexts/NotificationContext';
+import { useBackendValidation } from '../../hooks/useBackendValidation';
 import styles from './ShiftPlanCreate.module.css';
 
 // Interface für Template Presets
@@ -14,6 +16,8 @@ interface TemplatePreset {
 const ShiftPlanCreate: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { showNotification } = useNotification();
+  const { executeWithValidation, isSubmitting } = useBackendValidation();
   
   const [planName, setPlanName] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -21,8 +25,6 @@ const ShiftPlanCreate: React.FC = () => {
   const [selectedPreset, setSelectedPreset] = useState('');
   const [presets, setPresets] = useState<TemplatePreset[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     loadTemplatePresets();
@@ -42,36 +44,60 @@ const ShiftPlanCreate: React.FC = () => {
       }
     } catch (error) {
       console.error('❌ Fehler beim Laden der Vorlagen-Presets:', error);
-      setError('Vorlagen-Presets konnten nicht geladen werden');
+      showNotification({
+        type: 'error',
+        title: 'Fehler beim Laden',
+        message: 'Vorlagen-Presets konnten nicht geladen werden'
+      });
     } finally {
       setLoading(false);
     }
   };
 
   const handleCreate = async () => {
-    try {
-      // Validierung
-      if (!planName.trim()) {
-        setError('Bitte geben Sie einen Namen für den Schichtplan ein');
-        return;
-      }
-      if (!startDate) {
-        setError('Bitte wählen Sie ein Startdatum');
-        return;
-      }
-      if (!endDate) {
-        setError('Bitte wählen Sie ein Enddatum');
-        return;
-      }
-      if (new Date(endDate) < new Date(startDate)) {
-        setError('Das Enddatum muss nach dem Startdatum liegen');
-        return;
-      }
-      if (!selectedPreset) {
-        setError('Bitte wählen Sie eine Vorlage aus');
-        return;
-      }
+    // Basic frontend validation only
+    if (!planName.trim()) {
+      showNotification({
+        type: 'error',
+        title: 'Fehlende Angaben',
+        message: 'Bitte geben Sie einen Namen für den Schichtplan ein'
+      });
+      return;
+    }
+    if (!startDate) {
+      showNotification({
+        type: 'error',
+        title: 'Fehlende Angaben',
+        message: 'Bitte wählen Sie ein Startdatum'
+      });
+      return;
+    }
+    if (!endDate) {
+      showNotification({
+        type: 'error',
+        title: 'Fehlende Angaben', 
+        message: 'Bitte wählen Sie ein Enddatum'
+      });
+      return;
+    }
+    if (new Date(endDate) < new Date(startDate)) {
+      showNotification({
+        type: 'error',
+        title: 'Ungültige Daten',
+        message: 'Das Enddatum muss nach dem Startdatum liegen'
+      });
+      return;
+    }
+    if (!selectedPreset) {
+      showNotification({
+        type: 'error',
+        title: 'Fehlende Angaben',
+        message: 'Bitte wählen Sie eine Vorlage aus'
+      });
+      return;
+    }
 
+    await executeWithValidation(async () => {
       console.log('🔄 Erstelle Schichtplan aus Preset...', {
         presetName: selectedPreset,
         name: planName,
@@ -91,16 +117,16 @@ const ShiftPlanCreate: React.FC = () => {
       console.log('✅ Plan erstellt:', createdPlan);
       
       // Erfolgsmeldung und Weiterleitung
-      setSuccess('Schichtplan erfolgreich erstellt!');
+      showNotification({
+        type: 'success',
+        title: 'Erfolg',
+        message: 'Schichtplan erfolgreich erstellt!'
+      });
+      
       setTimeout(() => {
         navigate(`/shift-plans/${createdPlan.id}`);
       }, 1500);
-      
-    } catch (error) {
-      const err = error as Error;
-      console.error('❌ Fehler beim Erstellen des Plans:', err);
-      setError(`Plan konnte nicht erstellt werden: ${err.message}`);
-    } 
+    });
   };
 
   const getSelectedPresetDescription = () => {
@@ -120,22 +146,14 @@ const ShiftPlanCreate: React.FC = () => {
     <div className={styles.container}>
       <div className={styles.header}>
         <h1>Neuen Schichtplan erstellen</h1>
-        <button onClick={() => navigate(-1)} className={styles.backButton}>
+        <button 
+          onClick={() => navigate(-1)} 
+          className={styles.backButton}
+          disabled={isSubmitting}
+        >
           Zurück
         </button>
       </div>
-
-      {error && (
-        <div className={styles.error}>
-          {error}
-        </div>
-      )}
-
-      {success && (
-        <div className={styles.success}>
-          {success}
-        </div>
-      )}
       
       <div className={styles.form}>
         <div className={styles.formGroup}>
@@ -146,6 +164,7 @@ const ShiftPlanCreate: React.FC = () => {
             onChange={(e) => setPlanName(e.target.value)}
             placeholder="z.B. KW 42 2025"
             className={styles.input}
+            disabled={isSubmitting}
           />
         </div>
 
@@ -157,6 +176,7 @@ const ShiftPlanCreate: React.FC = () => {
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
               className={styles.input}
+              disabled={isSubmitting}
             />
           </div>
 
@@ -167,6 +187,7 @@ const ShiftPlanCreate: React.FC = () => {
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
               className={styles.input}
+              disabled={isSubmitting}
             />
           </div>
         </div>
@@ -177,6 +198,7 @@ const ShiftPlanCreate: React.FC = () => {
             value={selectedPreset} 
             onChange={(e) => setSelectedPreset(e.target.value)}
             className={`${styles.select} ${presets.length === 0 ? styles.empty : ''}`}
+            disabled={isSubmitting}
           >
             <option value="">Bitte wählen...</option>
             {presets.map(preset => (
@@ -203,9 +225,9 @@ const ShiftPlanCreate: React.FC = () => {
           <button 
             onClick={handleCreate} 
             className={styles.createButton} 
-            disabled={!selectedPreset || !planName.trim() || !startDate || !endDate}
+            disabled={isSubmitting || !selectedPreset || !planName.trim() || !startDate || !endDate}
           >
-            Schichtplan erstellen
+            {isSubmitting ? 'Wird erstellt...' : 'Schichtplan erstellen'}
           </button>
         </div>
       </div>

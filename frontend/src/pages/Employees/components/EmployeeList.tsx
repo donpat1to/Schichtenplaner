@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { ROLE_CONFIG, EMPLOYEE_TYPE_CONFIG } from '../../../models/defaults/employeeDefaults';
 import { Employee } from '../../../models/Employee';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useNotification } from '../../../contexts/NotificationContext';
 
 interface EmployeeListProps {
   employees: Employee[];
@@ -28,6 +29,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const { user: currentUser, hasRole } = useAuth();
+  const { showNotification, confirmDialog } = useNotification();
 
   // Filter employees based on active/inactive and search term
   const filteredEmployees = employees.filter(employee => {
@@ -174,6 +176,31 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
     if (roles.includes('admin')) return 'ADMIN';
     if (roles.includes('maintenance')) return 'INSTANDHALTER';
     return 'MITARBEITER';
+  };
+
+  const handleDeleteClick = async (employee: Employee) => {
+    const confirmed = await confirmDialog({
+      title: 'Mitarbeiter löschen',
+      message: `Sind Sie sicher, dass Sie ${employee.firstname} ${employee.lastname} löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.`,
+      confirmText: 'Löschen',
+      cancelText: 'Abbrechen',
+      type: 'warning'
+    });
+
+    if (confirmed) {
+      try {
+        onDelete(employee);
+        showNotification({
+          type: 'success',
+          title: 'Erfolg',
+          message: `${employee.firstname} ${employee.lastname} wurde erfolgreich gelöscht.`
+        });
+      } catch (error: any) {
+        // Error will be handled by parent component through useBackendValidation
+        // We just need to re-throw it so the parent can catch it
+        throw error;
+      }
+    }
   };
 
   if (employees.length === 0) {
@@ -468,7 +495,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
                 {/* Löschen Button */}
                 {canDelete && (
                   <button
-                    onClick={() => onDelete(employee)}
+                    onClick={() => handleDeleteClick(employee)}
                     style={{
                       padding: '6px 8px',
                       backgroundColor: '#e74c3c',

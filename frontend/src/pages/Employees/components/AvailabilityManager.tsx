@@ -3,6 +3,8 @@ import { employeeService } from '../../../services/employeeService';
 import { shiftPlanService } from '../../../services/shiftPlanService';
 import { Employee, EmployeeAvailability } from '../../../models/Employee';
 import { ShiftPlan, TimeSlot, Shift } from '../../../models/ShiftPlan';
+import { useNotification } from '../../../contexts/NotificationContext';
+import { useBackendValidation } from '../../../hooks/useBackendValidation';
 
 interface AvailabilityManagerProps {
   employee: Employee;
@@ -36,7 +38,8 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
   const [selectedPlan, setSelectedPlan] = useState<ShiftPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
+  const { showNotification } = useNotification();
+  const { executeWithValidation, isSubmitting } = useBackendValidation();
 
   const daysOfWeek = [
     { id: 1, name: 'Montag' },
@@ -81,7 +84,11 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
 
       } catch (err: any) {
         console.error('❌ FEHLER BEIM LADEN DER INITIALDATEN:', err);
-        setError('Daten konnten nicht geladen werden: ' + (err.message || 'Unbekannter Fehler'));
+        showNotification({
+          type: 'error',
+          title: 'Fehler beim Laden',
+          message: 'Daten konnten nicht geladen werden: ' + (err.message || 'Unbekannter Fehler')
+        });
         setLoading(false);
       }
     };
@@ -134,9 +141,6 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
           );
           if (invalidAvailabilities.length > 0) {
             console.warn('⚠️ UNGÜLTIGE VERFÜGBARKEITEN (OHNE SHIFT-ID):', invalidAvailabilities.length);
-            invalidAvailabilities.forEach(invalid => {
-              console.warn('   - Ungültiger Eintrag:', invalid);
-            });
           }
           
           // Transformiere die Daten
@@ -149,20 +153,20 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
 
           // Debug: Zeige vorhandene Präferenzen
           if (planAvailabilities.length > 0) {
-            console.log('🎯 VORHANDENE PRÄFERENZEN:');
-            planAvailabilities.forEach(avail => {
-              const shift = plan.shifts?.find(s => s.id === avail.shiftId);
-              console.log(`   - Shift: ${avail.shiftId} (Day: ${shift?.dayOfWeek}), Level: ${avail.preferenceLevel}`);
-            });
+            console.log('🎯 VORHANDENE PRÄFERENZEN:', planAvailabilities.length);
           }
-      } catch (availError) {
-        console.error('❌ FEHLER BEIM LADEN DER VERFÜGBARKEITEN:', availError);
-        setAvailabilities([]);
-      }
+        } catch (availError) {
+          console.error('❌ FEHLER BEIM LADEN DER VERFÜGBARKEITEN:', availError);
+          setAvailabilities([]);
+        }
 
       } catch (err: any) {
         console.error('❌ FEHLER BEIM LADEN DES SCHICHTPLANS:', err);
-        setError('Schichtplan konnte nicht geladen werden: ' + (err.message || 'Unbekannter Fehler'));
+        showNotification({
+          type: 'error',
+          title: 'Fehler beim Laden',
+          message: 'Schichtplan konnte nicht geladen werden: ' + (err.message || 'Unbekannter Fehler')
+        });
       } finally {
         setLoading(false);
       }
@@ -316,26 +320,6 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       return (a.startTime || '').localeCompare(b.startTime || '');
     });
 
-    // Validation: Check if shifts are correctly placed
-    const validationErrors: string[] = [];
-    
-    // Check for missing time slots
-    const usedTimeSlotIds = new Set(selectedPlan?.shifts?.map(s => s.timeSlotId) || []);
-    const availableTimeSlotIds = new Set(selectedPlan?.timeSlots?.map(ts => ts.id) || []);
-
-    usedTimeSlotIds.forEach(timeSlotId => {
-      if (!availableTimeSlotIds.has(timeSlotId)) {
-        validationErrors.push(`Zeitslot ${timeSlotId} wird verwendet, existiert aber nicht in timeSlots`);
-      }
-    });
-
-    // Check for shifts with invalid day numbers
-    selectedPlan?.shifts?.forEach(shift => {
-      if (shift.dayOfWeek < 1 || shift.dayOfWeek > 7) {
-        validationErrors.push(`Shift ${shift.id} hat ungültigen Wochentag: ${shift.dayOfWeek}`);
-      }
-    });
-
     return (
       <div style={{
         marginBottom: '30px',
@@ -354,23 +338,6 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
             {sortedTimeSlots.length} Zeitslots • {days.length} Tage • Zeitbasierte Darstellung
           </div>
         </div>
-
-        {/* Validation Warnings */}
-        {validationErrors.length > 0 && (
-          <div style={{
-            backgroundColor: '#fff3cd',
-            border: '1px solid #ffeaa7',
-            padding: '15px',
-            margin: '10px'
-          }}>
-            <h4 style={{ margin: '0 0 10px 0', color: '#856404' }}>⚠️ Validierungswarnungen:</h4>
-            <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '12px' }}>
-              {validationErrors.map((error, index) => (
-                <li key={index}>{error}</li>
-              ))}
-            </ul>
-          </div>
-        )}
 
         <div style={{ overflowX: 'auto' }}>
           <table style={{
@@ -421,9 +388,6 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                     <div style={{ fontSize: '14px', color: '#666' }}>
                       {formatTime(timeSlot.startTime)} - {formatTime(timeSlot.endTime)}
                     </div>
-                    <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>
-                      ID: {timeSlot.id.substring(0, 8)}...
-                    </div>
                   </td>
                   {days.map(weekday => {
                     const shift = timeSlot.shiftsByDay[weekday.id];
@@ -443,9 +407,6 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                       );
                     }
 
-                    // Validation: Check if shift has correct timeSlotId and dayOfWeek
-                    const isValidShift = shift.timeSlotId === timeSlot.id && shift.dayOfWeek === weekday.id;
-                    
                     const currentLevel = getAvailabilityForShift(shift.id);
                     const levelConfig = availabilityLevels.find(l => l.level === currentLevel);
                     
@@ -454,31 +415,8 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                         padding: '12px 16px',
                         border: '1px solid #dee2e6',
                         textAlign: 'center',
-                        backgroundColor: !isValidShift ? '#fff3cd' : (levelConfig?.bgColor || 'white'),
-                        position: 'relative'
+                        backgroundColor: levelConfig?.bgColor || 'white'
                       }}>
-                        {/* Validation indicator */}
-                        {!isValidShift && (
-                          <div style={{
-                            position: 'absolute',
-                            top: '2px',
-                            right: '2px',
-                            backgroundColor: '#f39c12',
-                            color: 'white',
-                            borderRadius: '50%',
-                            width: '16px',
-                            height: '16px',
-                            fontSize: '10px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                          }}
-                          title={`Shift Validierung: timeSlotId=${shift.timeSlotId}, dayOfWeek=${shift.dayOfWeek}`}
-                          >
-                            ⚠️
-                          </div>
-                        )}
-
                         <select
                           value={currentLevel}
                           onChange={(e) => {
@@ -487,10 +425,10 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                           }}
                           style={{
                             padding: '8px 12px',
-                            border: `2px solid ${!isValidShift ? '#f39c12' : (levelConfig?.color || '#ddd')}`,
+                            border: `2px solid ${levelConfig?.color || '#ddd'}`,
                             borderRadius: '6px',
-                            backgroundColor: !isValidShift ? '#fff3cd' : (levelConfig?.bgColor || 'white'),
-                            color: !isValidShift ? '#856404' : (levelConfig?.color || '#333'),
+                            backgroundColor: levelConfig?.bgColor || 'white',
+                            color: levelConfig?.color || '#333',
                             fontWeight: 'bold',
                             minWidth: '140px',
                             cursor: 'pointer',
@@ -511,23 +449,6 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                             </option>
                           ))}
                         </select>
-
-                        {/* Shift debug info */}
-                        <div style={{ 
-                          fontSize: '10px', 
-                          color: '#666', 
-                          marginTop: '4px',
-                          textAlign: 'left',
-                          fontFamily: 'monospace'
-                        }}>
-                          <div>Shift: {shift.id.substring(0, 6)}...</div>
-                          <div>Day: {shift.dayOfWeek}</div>
-                          {!isValidShift && (
-                            <div style={{ color: '#e74c3c', fontWeight: 'bold' }}>
-                              VALIDATION ERROR
-                            </div>
-                          )}
-                        </div>
                       </td>
                     );
                   })}
@@ -556,63 +477,35 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
   };
 
   const handleSave = async () => {
-    try {
+    if (!selectedPlanId) {
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: 'Bitte wählen Sie einen Schichtplan aus'
+      });
+      return;
+    }
+
+    // Basic frontend validation: Check if we have any availabilities to save
+    const validAvailabilities = availabilities.filter(avail => {
+      return avail.shiftId && selectedPlan?.shifts?.some(shift => shift.id === avail.shiftId);
+    });
+
+    if (validAvailabilities.length === 0) {
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: 'Keine gültigen Verfügbarkeiten zum Speichern gefunden'
+      });
+      return;
+    }
+
+    // Complex validation (contract type rules) is now handled by backend
+    // We only do basic required field validation in frontend
+
+    await executeWithValidation(async () => {
       setSaving(true);
-      setError('');
       
-      if (!selectedPlanId) {
-        setError('Bitte wählen Sie einen Schichtplan aus');
-        return;
-      }
-
-      // Filter availabilities to only include those with actual shifts AND valid shiftIds
-      const validAvailabilities = availabilities.filter(avail => {
-        // Check if this shiftId exists and is valid
-        if (!avail.shiftId) {
-          console.warn('⚠️ Überspringe ungültige Verfügbarkeit ohne Shift-ID:', avail);
-          return false;
-        }
-        
-        // Check if this shiftId exists in the current plan
-        return selectedPlan?.shifts?.some(shift => shift.id === avail.shiftId);
-      });
-
-      console.log('💾 SPEICHERE VERFÜGBARKEITEN:', {
-        total: availabilities.length,
-        valid: validAvailabilities.length,
-        invalid: availabilities.length - validAvailabilities.length
-      });
-
-      if (validAvailabilities.length === 0) {
-        setError('Keine gültigen Verfügbarkeiten zum Speichern gefunden');
-        return;
-      }
-
-      // Contract type validation
-      const availableShifts = validAvailabilities.filter(avail => 
-        avail.preferenceLevel === 1 || avail.preferenceLevel === 2
-      ).length;
-
-      let contractRequirement = 0;
-      let contractTypeName = '';
-
-      if (employee.contractType === 'small') {
-        contractRequirement = 2;
-        contractTypeName = 'Kleiner Vertrag';
-      } else if (employee.contractType === 'large') {
-        contractRequirement = 3;
-        contractTypeName = 'Großer Vertrag';
-      }
-
-      if (contractRequirement > 0 && availableShifts < contractRequirement) {
-        setError(
-          `${contractTypeName} erfordert mindestens ${contractRequirement} verfügbare Shifts. ` +
-          `Aktuell sind nur ${availableShifts} Shifts mit Verfügbarkeit "Bevorzugt" oder "Möglich" ausgewählt.`
-        );
-        setSaving(false);
-        return;
-      }
-
       // Convert to the format expected by the API - using shiftId directly
       const requestData = {
         planId: selectedPlanId,
@@ -627,15 +520,16 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       await employeeService.updateAvailabilities(employee.id, requestData);
       console.log('✅ VERFÜGBARKEITEN ERFOLGREICH GESPEICHERT');
 
+      showNotification({
+        type: 'success',
+        title: 'Erfolg',
+        message: 'Verfügbarkeiten wurden erfolgreich gespeichert'
+      });
+
       window.dispatchEvent(new CustomEvent('availabilitiesChanged'));
       
       onSave();
-    } catch (err: any) {
-      console.error('❌ FEHLER BEIM SPEICHERN:', err);
-      setError(err.message || 'Fehler beim Speichern der Verfügbarkeiten');
-    } finally {
-      setSaving(false);
-    }
+    });
   };
 
   if (loading) {
@@ -658,11 +552,10 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
   // Get full name for display
   const employeeFullName = `${employee.firstname} ${employee.lastname}`;
 
-  // Mininmum amount of shifts per contract type
+  // Available shifts count for display only (not for validation)
   const availableShiftsCount = availabilities.filter(avail => 
     avail.preferenceLevel === 1 || avail.preferenceLevel === 2
   ).length;
-    
 
   return (
     <div style={{
@@ -694,25 +587,13 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         {employee.contractType && (
           <p style={{ margin: '5px 0 0 0', color: employee.contractType === 'small' ? '#f39c12' : '#27ae60' }}>
             <strong>Vertrag:</strong> 
-            {employee.contractType === 'small' ? ' Kleiner Vertrag (min. 2 verfügbare Shifts)' : 
-            employee.contractType === 'large' ? ' Großer Vertrag (min. 3 verfügbare Shifts)' : 
+            {employee.contractType === 'small' ? ' Kleiner Vertrag' : 
+            employee.contractType === 'large' ? ' Großer Vertrag' : 
             ' Flexibler Vertrag'}
+            {/* Note: Contract validation is now handled by backend */}
           </p>
         )}
       </div>
-
-      {error && (
-        <div style={{
-          backgroundColor: '#fee',
-          border: '1px solid #f5c6cb',
-          color: '#721c24',
-          padding: '12px',
-          borderRadius: '6px',
-          marginBottom: '20px'
-        }}>
-          <strong>Fehler:</strong> {error}
-        </div>
-      )}
 
       {/* Availability Legend */}
       <div style={{
@@ -774,7 +655,6 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                 const newPlanId = e.target.value;
                 console.log('🔄 PLAN WECHSELN ZU:', newPlanId);
                 setSelectedPlanId(newPlanId);
-                // Der useEffect wird automatisch ausgelöst
               }}
               style={{
                 padding: '8px 12px',
@@ -828,15 +708,15 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       }}>
         <button
           onClick={onCancel}
-          disabled={saving}
+          disabled={isSubmitting}
           style={{
             padding: '12px 24px',
             backgroundColor: '#95a5a6',
             color: 'white',
             border: 'none',
             borderRadius: '6px',
-            cursor: saving ? 'not-allowed' : 'pointer',
-            opacity: saving ? 0.6 : 1
+            cursor: isSubmitting ? 'not-allowed' : 'pointer',
+            opacity: isSubmitting ? 0.6 : 1
           }}
         >
           Abbrechen
@@ -844,18 +724,18 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         
         <button
           onClick={handleSave}
-          disabled={saving || shiftsCount === 0 || !selectedPlanId}
+          disabled={isSubmitting || shiftsCount === 0 || !selectedPlanId}
           style={{
             padding: '12px 24px',
-            backgroundColor: saving ? '#bdc3c7' : (shiftsCount === 0 || !selectedPlanId ? '#95a5a6' : '#3498db'),
+            backgroundColor: isSubmitting ? '#bdc3c7' : (shiftsCount === 0 || !selectedPlanId ? '#95a5a6' : '#3498db'),
             color: 'white',
             border: 'none',
             borderRadius: '6px',
-            cursor: (saving || shiftsCount === 0 || !selectedPlanId) ? 'not-allowed' : 'pointer',
+            cursor: (isSubmitting || shiftsCount === 0 || !selectedPlanId) ? 'not-allowed' : 'pointer',
             fontWeight: 'bold'
           }}
         >
-          {saving ? '⏳ Wird gespeichert...' : `Verfügbarkeiten speichern (${availableShiftsCount})`}
+          {isSubmitting ? '⏳ Wird gespeichert...' : `Verfügbarkeiten speichern (${availableShiftsCount})`}
         </button>
       </div>
     </div>
