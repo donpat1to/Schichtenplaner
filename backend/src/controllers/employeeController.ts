@@ -18,17 +18,17 @@ function generateEmail(firstname: string, lastname: string): string {
 
   const cleanFirstname = convertUmlauts(firstname).replace(/[^a-z0-9]/g, '');
   const cleanLastname = convertUmlauts(lastname).replace(/[^a-z0-9]/g, '');
-  
+
   return `${cleanFirstname}.${cleanLastname}@sp.de`;
 }
 
 export const getEmployees = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     console.log('🔍 Fetching employees - User:', req.user);
-    
+
     const { includeInactive } = req.query;
     const includeInactiveFlag = includeInactive === 'true';
-    
+
     let query = `
       SELECT 
         e.id, e.email, e.firstname, e.lastname, 
@@ -43,13 +43,13 @@ export const getEmployees = async (req: AuthRequest, res: Response): Promise<voi
       FROM employees e
       LEFT JOIN employee_roles er ON e.id = er.employee_id
     `;
-    
+
     if (!includeInactiveFlag) {
       query += ' WHERE e.is_active = 1';
     }
-    
+
     query += ' ORDER BY e.firstname, e.lastname';
-    
+
     const employees = await db.all<any>(query);
 
     // Format employees with proper field names and roles array
@@ -132,12 +132,12 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
       password: '***hidden***'
     });
 
-    const { 
-      password, 
-      firstname, 
-      lastname, 
+    const {
+      password,
+      firstname,
+      lastname,
       roles = ['user'],
-      employeeType, 
+      employeeType,
       contractType,
       canWorkAlone = false,
       isTrainee = false
@@ -146,21 +146,21 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
     // Validation
     if (!password || !firstname || !lastname || !employeeType) {
       console.log('❌ Validation failed: Missing required fields');
-      res.status(400).json({ 
-        error: 'Password, firstname, lastname und employeeType sind erforderlich' 
+      res.status(400).json({
+        error: 'Password, firstname, lastname und employeeType sind erforderlich'
       });
       return;
     }
 
     // ✅ ENHANCED: Validate employee type exists and get category info
-    const employeeTypeInfo = await db.get<{type: string, category: string, has_contract_type: number}>(
+    const employeeTypeInfo = await db.get<{ type: string, category: string, has_contract_type: number }>(
       'SELECT type, category, has_contract_type FROM employee_types WHERE type = ?',
       [employeeType]
     );
 
     if (!employeeTypeInfo) {
-      res.status(400).json({ 
-        error: `Ungültiger employeeType: ${employeeType}. Gültige Typen: manager, personell, apprentice, guest` 
+      res.status(400).json({
+        error: `Ungültiger employeeType: ${employeeType}. Gültige Typen: manager, personell, apprentice, guest`
       });
       return;
     }
@@ -169,22 +169,22 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
     if (employeeTypeInfo.has_contract_type === 1) {
       // Internal types require contract type
       if (!contractType) {
-        res.status(400).json({ 
-          error: `contractType ist erforderlich für employeeType: ${employeeType}` 
+        res.status(400).json({
+          error: `contractType ist erforderlich für employeeType: ${employeeType}`
         });
         return;
       }
       if (!['small', 'large', 'flexible'].includes(contractType)) {
-        res.status(400).json({ 
-          error: `Ungültiger contractType: ${contractType}. Gültige Werte: small, large, flexible` 
+        res.status(400).json({
+          error: `Ungültiger contractType: ${contractType}. Gültige Werte: small, large, flexible`
         });
         return;
       }
     } else {
       // External types (guest) should not have contract type
       if (contractType) {
-        res.status(400).json({ 
-          error: `contractType ist nicht erlaubt für employeeType: ${employeeType}` 
+        res.status(400).json({
+          error: `contractType ist nicht erlaubt für employeeType: ${employeeType}`
         });
         return;
       }
@@ -192,8 +192,8 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
 
     // ✅ ENHANCED: isTrainee validation - only applicable for personell type
     if (isTrainee && employeeType !== 'personell') {
-      res.status(400).json({ 
-        error: `isTrainee ist nur für employeeType 'personell' erlaubt` 
+      res.status(400).json({
+        error: `isTrainee ist nur für employeeType 'personell' erlaubt`
       });
       return;
     }
@@ -204,11 +204,11 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
 
     // Check if generated email already exists
     const existingUser = await db.get<any>('SELECT id FROM employees WHERE email = ? AND is_active = 1', [email]);
-    
+
     if (existingUser) {
       console.log('❌ Generated email already exists:', email);
-      res.status(409).json({ 
-        error: `Employee with email ${email} already exists. Please use different firstname/lastname.` 
+      res.status(409).json({
+        error: `Employee with email ${email} already exists. Please use different firstname/lastname.`
       });
       return;
     }
@@ -228,12 +228,12 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
           is_active, is_trainee
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          employeeId, 
-          email, 
-          hashedPassword, 
-          firstname, 
-          lastname, 
-          employeeType, 
+          employeeId,
+          email,
+          hashedPassword,
+          firstname,
+          lastname,
+          employeeType,
           contractType, // Will be NULL for external types
           canWorkAlone ? 1 : 0,
           1,
@@ -302,9 +302,9 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
     const { id } = req.params;
     const { firstname, lastname, roles, isActive, employeeType, contractType, canWorkAlone, isTrainee } = req.body;
 
-    console.log('📝 Update Employee Request:', { 
-      id, firstname, lastname, roles, isActive, 
-      employeeType, contractType, canWorkAlone, isTrainee 
+    console.log('📝 Update Employee Request:', {
+      id, firstname, lastname, roles, isActive,
+      employeeType, contractType, canWorkAlone, isTrainee
     });
 
     // Check if employee exists and get current data
@@ -321,10 +321,10 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
         'SELECT role FROM employee_roles WHERE employee_id = ?',
         [currentUser.userId]
       );
-      
+
       const isCurrentlyAdmin = currentUserRoles.some(role => role.role === 'admin');
       const willBeAdmin = roles.includes('admin');
-      
+
       if (isCurrentlyAdmin && !willBeAdmin) {
         res.status(400).json({ error: 'You cannot remove your own admin role' });
         return;
@@ -372,8 +372,8 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
       );
 
       if (!validEmployeeType) {
-        res.status(400).json({ 
-          error: `Ungültiger employeeType: ${employeeType}` 
+        res.status(400).json({
+          error: `Ungültiger employeeType: ${employeeType}`
         });
         return;
       }
@@ -385,16 +385,16 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
       const newFirstname = firstname || existingEmployee.firstname;
       const newLastname = lastname || existingEmployee.lastname;
       email = generateEmail(newFirstname, newLastname);
-      
+
       // Check if new email already exists (for another employee)
       const emailExists = await db.get<any>(
-        'SELECT id FROM employees WHERE email = ? AND id != ? AND is_active = 1', 
+        'SELECT id FROM employees WHERE email = ? AND id != ? AND is_active = 1',
         [email, id]
       );
-      
+
       if (emailExists) {
-        res.status(409).json({ 
-          error: `Cannot update name - email ${email} already exists for another employee` 
+        res.status(409).json({
+          error: `Cannot update name - email ${email} already exists for another employee`
         });
         return;
       }
@@ -423,7 +423,7 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
       if (roles) {
         // Delete existing roles
         await db.run('DELETE FROM employee_roles WHERE employee_id = ?', [id]);
-        
+
         // Insert new roles
         for (const role of roles) {
           await db.run(
@@ -541,18 +541,18 @@ export const deleteEmployee = async (req: AuthRequest, res: Response): Promise<v
     try {
       // 1. Remove availabilities
       await db.run('DELETE FROM employee_availability WHERE employee_id = ?', [id]);
-      
+
       // 2. Remove from assigned_shifts (JSON field cleanup)
       interface AssignedShift {
         id: string;
         assigned_employees: string;
       }
-      
+
       const assignedShifts = await db.all<AssignedShift>(
-        'SELECT id, assigned_employees FROM scheduled_shifts WHERE json_extract(assigned_employees, "$") LIKE ?', 
+        'SELECT id, assigned_employees FROM scheduled_shifts WHERE json_extract(assigned_employees, "$") LIKE ?',
         [`%${id}%`]
       );
-      
+
       for (const shift of assignedShifts) {
         try {
           const employeesArray: string[] = JSON.parse(shift.assigned_employees || '[]');
@@ -581,7 +581,7 @@ export const deleteEmployee = async (req: AuthRequest, res: Response): Promise<v
 
       await db.run('COMMIT');
       console.log('✅ Successfully deleted employee:', existingEmployee.email);
-      
+
       res.status(204).send();
 
     } catch (error) {
@@ -655,23 +655,23 @@ export const updateAvailabilities = async (req: AuthRequest, res: Response): Pro
     }
 
     // Validate contract type requirements
-    const availableCount = availabilities.filter((avail: any) => 
+    const availableCount = availabilities.filter((avail: any) =>
       avail.preferenceLevel === 1 || avail.preferenceLevel === 2
     ).length;
 
     const contractType = existingEmployee.contract_type;
-    
+
     // Apply contract type minimum requirements
     if (contractType === 'small' && availableCount < 2) {
-      res.status(400).json({ 
-        error: 'Employees with small contract must have at least 2 available shifts' 
+      res.status(400).json({
+        error: 'Employees with small contract must have at least 2 available shifts'
       });
       return;
     }
 
     if (contractType === 'large' && availableCount < 3) {
-      res.status(400).json({ 
-        error: 'Employees with large contract must have at least 3 available shifts' 
+      res.status(400).json({
+        error: 'Employees with large contract must have at least 3 available shifts'
       });
       return;
     }
@@ -742,12 +742,12 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
 
     // Get the current user from the auth middleware
     const currentUser = (req as AuthRequest).user;
-    
+
     // Check if user is changing their own password or is an admin
     if (currentUser?.userId !== id && currentUser?.role !== 'admin') {
       res.status(403).json({ error: 'You can only change your own password' });
       return;
-    } 
+    }
 
     // Check if employee exists and get password
     const employee = await db.get<{ password: string }>('SELECT password FROM employees WHERE id = ?', [id]);
@@ -756,8 +756,8 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    // For non-admin users, verify current password
-    if (currentUser?.role !== 'admin') {
+    // Verify current password
+    if (employee) {
       const isValidPassword = await bcrypt.compare(currentPassword, employee.password);
       if (!isValidPassword) {
         res.status(400).json({ error: 'Current password is incorrect' });
@@ -767,7 +767,7 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
 
     // Validate new password
     if (!newPassword || newPassword.length < 6) {
-      res.status(400).json({ error: 'New password must be at least 6 characters long' });
+      res.status(400).json({ error: 'New password must be at least 8 characters long' });
       return;
     }
 
@@ -798,13 +798,13 @@ export const updateLastLogin = async (req: AuthRequest, res: Response): Promise<
     // Update last_login with current timestamp
     const currentTimestamp = new Date().toISOString();
     await db.run(
-      'UPDATE employees SET last_login = ? WHERE id = ?', 
+      'UPDATE employees SET last_login = ? WHERE id = ?',
       [currentTimestamp, id]
     );
 
     console.log(`✅ Last login updated for employee ${id}: ${currentTimestamp}`);
-    
-    res.json({ 
+
+    res.json({
       message: 'Last login updated successfully',
       lastLogin: currentTimestamp
     });
@@ -825,7 +825,7 @@ const checkAdminCount = async (employeeId: string, newRoles: string[]): Promise<
     );
 
     const currentAdminCount = adminCountResult?.count || 0;
-    
+
     // Check ALL current roles for the employee
     const currentEmployeeRoles = await db.all<{ role: string }>(
       `SELECT role FROM employee_roles WHERE employee_id = ?`,

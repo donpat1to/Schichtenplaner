@@ -73,7 +73,7 @@ export const validateEmployee = [
   body('contractType')
     .custom((value, { req }) => {
       const employeeType = req.body.employeeType;
-      
+
       // Manager, apprentice => contractType must be flexible
       if (['manager', 'apprentice'].includes(employeeType)) {
         if (value !== 'flexible') {
@@ -92,7 +92,7 @@ export const validateEmployee = [
           throw new Error(`contractType must be 'small' or 'large' for employeeType: ${employeeType}`);
         }
       }
-      
+
       return true;
     }),
 
@@ -156,7 +156,7 @@ export const validateEmployeeUpdate = [
     .custom((value, { req }) => {
       const employeeType = req.body.employeeType;
       if (!employeeType) return true; // Skip if employeeType not provided
-      
+
       // Same validation logic as create
       if (['manager', 'apprentice'].includes(employeeType)) {
         if (value !== 'flexible') {
@@ -173,7 +173,7 @@ export const validateEmployeeUpdate = [
           throw new Error(`contractType must be 'small' or 'large' for employeeType: ${employeeType}`);
         }
       }
-      
+
       return true;
     }),
 
@@ -209,7 +209,7 @@ export const validateChangePassword = [
     .isLength({ min: 1 })
     .withMessage('Current password is required for self-password change'),
 
-  body('password')
+  body('newPassword')
     .isLength({ min: 8 })
     .withMessage('Password must be at least 8 characters')
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?])/)
@@ -217,7 +217,7 @@ export const validateChangePassword = [
 
   body('confirmPassword')
     .custom((value, { req }) => {
-      if (value !== req.body.password) {
+      if (value !== req.body.newPassword) {
         throw new Error('Passwords do not match');
       }
       return true;
@@ -465,7 +465,7 @@ export const validateAvailabilities = [
     .withMessage('Availabilities must be an array')
     .custom((availabilities, { req }) => {
       // Count available shifts (preference level 1 or 2)
-      const availableCount = availabilities.filter((avail: any) => 
+      const availableCount = availabilities.filter((avail: any) =>
         avail.preferenceLevel === 1 || avail.preferenceLevel === 2
       ).length;
 
@@ -473,7 +473,7 @@ export const validateAvailabilities = [
       if (availableCount === 0) {
         throw new Error('At least one available shift is required');
       }
-      
+
       return true;
     }),
 

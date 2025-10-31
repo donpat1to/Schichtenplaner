@@ -1,8 +1,9 @@
-// frontend/src/pages/Settings/Settings.tsx - UPDATED WITH NEW STYLES
+// frontend/src/pages/Settings/Settings.tsx - UPDATED WITH VALIDATION STRATEGY
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { employeeService } from '../../services/employeeService';
 import { useNotification } from '../../contexts/NotificationContext';
+import { useBackendValidation } from '../../hooks/useBackendValidation';
 import AvailabilityManager from '../Employees/components/AvailabilityManager';
 import { Employee } from '../../models/Employee';
 import { styles } from './type/SettingsType';
@@ -10,11 +11,12 @@ import { styles } from './type/SettingsType';
 const Settings: React.FC = () => {
   const { user: currentUser, updateUser } = useAuth();
   const { showNotification } = useNotification();
+  const { executeWithValidation, clearErrors, isSubmitting } = useBackendValidation();
+
   const [activeTab, setActiveTab] = useState<'profile' | 'password' | 'availability'>('profile');
-  const [loading, setLoading] = useState(false);
   const [showAvailabilityManager, setShowAvailabilityManager] = useState(false);
-  
-  // Profile form state - updated for firstname/lastname
+
+  // Profile form state
   const [profileForm, setProfileForm] = useState({
     firstname: currentUser?.firstname || '',
     lastname: currentUser?.lastname || ''
@@ -73,7 +75,7 @@ const Settings: React.FC = () => {
     }));
   };
 
-  // Password visibility handlers for current password
+  // Password visibility handlers
   const handleCurrentPasswordMouseDown = () => {
     currentPasswordTimeoutRef.current = setTimeout(() => {
       setShowCurrentPassword(true);
@@ -88,7 +90,6 @@ const Settings: React.FC = () => {
     setShowCurrentPassword(false);
   };
 
-  // Password visibility handlers for new password
   const handleNewPasswordMouseDown = () => {
     newPasswordTimeoutRef.current = setTimeout(() => {
       setShowNewPassword(true);
@@ -103,7 +104,6 @@ const Settings: React.FC = () => {
     setShowNewPassword(false);
   };
 
-  // Password visibility handlers for confirm password
   const handleConfirmPasswordMouseDown = () => {
     confirmPasswordTimeoutRef.current = setTimeout(() => {
       setShowConfirmPassword(true);
@@ -129,7 +129,6 @@ const Settings: React.FC = () => {
     cleanup();
   };
 
-  // Prevent context menu
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
   };
@@ -138,40 +137,46 @@ const Settings: React.FC = () => {
     e.preventDefault();
     if (!currentUser) return;
 
-    // Validation
-    if (!profileForm.firstname.trim() || !profileForm.lastname.trim()) {
+    // BASIC FRONTEND VALIDATION: Only check required fields
+    if (!profileForm.firstname.trim()) {
       showNotification({
         type: 'error',
         title: 'Fehler',
-        message: 'Vorname und Nachname sind erforderlich'
+        message: 'Vorname ist erforderlich'
+      });
+      return;
+    }
+
+    if (!profileForm.lastname.trim()) {
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: 'Nachname ist erforderlich'
       });
       return;
     }
 
     try {
-      setLoading(true);
-      await employeeService.updateEmployee(currentUser.id, {
-        firstname: profileForm.firstname.trim(),
-        lastname: profileForm.lastname.trim()
-      });
+      // Use executeWithValidation to handle backend validation
+      await executeWithValidation(async () => {
+        const updatedEmployee = await employeeService.updateEmployee(currentUser.id, {
+          firstname: profileForm.firstname.trim(),
+          lastname: profileForm.lastname.trim()
+        });
 
-      // Update the auth context with new user data
-      const updatedUser = await employeeService.getEmployee(currentUser.id);
-      updateUser(updatedUser);
+        // Update the auth context with new user data
+        updateUser(updatedEmployee);
 
-      showNotification({
-        type: 'success',
-        title: 'Erfolg',
-        message: 'Profil erfolgreich aktualisiert'
+        showNotification({
+          type: 'success',
+          title: 'Erfolg',
+          message: 'Profil erfolgreich aktualisiert'
+        });
       });
-    } catch (error: any) {
-      showNotification({
-        type: 'error',
-        title: 'Fehler',
-        message: error.message || 'Profil konnte nicht aktualisiert werden'
-      });
-    } finally {
-      setLoading(false);
+    } catch (error) {
+      // Backend validation errors are already handled by executeWithValidation
+      // We only need to handle unexpected errors here
+      console.error('Unexpected error:', error);
     }
   };
 
@@ -179,7 +184,25 @@ const Settings: React.FC = () => {
     e.preventDefault();
     if (!currentUser) return;
 
-    // Validation
+    // BASIC FRONTEND VALIDATION: Only check minimum requirements
+    if (!passwordForm.currentPassword) {
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: 'Aktuelles Passwort ist erforderlich'
+      });
+      return;
+    }
+
+    if (!passwordForm.newPassword) {
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: 'Neues Passwort ist erforderlich'
+      });
+      return;
+    }
+
     if (passwordForm.newPassword.length < 6) {
       showNotification({
         type: 'error',
@@ -199,34 +222,30 @@ const Settings: React.FC = () => {
     }
 
     try {
-      setLoading(true);
-      
-      // Use the actual password change endpoint
-      await employeeService.changePassword(currentUser.id, {
-        currentPassword: passwordForm.currentPassword,
-        newPassword: passwordForm.newPassword
-      });
+      // Use executeWithValidation to handle backend validation
+      await executeWithValidation(async () => {
+        await employeeService.changePassword(currentUser.id, {
+          currentPassword: passwordForm.currentPassword,
+          newPassword: passwordForm.newPassword,
+          confirmPassword: passwordForm.confirmPassword
+        });
 
-      showNotification({
-        type: 'success',
-        title: 'Erfolg',
-        message: 'Passwort erfolgreich geändert'
-      });
+        showNotification({
+          type: 'success',
+          title: 'Erfolg',
+          message: 'Passwort erfolgreich geändert'
+        });
 
-      // Clear password form
-      setPasswordForm({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: ''
+        // Clear password form
+        setPasswordForm({
+          currentPassword: '',
+          newPassword: '',
+          confirmPassword: ''
+        });
       });
-    } catch (error: any) {
-      showNotification({
-        type: 'error',
-        title: 'Fehler',
-        message: error.message || 'Passwort konnte nicht geändert werden'
-      });
-    } finally {
-      setLoading(false);
+    } catch (error) {
+      // Backend validation errors are already handled by executeWithValidation
+      console.error('Unexpected error:', error);
     }
   };
 
@@ -243,12 +262,18 @@ const Settings: React.FC = () => {
     setShowAvailabilityManager(false);
   };
 
+  // Clear validation errors when switching tabs
+  const handleTabChange = (tab: 'profile' | 'password' | 'availability') => {
+    clearErrors();
+    setActiveTab(tab);
+  };
+
   if (!currentUser) {
-    return <div style={{ 
-      textAlign: 'center', 
-      padding: '3rem', 
-      color: '#666', 
-      fontSize: '1.1rem' 
+    return <div style={{
+      textAlign: 'center',
+      padding: '3rem',
+      color: '#666',
+      fontSize: '1.1rem'
     }}>Nicht eingeloggt</div>;
   }
 
@@ -270,10 +295,10 @@ const Settings: React.FC = () => {
           <h1 style={styles.title}>Einstellungen</h1>
           <div style={styles.subtitle}>Verwalten Sie Ihre Kontoeinstellungen und Präferenzen</div>
         </div>
-        
+
         <div style={styles.tabs}>
           <button
-            onClick={() => setActiveTab('profile')}
+            onClick={() => handleTabChange('profile')}
             style={{
               ...styles.tab,
               ...(activeTab === 'profile' ? styles.tabActive : {})
@@ -299,9 +324,9 @@ const Settings: React.FC = () => {
               <span style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '2px' }}>Persönliche Informationen</span>
             </div>
           </button>
-          
+
           <button
-            onClick={() => setActiveTab('password')}
+            onClick={() => handleTabChange('password')}
             style={{
               ...styles.tab,
               ...(activeTab === 'password' ? styles.tabActive : {})
@@ -327,9 +352,9 @@ const Settings: React.FC = () => {
               <span style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '2px' }}>Sicherheitseinstellungen</span>
             </div>
           </button>
-          
+
           <button
-            onClick={() => setActiveTab('availability')}
+            onClick={() => handleTabChange('availability')}
             style={{
               ...styles.tab,
               ...(activeTab === 'availability' ? styles.tabActive : {})
@@ -369,7 +394,7 @@ const Settings: React.FC = () => {
                 Verwalten Sie Ihre persönlichen Informationen und Kontaktdaten
               </p>
             </div>
-            
+
             <form onSubmit={handleProfileUpdate} style={{ marginTop: '2rem' }}>
               <div style={styles.formGrid}>
                 {/* Read-only information */}
@@ -480,28 +505,28 @@ const Settings: React.FC = () => {
               <div style={styles.actions}>
                 <button
                   type="submit"
-                  disabled={loading || !profileForm.firstname.trim() || !profileForm.lastname.trim()}
+                  disabled={isSubmitting || !profileForm.firstname.trim() || !profileForm.lastname.trim()}
                   style={{
                     ...styles.button,
                     ...styles.buttonPrimary,
-                    ...((loading || !profileForm.firstname.trim() || !profileForm.lastname.trim()) ? styles.buttonDisabled : {})
+                    ...((isSubmitting || !profileForm.firstname.trim() || !profileForm.lastname.trim()) ? styles.buttonDisabled : {})
                   }}
                   onMouseEnter={(e) => {
-                    if (!loading && profileForm.firstname.trim() && profileForm.lastname.trim()) {
+                    if (!isSubmitting && profileForm.firstname.trim() && profileForm.lastname.trim()) {
                       e.currentTarget.style.background = styles.buttonPrimaryHover.background;
                       e.currentTarget.style.transform = styles.buttonPrimaryHover.transform;
                       e.currentTarget.style.boxShadow = styles.buttonPrimaryHover.boxShadow;
                     }
                   }}
                   onMouseLeave={(e) => {
-                    if (!loading && profileForm.firstname.trim() && profileForm.lastname.trim()) {
+                    if (!isSubmitting && profileForm.firstname.trim() && profileForm.lastname.trim()) {
                       e.currentTarget.style.background = styles.buttonPrimary.background;
                       e.currentTarget.style.transform = 'none';
                       e.currentTarget.style.boxShadow = styles.buttonPrimary.boxShadow;
                     }
                   }}
                 >
-                  {loading ? '⏳ Wird gespeichert...' : 'Profil aktualisieren'}
+                  {isSubmitting ? '⏳ Wird gespeichert...' : 'Profil aktualisieren'}
                 </button>
               </div>
             </form>
@@ -517,7 +542,7 @@ const Settings: React.FC = () => {
                 Aktualisieren Sie Ihr Passwort für erhöhte Sicherheit
               </p>
             </div>
-            
+
             <form onSubmit={handlePasswordUpdate} style={{ marginTop: '2rem' }}>
               <div style={styles.formGridCompact}>
                 {/* Current Password Field */}
@@ -657,28 +682,28 @@ const Settings: React.FC = () => {
               <div style={styles.actions}>
                 <button
                   type="submit"
-                  disabled={loading || !passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword}
+                  disabled={isSubmitting || !passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword}
                   style={{
                     ...styles.button,
                     ...styles.buttonPrimary,
-                    ...((loading || !passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) ? styles.buttonDisabled : {})
+                    ...((isSubmitting || !passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) ? styles.buttonDisabled : {})
                   }}
                   onMouseEnter={(e) => {
-                    if (!loading && passwordForm.currentPassword && passwordForm.newPassword && passwordForm.confirmPassword) {
+                    if (!isSubmitting && passwordForm.currentPassword && passwordForm.newPassword && passwordForm.confirmPassword) {
                       e.currentTarget.style.background = styles.buttonPrimaryHover.background;
                       e.currentTarget.style.transform = styles.buttonPrimaryHover.transform;
                       e.currentTarget.style.boxShadow = styles.buttonPrimaryHover.boxShadow;
                     }
                   }}
                   onMouseLeave={(e) => {
-                    if (!loading && passwordForm.currentPassword && passwordForm.newPassword && passwordForm.confirmPassword) {
+                    if (!isSubmitting && passwordForm.currentPassword && passwordForm.newPassword && passwordForm.confirmPassword) {
                       e.currentTarget.style.background = styles.buttonPrimary.background;
                       e.currentTarget.style.transform = 'none';
                       e.currentTarget.style.boxShadow = styles.buttonPrimary.boxShadow;
                     }
                   }}
                 >
-                  {loading ? '⏳ Wird geändert...' : 'Passwort ändern'}
+                  {isSubmitting ? '⏳ Wird geändert...' : 'Passwort ändern'}
                 </button>
               </div>
             </form>
@@ -694,16 +719,16 @@ const Settings: React.FC = () => {
                 Legen Sie Ihre persönliche Verfügbarkeit für Schichtpläne fest
               </p>
             </div>
-            
+
             <div style={styles.availabilityCard}>
               <div style={styles.availabilityIcon}>📅</div>
               <h3 style={styles.availabilityTitle}>Verfügbarkeit verwalten</h3>
               <p style={styles.availabilityDescription}>
                 Hier können Sie Ihre persönliche Verfügbarkeit für Schichtpläne festlegen.
-                Legen Sie für jeden Tag und jede Schicht fest, ob Sie bevorzugt, möglicherweise 
+                Legen Sie für jeden Tag und jede Schicht fest, ob Sie bevorzugt, möglicherweise
                 oder nicht verfügbar sind.
               </p>
-              
+
               <button
                 onClick={() => setShowAvailabilityManager(true)}
                 style={{

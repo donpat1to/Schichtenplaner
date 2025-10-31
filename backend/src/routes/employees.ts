@@ -11,15 +11,15 @@ import {
   changePassword,
   updateLastLogin
 } from '../controllers/employeeController.js';
-import { 
-  handleValidationErrors, 
-  validateEmployee, 
-  validateEmployeeUpdate, 
+import {
+  handleValidationErrors,
+  validateEmployee,
+  validateEmployeeUpdate,
   validateChangePassword,
   validateId,
   validateEmployeeId,
   validateAvailabilities,
-  validatePagination 
+  validatePagination
 } from '../middleware/validation.js';
 
 const router = express.Router();
@@ -28,18 +28,18 @@ const router = express.Router();
 router.use(authMiddleware);
 
 // Employee CRUD Routes
-router.get('/', validatePagination, handleValidationErrors, getEmployees);
+router.get('/', validatePagination, handleValidationErrors, authMiddleware, getEmployees);
 router.get('/:id', validateId, handleValidationErrors, requireRole(['admin', 'maintenance']), getEmployee);
 router.post('/', validateEmployee, handleValidationErrors, requireRole(['admin']), createEmployee);
 router.put('/:id', validateId, validateEmployeeUpdate, handleValidationErrors, requireRole(['admin', 'maintenance']), updateEmployee);
 router.delete('/:id', validateId, handleValidationErrors, requireRole(['admin']), deleteEmployee);
 
 // Password & Login Routes
-router.put('/:id/password', validateId, validateChangePassword, handleValidationErrors, changePassword);
-router.put('/:id/last-login', validateId, handleValidationErrors, updateLastLogin);
+router.put('/:id/password', validateId, validateChangePassword, handleValidationErrors, authMiddleware, changePassword);
+router.put('/:id/last-login', validateId, handleValidationErrors, authMiddleware, updateLastLogin);
 
 // Availability Routes
-router.get('/:employeeId/availabilities', validateEmployeeId, handleValidationErrors, getAvailabilities);
-router.put('/:employeeId/availabilities', validateEmployeeId, validateAvailabilities, handleValidationErrors, updateAvailabilities);
+router.get('/:employeeId/availabilities', validateEmployeeId, handleValidationErrors, authMiddleware, getAvailabilities);
+router.put('/:employeeId/availabilities', validateEmployeeId, validateAvailabilities, handleValidationErrors, authMiddleware, updateAvailabilities);
 
 export default router;

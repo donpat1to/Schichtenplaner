@@ -33,35 +33,19 @@ export const useBackendValidation = () => {
         const result = await apiCall();
         return result;
       } catch (error: any) {
-        if (error.validationErrors) {
+        if (error.validationErrors && Array.isArray(error.validationErrors)) {
           setValidationErrors(error.validationErrors);
-          
-          // Show specific validation error messages
-          if (error.validationErrors.length > 0) {
-            // Show the first validation error as the main notification
-            const firstError = error.validationErrors[0];
-            showNotification({
-              type: 'error',
-              title: 'Validierungsfehler',
-              message: firstError.message
-            });
 
-            // If there are multiple errors, show additional notifications for each
-            if (error.validationErrors.length > 1) {
-              // Wait a bit before showing additional notifications to avoid overlap
-              setTimeout(() => {
-                error.validationErrors.slice(1).forEach((validationError: ValidationError, index: number) => {
-                  setTimeout(() => {
-                    showNotification({
-                      type: 'error',
-                      title: 'Weiterer Fehler',
-                      message: validationError.message
-                    });
-                  }, index * 300); // Stagger the notifications
-                });
-              }, 500);
-            }
-          }
+          // Show specific validation error messages from backend
+          error.validationErrors.forEach((validationError: ValidationError, index: number) => {
+            setTimeout(() => {
+              showNotification({
+                type: 'error',
+                title: 'Validierungsfehler',
+                message: `${validationError.field ? `${validationError.field}: ` : ''}${validationError.message}`
+              });
+            }, index * 500); // Stagger the notifications
+          });
         } else {
           // Show notification for other errors
           showNotification({

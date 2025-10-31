@@ -17,40 +17,40 @@ export class EmployeeService {
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       const validationErrors = ErrorService.extractValidationErrors(errorData);
-      
+
       if (validationErrors.length > 0) {
         const error = new Error('Validation failed');
         (error as any).validationErrors = validationErrors;
         throw error;
       }
-      
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+
+      throw new Error(errorData.error || errorData.message || `HTTP error! status: ${response.status}`);
     }
-    
+
     return response.json();
   }
 
   async getEmployees(includeInactive: boolean = false): Promise<Employee[]> {
     console.log('🔄 Fetching employees from API...');
-    
+
     const token = localStorage.getItem('token');
     console.log('🔑 Token exists:', !!token);
-    
+
     const response = await fetch(`${API_BASE_URL}/employees?includeInactive=${includeInactive}`, {
       headers: getAuthHeaders(),
     });
-    
+
     console.log('📡 Response status:', response.status);
-    
+
     if (!response.ok) {
       const errorText = await response.text();
       console.error('❌ API Error:', errorText);
       throw new Error('Failed to fetch employees');
     }
-    
+
     const employees = await response.json();
     console.log('✅ Employees received:', employees.length);
-    
+
     return employees;
   }
 
@@ -58,12 +58,8 @@ export class EmployeeService {
     const response = await fetch(`${API_BASE_URL}/employees/${id}`, {
       headers: getAuthHeaders(),
     });
-    
-    if (!response.ok) {
-      throw new Error('Failed to fetch employee');
-    }
-    
-    return response.json();
+
+    return this.handleApiResponse<Employee>(response);
   }
 
   async createEmployee(employee: CreateEmployeeRequest): Promise<Employee> {
@@ -72,7 +68,7 @@ export class EmployeeService {
       headers: getAuthHeaders(),
       body: JSON.stringify(employee),
     });
-    
+
     return this.handleApiResponse<Employee>(response);
   }
 
@@ -82,7 +78,7 @@ export class EmployeeService {
       headers: getAuthHeaders(),
       body: JSON.stringify(employee),
     });
-    
+
     return this.handleApiResponse<Employee>(response);
   }
 
@@ -91,7 +87,7 @@ export class EmployeeService {
       method: 'DELETE',
       headers: getAuthHeaders(),
     });
-    
+
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.error || 'Failed to delete employee');
@@ -102,12 +98,8 @@ export class EmployeeService {
     const response = await fetch(`${API_BASE_URL}/employees/${employeeId}/availabilities`, {
       headers: getAuthHeaders(),
     });
-    
-    if (!response.ok) {
-      throw new Error('Failed to fetch availabilities');
-    }
-    
-    return response.json();
+
+    return this.handleApiResponse<EmployeeAvailability[]>(response);
   }
 
   async updateAvailabilities(employeeId: string, data: { planId: string, availabilities: Omit<EmployeeAvailability, 'id' | 'employeeId'>[] }): Promise<EmployeeAvailability[]> {
@@ -117,26 +109,18 @@ export class EmployeeService {
       headers: getAuthHeaders(),
       body: JSON.stringify(data),
     });
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to update availabilities');
-    }
-    
-    return response.json();
+
+    return this.handleApiResponse<EmployeeAvailability[]>(response);
   }
 
-  async changePassword(id: string, data: { currentPassword: string, newPassword: string }): Promise<void> {
+  async changePassword(id: string, data: { currentPassword: string, newPassword: string, confirmPassword: string }): Promise<void> {
     const response = await fetch(`${API_BASE_URL}/employees/${id}/password`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(data),
     });
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to change password');
-    }
+
+    return this.handleApiResponse<void>(response);
   }
 
   async updateLastLogin(employeeId: string): Promise<void> {

@@ -1,5 +1,7 @@
-// frontend/src/services/authService.ts
+// frontend/src/services/authService.ts - UPDATED
 import { Employee } from '../models/Employee';
+import { ErrorService } from './errorService';
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 export interface LoginRequest {
@@ -23,6 +25,23 @@ export interface AuthResponse {
 class AuthService {
   private token: string | null = null;
 
+  private async handleApiResponse<T>(response: Response): Promise<T> {
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const validationErrors = ErrorService.extractValidationErrors(errorData);
+
+      if (validationErrors.length > 0) {
+        const error = new Error('Validation failed');
+        (error as any).validationErrors = validationErrors;
+        throw error;
+      }
+
+      throw new Error(errorData.error || errorData.message || 'Authentication failed');
+    }
+
+    return response.json();
+  }
+
   async login(credentials: LoginRequest): Promise<AuthResponse> {
     const response = await fetch(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
@@ -30,12 +49,7 @@ class AuthService {
       body: JSON.stringify(credentials)
     });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Login fehlgeschlagen');
-    }
-
-    const data: AuthResponse = await response.json();
+    const data = await this.handleApiResponse<AuthResponse>(response);
     this.token = data.token;
     localStorage.setItem('token', data.token);
     localStorage.setItem('employee', JSON.stringify(data.employee));
@@ -49,11 +63,7 @@ class AuthService {
       body: JSON.stringify(userData)
     });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Registrierung fehlgeschlagen');
-    }
-
+    const data = await this.handleApiResponse<AuthResponse>(response);
     return this.login({
       email: userData.email,
       password: userData.password
@@ -95,6 +105,7 @@ class AuthService {
     this.token = null;
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('employee');
   }
 
   getToken(): string | null {
