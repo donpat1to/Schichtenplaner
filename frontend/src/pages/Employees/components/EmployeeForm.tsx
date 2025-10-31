@@ -23,12 +23,12 @@ interface EmployeeFormData {
   lastname: string;
   email: string;
   password: string;
-  
+
   // Step 2: Mitarbeiterkategorie
   employeeType: EmployeeType;
   contractType: ContractType | undefined;
   isTrainee: boolean;
-  
+
   // Step 3: Berechtigungen & Status
   roles: string[];
   canWorkAlone: boolean;
@@ -64,12 +64,12 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
     canWorkAlone: false,
     isActive: true
   });
-  
+
   const [passwordForm, setPasswordForm] = useState<PasswordFormData>({
     newPassword: '',
     confirmPassword: ''
   });
-  
+
   const [showPasswordSection, setShowPasswordSection] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -116,7 +116,7 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
 
     const cleanFirstname = convertUmlauts(firstname).replace(/[^a-z0-9]/g, '');
     const cleanLastname = convertUmlauts(lastname).replace(/[^a-z0-9]/g, '');
-    
+
     return `${cleanFirstname}.${cleanLastname}@sp.de`;
   };
 
@@ -177,7 +177,7 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
   const goToNextStep = (): void => {
     setError('');
     clearErrors(); // Clear previous validation errors
-    
+
     if (!validateCurrentStep(currentStep)) {
       return;
     }
@@ -198,7 +198,7 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
   const handleStepChange = (stepIndex: number): void => {
     setError('');
     clearErrors(); // Clear validation errors when changing steps
-    
+
     // Nur erlauben, zu bereits validierten Schritten zu springen
     if (stepIndex <= currentStep + 1) {
       // Vor dem Wechsel validieren
@@ -212,7 +212,7 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
   // ===== FORM HANDLER =====
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
-    
+
     setFormData(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
@@ -264,9 +264,9 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
     }
 
     // Determine if can work alone based on employee type
-    const canWorkAlone = employeeType === 'manager' || 
-                        (employeeType === 'personell' && !formData.isTrainee);
-    
+    const canWorkAlone = employeeType === 'manager' ||
+      (employeeType === 'personell' && !formData.isTrainee);
+
     // Reset isTrainee if not personell
     const isTrainee = employeeType === 'personell' ? formData.isTrainee : false;
 
@@ -311,9 +311,9 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
           canWorkAlone: formData.canWorkAlone,
           isTrainee: formData.isTrainee
         };
-        
+
         // Use executeWithValidation ONLY for the API call
-        await executeWithValidation(() => 
+        await executeWithValidation(() =>
           employeeService.createEmployee(createData)
         );
       } else if (employee) {
@@ -327,9 +327,9 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
           isActive: formData.isActive,
           isTrainee: formData.isTrainee
         };
-        
+
         // Use executeWithValidation for the update call
-        await executeWithValidation(() => 
+        await executeWithValidation(() =>
           employeeService.updateEmployee(employee.id, updateData)
         );
 
@@ -343,12 +343,13 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
           await executeWithValidation(() =>
             employeeService.changePassword(employee.id, {
               currentPassword: '',
-              newPassword: passwordForm.newPassword
+              newPassword: passwordForm.newPassword,
+              confirmPassword: passwordForm.confirmPassword
             })
           );
         }
       }
-      
+
       return Promise.resolve();
     } catch (err: any) {
       // Only set error if it's not a validation error (validation errors are handled by the hook)
@@ -364,9 +365,9 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
   const isStepCompleted = (stepIndex: number): boolean => {
     switch (stepIndex) {
       case 0:
-        return !!formData.firstname.trim() && 
-               !!formData.lastname.trim();
-               // REMOVE: (mode === 'edit' || formData.password.length >= 6)
+        return !!formData.firstname.trim() &&
+          !!formData.lastname.trim();
+      // REMOVE: (mode === 'edit' || formData.password.length >= 6)
       case 1:
         return !!formData.employeeType;
       case 2:
@@ -391,7 +392,7 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
     validationErrors,
     getFieldError,
     hasErrors,
-    
+
     // Actions
     goToNextStep,
     goToPrevStep,
@@ -405,7 +406,7 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
     handleSubmit,
     setShowPasswordSection,
     clearErrors,
-    
+
     // Helpers
     isStepCompleted
   };
@@ -430,8 +431,8 @@ interface StepContentProps {
   hasErrors: (fieldName?: string) => boolean;
 }
 
-const Step1Content: React.FC<StepContentProps> = ({ 
-  formData, 
+const Step1Content: React.FC<StepContentProps> = ({
+  formData,
   onInputChange,
   emailPreview,
   mode
@@ -439,9 +440,9 @@ const Step1Content: React.FC<StepContentProps> = ({
   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
       <div>
-        <label style={{ 
-          display: 'block', 
-          marginBottom: '0.5rem', 
+        <label style={{
+          display: 'block',
+          marginBottom: '0.5rem',
           fontWeight: '600',
           color: '#495057'
         }}>
@@ -465,9 +466,9 @@ const Step1Content: React.FC<StepContentProps> = ({
       </div>
 
       <div>
-        <label style={{ 
-          display: 'block', 
-          marginBottom: '0.5rem', 
+        <label style={{
+          display: 'block',
+          marginBottom: '0.5rem',
           fontWeight: '600',
           color: '#495057'
         }}>
@@ -493,17 +494,17 @@ const Step1Content: React.FC<StepContentProps> = ({
 
     {/* Email Preview */}
     <div>
-      <label style={{ 
-        display: 'block', 
-        marginBottom: '0.5rem', 
+      <label style={{
+        display: 'block',
+        marginBottom: '0.5rem',
         fontWeight: '600',
         color: '#495057'
       }}>
         E-Mail Adresse (automatisch generiert)
       </label>
-      <div style={{ 
-        padding: '0.75rem', 
-        backgroundColor: '#e9ecef', 
+      <div style={{
+        padding: '0.75rem',
+        backgroundColor: '#e9ecef',
         border: '1px solid #ced4da',
         borderRadius: '6px',
         color: '#495057',
@@ -512,8 +513,8 @@ const Step1Content: React.FC<StepContentProps> = ({
       }}>
         {emailPreview || 'max.mustermann@sp.de'}
       </div>
-      <div style={{ 
-        fontSize: '0.875rem', 
+      <div style={{
+        fontSize: '0.875rem',
         color: '#6c757d',
         marginTop: '0.25rem'
       }}>
@@ -523,9 +524,9 @@ const Step1Content: React.FC<StepContentProps> = ({
 
     {mode === 'create' && (
       <div>
-        <label style={{ 
-          display: 'block', 
-          marginBottom: '0.5rem', 
+        <label style={{
+          display: 'block',
+          marginBottom: '0.5rem',
           fontWeight: '600',
           color: '#495057'
         }}>
@@ -546,8 +547,8 @@ const Step1Content: React.FC<StepContentProps> = ({
           }}
           placeholder="Passwort eingeben"
         />
-        <div style={{ 
-          fontSize: '0.875rem', 
+        <div style={{
+          fontSize: '0.875rem',
           color: '#6c757d',
           marginTop: '0.25rem'
         }}>
@@ -558,7 +559,7 @@ const Step1Content: React.FC<StepContentProps> = ({
   </div>
 );
 
-const Step2Content: React.FC<StepContentProps> = ({ 
+const Step2Content: React.FC<StepContentProps> = ({
   formData,
   onEmployeeTypeChange,
   onTraineeChange,
@@ -581,11 +582,11 @@ const Step2Content: React.FC<StepContentProps> = ({
       {/* Mitarbeiter Kategorie */}
       <div>
         <h3 style={{ margin: '0 0 1rem 0', color: '#495057' }}>👥 Mitarbeiter Kategorie</h3>
-        
+
         {employeeTypeError && (
-          <div style={{ 
-            color: '#dc3545', 
-            fontSize: '0.875rem', 
+          <div style={{
+            color: '#dc3545',
+            fontSize: '0.875rem',
             marginBottom: '1rem',
             padding: '0.5rem',
             backgroundColor: '#f8d7da',
@@ -595,10 +596,10 @@ const Step2Content: React.FC<StepContentProps> = ({
             {employeeTypeError}
           </div>
         )}
-        
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           {Object.values(EMPLOYEE_TYPE_CONFIG).map(type => (
-            <div 
+            <div
               key={type.value}
               style={{
                 display: 'flex',
@@ -626,16 +627,16 @@ const Step2Content: React.FC<StepContentProps> = ({
                 }}
               />
               <div style={{ flex: 1 }}>
-                <div style={{ 
-                  fontWeight: 'bold', 
+                <div style={{
+                  fontWeight: 'bold',
                   color: '#2c3e50',
                   marginBottom: '4px',
                   fontSize: '16px'
                 }}>
                   {type.label}
                 </div>
-                <div style={{ 
-                  fontSize: '14px', 
+                <div style={{
+                  fontSize: '14px',
                   color: '#7f8c8d',
                   lineHeight: '1.4'
                 }}>
@@ -658,10 +659,10 @@ const Step2Content: React.FC<StepContentProps> = ({
 
         {/* Trainee checkbox for personell type */}
         {formData.employeeType === 'personell' && (
-          <div style={{ 
+          <div style={{
             marginTop: '1rem',
-            display: 'flex', 
-            alignItems: 'center', 
+            display: 'flex',
+            alignItems: 'center',
             gap: '10px',
             padding: '1rem',
             border: '1px solid #e0e0e0',
@@ -692,11 +693,11 @@ const Step2Content: React.FC<StepContentProps> = ({
       {hasRole(['admin']) && showContractType && (
         <div>
           <h3 style={{ margin: '0 0 1rem 0', color: '#0c5460' }}>📝 Vertragstyp</h3>
-          
+
           {contractTypeError && (
-            <div style={{ 
-              color: '#dc3545', 
-              fontSize: '0.875rem', 
+            <div style={{
+              color: '#dc3545',
+              fontSize: '0.875rem',
               marginBottom: '1rem',
               padding: '0.5rem',
               backgroundColor: '#f8d7da',
@@ -706,16 +707,16 @@ const Step2Content: React.FC<StepContentProps> = ({
               {contractTypeError}
             </div>
           )}
-          
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {contractTypeOptions.map(contract => {
               const isFlexibleDisabled = contract.value === 'flexible' && formData.employeeType === 'personell';
-              const isSmallLargeDisabled = (contract.value === 'small' || contract.value === 'large') && 
-                                        (formData.employeeType === 'manager' || formData.employeeType === 'apprentice');
+              const isSmallLargeDisabled = (contract.value === 'small' || contract.value === 'large') &&
+                (formData.employeeType === 'manager' || formData.employeeType === 'apprentice');
               const isDisabled = isFlexibleDisabled || isSmallLargeDisabled;
-              
+
               return (
-                <div 
+                <div
                   key={contract.value}
                   style={{
                     display: 'flex',
@@ -745,8 +746,8 @@ const Step2Content: React.FC<StepContentProps> = ({
                     }}
                   />
                   <div style={{ flex: 1 }}>
-                    <div style={{ 
-                      fontWeight: 'bold', 
+                    <div style={{
+                      fontWeight: 'bold',
                       color: '#2c3e50',
                       marginBottom: '4px',
                       fontSize: '16px'
@@ -773,8 +774,8 @@ const Step2Content: React.FC<StepContentProps> = ({
                         </span>
                       )}
                     </div>
-                    <div style={{ 
-                      fontSize: '14px', 
+                    <div style={{
+                      fontSize: '14px',
                       color: '#7f8c8d',
                       lineHeight: '1.4'
                     }}>
@@ -801,7 +802,7 @@ const Step2Content: React.FC<StepContentProps> = ({
   );
 };
 
-const Step3Content: React.FC<StepContentProps> = ({ 
+const Step3Content: React.FC<StepContentProps> = ({
   formData,
   onInputChange,
   onRoleChange,
@@ -816,11 +817,11 @@ const Step3Content: React.FC<StepContentProps> = ({
       {/* Eigenständigkeit */}
       <div>
         <h3 style={{ margin: '0 0 1rem 0', color: '#495057' }}>🎯 Eigenständigkeit</h3>
-        
+
         {canWorkAloneError && (
-          <div style={{ 
-            color: '#dc3545', 
-            fontSize: '0.875rem', 
+          <div style={{
+            color: '#dc3545',
+            fontSize: '0.875rem',
             marginBottom: '1rem',
             padding: '0.5rem',
             backgroundColor: '#f8d7da',
@@ -830,10 +831,10 @@ const Step3Content: React.FC<StepContentProps> = ({
             {canWorkAloneError}
           </div>
         )}
-        
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
+
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
           gap: '15px',
           padding: '1rem',
           border: '1px solid #e0e0e0',
@@ -847,16 +848,16 @@ const Step3Content: React.FC<StepContentProps> = ({
             checked={formData.canWorkAlone}
             onChange={onInputChange}
             disabled={formData.employeeType === 'manager' || (formData.employeeType === 'personell' && formData.isTrainee)}
-            style={{ 
-              width: '20px', 
+            style={{
+              width: '20px',
               height: '20px',
               opacity: (formData.employeeType === 'manager' || (formData.employeeType === 'personell' && formData.isTrainee)) ? 0.5 : 1
             }}
           />
           <div style={{ flex: 1 }}>
-            <label htmlFor="canWorkAlone" style={{ 
-              fontWeight: 'bold', 
-              color: '#2c3e50', 
+            <label htmlFor="canWorkAlone" style={{
+              fontWeight: 'bold',
+              color: '#2c3e50',
               display: 'block',
               opacity: (formData.employeeType === 'manager' || (formData.employeeType === 'personell' && formData.isTrainee)) ? 0.5 : 1
             }}>
@@ -864,11 +865,11 @@ const Step3Content: React.FC<StepContentProps> = ({
               {(formData.employeeType === 'manager' || (formData.employeeType === 'personell' && formData.isTrainee)) && ' (Automatisch festgelegt)'}
             </label>
             <div style={{ fontSize: '14px', color: '#7f8c8d' }}>
-              {formData.employeeType === 'manager' 
+              {formData.employeeType === 'manager'
                 ? 'Chefs sind automatisch als eigenständig markiert.'
                 : formData.employeeType === 'personell' && formData.isTrainee
-                ? 'Auszubildende können nicht als eigenständig markiert werden.'
-                : 'Dieser Mitarbeiter kann komplexe Aufgaben eigenständig lösen und benötigt keine ständige Betreuung.'
+                  ? 'Auszubildende können nicht als eigenständig markiert werden.'
+                  : 'Dieser Mitarbeiter kann komplexe Aufgaben eigenständig lösen und benötigt keine ständige Betreuung.'
               }
             </div>
           </div>
@@ -890,11 +891,11 @@ const Step3Content: React.FC<StepContentProps> = ({
       {hasRole(['admin']) && (
         <div>
           <h3 style={{ margin: '0 0 1rem 0', color: '#856404' }}>⚙️ Systemrollen</h3>
-          
+
           {rolesError && (
-            <div style={{ 
-              color: '#dc3545', 
-              fontSize: '0.875rem', 
+            <div style={{
+              color: '#dc3545',
+              fontSize: '0.875rem',
               marginBottom: '1rem',
               padding: '0.5rem',
               backgroundColor: '#f8d7da',
@@ -904,10 +905,10 @@ const Step3Content: React.FC<StepContentProps> = ({
               {rolesError}
             </div>
           )}
-          
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {ROLE_CONFIG.map(role => (
-              <div 
+              <div
                 key={role.value}
                 style={{
                   display: 'flex',
@@ -951,7 +952,7 @@ const Step3Content: React.FC<StepContentProps> = ({
   );
 };
 
-const Step4Content: React.FC<StepContentProps> = ({ 
+const Step4Content: React.FC<StepContentProps> = ({
   formData,
   passwordForm,
   onInputChange,
@@ -970,7 +971,7 @@ const Step4Content: React.FC<StepContentProps> = ({
       {/* Passwort ändern */}
       <div>
         <h3 style={{ margin: '0 0 1rem 0', color: '#856404' }}>🔒 Passwort zurücksetzen</h3>
-        
+
         {!showPasswordSection ? (
           <button
             type="button"
@@ -1009,10 +1010,10 @@ const Step4Content: React.FC<StepContentProps> = ({
                 placeholder="Mindestens 6 Zeichen"
               />
               {newPasswordError && (
-                <div style={{ 
-                  color: '#dc3545', 
-                  fontSize: '0.875rem', 
-                  marginTop: '0.25rem' 
+                <div style={{
+                  color: '#dc3545',
+                  fontSize: '0.875rem',
+                  marginTop: '0.25rem'
                 }}>
                   {newPasswordError}
                 </div>
@@ -1039,10 +1040,10 @@ const Step4Content: React.FC<StepContentProps> = ({
                 placeholder="Passwort wiederholen"
               />
               {confirmPasswordError && (
-                <div style={{ 
-                  color: '#dc3545', 
-                  fontSize: '0.875rem', 
-                  marginTop: '0.25rem' 
+                <div style={{
+                  color: '#dc3545',
+                  fontSize: '0.875rem',
+                  marginTop: '0.25rem'
                 }}>
                   {confirmPasswordError}
                 </div>
@@ -1074,9 +1075,9 @@ const Step4Content: React.FC<StepContentProps> = ({
 
       {/* Aktiv Status */}
       {mode === 'edit' && (
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
           gap: '10px',
           padding: '1rem',
           border: `1px solid ${isActiveError ? '#dc3545' : '#e0e0e0'}`,
@@ -1099,10 +1100,10 @@ const Step4Content: React.FC<StepContentProps> = ({
               Inaktive Mitarbeiter können sich nicht anmelden und werden nicht für Schichten eingeplant.
             </div>
             {isActiveError && (
-              <div style={{ 
-                color: '#dc3545', 
-                fontSize: '0.875rem', 
-                marginTop: '0.25rem' 
+              <div style={{
+                color: '#dc3545',
+                fontSize: '0.875rem',
+                marginTop: '0.25rem'
               }}>
                 {isActiveError}
               </div>
@@ -1151,9 +1152,9 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
 
   // Inline Step Indicator Komponente (wie in Setup.tsx)
   const StepIndicator: React.FC = () => (
-    <div style={{ 
-      display: 'flex', 
-      justifyContent: 'space-between', 
+    <div style={{
+      display: 'flex',
+      justifyContent: 'space-between',
       alignItems: 'center',
       marginBottom: '2.5rem',
       position: 'relative',
@@ -1169,18 +1170,18 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
         backgroundColor: '#e9ecef',
         zIndex: 1
       }} />
-      
+
       {steps.map((step, index) => {
         const isCompleted = index < currentStep;
         const isCurrent = index === currentStep;
         const isClickable = index <= currentStep + 1;
-        
+
         return (
-          <div 
+          <div
             key={step.id}
-            style={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
               zIndex: 2,
               position: 'relative',
@@ -1210,18 +1211,18 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
             >
               {index + 1}
             </button>
-            
+
             <div style={{ textAlign: 'center' }}>
-              <div style={{ 
-                fontSize: '14px', 
+              <div style={{
+                fontSize: '14px',
                 fontWeight: isCurrent ? '600' : '400',
                 color: isCurrent ? '#51258f' : '#6c757d'
               }}>
                 {step.title}
               </div>
               {step.subtitle && (
-                <div style={{ 
-                  fontSize: '12px', 
+                <div style={{
+                  fontSize: '12px',
                   color: '#6c757d',
                   marginTop: '2px'
                 }}>
@@ -1275,8 +1276,8 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
       showNotification({ // Changed from addNotification to showNotification
         type: 'success',
         title: 'Erfolg',
-        message: mode === 'create' 
-          ? 'Mitarbeiter wurde erfolgreich erstellt' 
+        message: mode === 'create'
+          ? 'Mitarbeiter wurde erfolgreich erstellt'
           : 'Mitarbeiter wurde erfolgreich aktualisiert'
       });
       onSuccess();
@@ -1287,11 +1288,11 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
 
   const getNextButtonText = (): string => {
     if (loading) return '⏳ Wird gespeichert...';
-    
+
     if (currentStep === steps.length - 1) {
       return mode === 'create' ? 'Mitarbeiter erstellen' : 'Änderungen speichern';
     }
-    
+
     return 'Weiter →';
   };
 
@@ -1307,8 +1308,8 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
       border: '1px solid #e0e0e0',
       boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
     }}>
-      <h2 style={{ 
-        margin: '0 0 1.5rem 0', 
+      <h2 style={{
+        margin: '0 0 1.5rem 0',
         color: '#2c3e50',
         borderBottom: '2px solid #f0f0f0',
         paddingBottom: '1rem',
@@ -1322,16 +1323,16 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
 
       {/* Aktueller Schritt Titel und Beschreibung */}
       <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-        <h3 style={{ 
-          fontSize: '1.25rem', 
-          fontWeight: 'bold', 
+        <h3 style={{
+          fontSize: '1.25rem',
+          fontWeight: 'bold',
           marginBottom: '0.5rem',
           color: '#2c3e50'
         }}>
           {steps[currentStep].title}
         </h3>
         {steps[currentStep].subtitle && (
-          <p style={{ 
+          <p style={{
             color: '#6c757d',
             fontSize: '1rem'
           }}>
@@ -1346,9 +1347,9 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
       </div>
 
       {/* Navigations-Buttons */}
-      <div style={{ 
-        marginTop: '2rem', 
-        display: 'flex', 
+      <div style={{
+        marginTop: '2rem',
+        display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center'
       }}>
@@ -1368,7 +1369,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
         >
           {currentStep === 0 ? 'Abbrechen' : '← Zurück'}
         </button>
-        
+
         <button
           onClick={isLastStep ? handleFinalSubmit : goToNextStep}
           disabled={loading}
@@ -1390,16 +1391,16 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({
 
       {/* Zusätzliche Informationen */}
       {isLastStep && !loading && (
-        <div style={{ 
-          marginTop: '1.5rem', 
-          textAlign: 'center', 
-          color: '#6c757d', 
+        <div style={{
+          marginTop: '1.5rem',
+          textAlign: 'center',
+          color: '#6c757d',
           fontSize: '0.9rem',
           padding: '1rem',
           backgroundColor: '#f8f9fa',
           borderRadius: '6px'
         }}>
-          {mode === 'create' 
+          {mode === 'create'
             ? 'Überprüfen Sie alle Daten, bevor Sie den Mitarbeiter erstellen'
             : 'Überprüfen Sie alle Änderungen, bevor Sie sie speichern'
           }
