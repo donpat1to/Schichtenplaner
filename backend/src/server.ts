@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { initializeDatabase } from './scripts/initializeDatabase.js';
 import fs from 'fs';
 import helmet from 'helmet';
+import type { ViteDevServer } from 'vite';
 
 // Route imports
 import authRoutes from './routes/auth.js';
@@ -21,6 +22,62 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = 3002;
 const isDevelopment = process.env.NODE_ENV === 'development';
+
+let vite: ViteDevServer | undefined;
+
+if (isDevelopment) {
+  // Dynamically import and setup Vite middleware
+  const setupViteDevServer = async () => {
+    try {
+      const { createServer } = await import('vite');
+      vite = await createServer({
+        server: { middlewareMode: true },
+        appType: 'spa'
+      });
+      app.use(vite.middlewares);
+      console.log('🔧 Vite dev server integrated with Express');
+    } catch (error) {
+      console.warn('⚠️ Vite integration failed, using static files:', error);
+    }
+  };
+  setupViteDevServer();
+}
+
+const configureStaticFiles = () => {
+  const possiblePaths = [
+    // Production path (Docker)
+    '/app/frontend-build',
+    // Development paths
+    path.resolve(__dirname, '../../frontend/dist'),
+    path.resolve(__dirname, '../frontend/dist'), // Added for monorepo
+    path.resolve(process.cwd(), 'frontend/dist'), // Current directory
+    path.resolve(process.cwd(), '../frontend/dist'), // Parent directory
+    // Vite dev server fallback
+    ...(isDevelopment ? [path.resolve(__dirname, '../../frontend')] : [])
+  ];
+
+  for (const testPath of possiblePaths) {
+    try {
+      if (fs.existsSync(testPath)) {
+        // In development, check for dist or direct source
+        if (fs.existsSync(path.join(testPath, 'index.html'))) {
+          console.log('✅ Found frontend at:', testPath);
+          app.use(express.static(testPath));
+          return testPath;
+        }
+        // For Vite dev server in development
+        else if (isDevelopment && fs.existsSync(path.join(testPath, 'index.html'))) {
+          console.log('🔧 Development: Serving frontend source from:', testPath);
+          app.use(express.static(testPath));
+          return testPath;
+        }
+      }
+    } catch (error) {
+      // Silent catch
+    }
+  }
+  return null;
+};
 
 app.set('trust proxy', true);
 
@@ -81,8 +138,8 @@ app.use('/api/scheduling', schedulingRoutes);
 
 // Health route
 app.get('/api/health', (req: express.Request, res: express.Response) => {
-  res.json({ 
-    status: 'OK', 
+  res.json({
+    status: 'OK',
     message: 'Backend läuft!',
     timestamp: new Date().toISOString(),
     mode: process.env.NODE_ENV || 'development'
@@ -118,6 +175,7 @@ const findFrontendBuildPath = (): string | null => {
 };
 
 const frontendBuildPath = findFrontendBuildPath();
+const staticPath = configureStaticFiles();
 
 if (frontendBuildPath) {
   app.use(express.static(frontendBuildPath));
@@ -130,46 +188,71 @@ if (frontendBuildPath) {
 }
 
 // Root route
-app.get('/', (req, res) => {
-  if (!frontendBuildPath) {
-    if (isDevelopment) {
-      return res.redirect('http://localhost:3003');
+app.get('/', async (req, res) => {
+  // In development with Vite middleware
+  if (vite) {
+    try {
+      const template = fs.readFileSync(
+        path.resolve(__dirname, '../../frontend/index.html'),
+        'utf-8'
+      );
+      const html = await vite.transformIndexHtml(req.url, template);
+      res.send(html);
+    } catch (error) {
+      res.status(500).send('Vite dev server error');
     }
-    return res.status(500).send('Frontend build not found');
+    return;
   }
-  
+
+  // Fallback to static file serving
+  if (!frontendBuildPath) {
+    return res.status(500).send('Frontend not available');
+  }
+
   const indexPath = path.join(frontendBuildPath, 'index.html');
   res.sendFile(indexPath);
 });
 
 // Client-side routing fallback
-app.get('*', (req, res) => {
+app.get('*', async (req, res, next) => {
   if (req.path.startsWith('/api/')) {
-    return res.status(404).json({ error: 'API endpoint not found' });
+    return next(); // API routes handled normally
   }
-  
-  if (!frontendBuildPath) {
-    if (isDevelopment) {
-      return res.redirect(`http://localhost:3003${req.path}`);
+
+  // Vite dev server handling
+  if (vite) {
+    try {
+      const template = fs.readFileSync(
+        path.resolve(__dirname, '../../frontend/index.html'),
+        'utf-8'
+      );
+      const html = await vite.transformIndexHtml(req.url, template);
+      return res.send(html);
+    } catch (error) {
+      console.error('Vite transformation error:', error);
     }
-    return res.status(500).json({ error: 'Frontend application not available' });
   }
-  
-  const indexPath = path.join(frontendBuildPath, 'index.html');
-  res.sendFile(indexPath);
+
+  // Static file fallback
+  if (staticPath) {
+    const indexPath = path.join(staticPath, 'index.html');
+    return res.sendFile(indexPath);
+  }
+
+  res.status(500).send('Frontend not available');
 });
 
 // Error handling
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Error:', err);
-  
+
   if (process.env.NODE_ENV === 'production') {
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       message: 'Something went wrong'
     });
   } else {
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error',
       message: err.message,
       stack: err.stack
@@ -196,7 +279,7 @@ const initializeApp = async () => {
       if (frontendBuildPath) {
         console.log(`📍 Frontend: http://localhost:${PORT}`);
       } else if (isDevelopment) {
-        console.log(`📍 Frontend (Vite): http://localhost:3003`);
+        console.log(`📍 Frontend (Vite): http://localhost:3002`);
       }
       console.log(`📍 API: http://localhost:${PORT}/api`);
     });

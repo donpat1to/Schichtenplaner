@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "npm run build && npx tsx src/server.ts",
-    "build": "tsc", 
+    "dev:single": "cross-env NODE_ENV=development npx tsx src/server.ts",
+    "build": "tsc",
     "start": "node dist/server.js",
     "prestart": "npm run build",
     "test": "jest",
@@ -32,6 +33,7 @@
     "@types/jest": "^29.5.0",
     "ts-node": "^10.9.0",
     "typescript": "^5.0.0",
-    "tsx": "^4.0.0"
+    "tsx": "^4.0.0",
+    "cross-env": "10.1.0"
   }
 }
