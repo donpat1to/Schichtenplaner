@@ -33,10 +33,10 @@ export async function initializeDatabase(): Promise<void> {
 
   console.log(`✅ Using schema at: ${schemaPath}`);
   const schema = fs.readFileSync(schemaPath, 'utf8');
-  
+
   try {
     console.log('Starting database initialization...');
-    
+
     try {
       const existingAdmin = await db.get<{ count: number }>(
         `SELECT COUNT(*) as count 
@@ -44,7 +44,7 @@ export async function initializeDatabase(): Promise<void> {
          JOIN employee_roles er ON e.id = er.employee_id
          WHERE er.role = 'admin' AND e.is_active = 1`
       );
-      
+
       if (existingAdmin && existingAdmin.count > 0) {
         console.log('✅ Database already initialized with admin user');
         return;
@@ -52,23 +52,23 @@ export async function initializeDatabase(): Promise<void> {
     } catch (error) {
       console.log('ℹ️ Database tables might not exist yet, creating schema...');
     }
-    
+
     // Get list of existing tables
     interface TableInfo {
       name: string;
     }
-    
+
     try {
       const existingTables = await db.all<TableInfo>(
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
       );
-      
+
       console.log('Existing tables found:', existingTables.map(t => t.name).join(', ') || 'none');
-      
-      // UPDATED: Drop tables in correct dependency order for new schema
+
+      // Drop tables in correct dependency order for new schema
       const tablesToDrop = [
         'employee_availability',
-        'shift_assignments', 
+        'shift_assignments',
         'scheduled_shifts',
         'shifts',
         'time_slots',
@@ -79,7 +79,7 @@ export async function initializeDatabase(): Promise<void> {
         'shift_plans',
         'applied_migrations'
       ];
-      
+
       for (const table of tablesToDrop) {
         if (existingTables.some(t => t.name === table)) {
           console.log(`Dropping table: ${table}`);
@@ -94,17 +94,41 @@ export async function initializeDatabase(): Promise<void> {
       console.error('Error checking/dropping existing tables:', error);
       // Continue with schema creation even if table dropping fails
     }
-    
-    // Execute schema creation in a transaction
-    await db.run('BEGIN EXCLUSIVE TRANSACTION');
-    
-    // Execute each statement separately for better error reporting
-    const statements = schema
+
+    // NEU: PRAGMA-Anweisungen außerhalb der Transaktion ausführen
+    console.log('Executing PRAGMA statements outside transaction...');
+    const pragmaStatements = schema
       .split(';')
       .map(stmt => stmt.trim())
       .filter(stmt => stmt.length > 0)
+      .filter(stmt => stmt.toUpperCase().startsWith('PRAGMA'))
       .map(stmt => {
-        // Remove any single-line comments
+        return stmt.split('\n')
+          .filter(line => !line.trim().startsWith('--'))
+          .join('\n')
+          .trim();
+      });
+
+    for (const statement of pragmaStatements) {
+      try {
+        console.log('Executing PRAGMA:', statement);
+        await db.run(statement);
+      } catch (error) {
+        console.warn('PRAGMA statement might have failed:', statement, error);
+        // Continue even if PRAGMA fails
+      }
+    }
+
+    // Schema-Erstellung in Transaktion
+    await db.run('BEGIN EXCLUSIVE TRANSACTION');
+
+    // Nur die CREATE TABLE und andere Anweisungen (ohne PRAGMA)
+    const schemaStatements = schema
+      .split(';')
+      .map(stmt => stmt.trim())
+      .filter(stmt => stmt.length > 0)
+      .filter(stmt => !stmt.toUpperCase().startsWith('PRAGMA'))
+      .map(stmt => {
         return stmt.split('\n')
           .filter(line => !line.trim().startsWith('--'))
           .join('\n')
@@ -112,7 +136,7 @@ export async function initializeDatabase(): Promise<void> {
       })
       .filter(stmt => stmt.length > 0);
 
-    for (const statement of statements) {
+    for (const statement of schemaStatements) {
       try {
         console.log('Executing statement:', statement.substring(0, 50) + '...');
         await db.run(statement);
@@ -123,8 +147,8 @@ export async function initializeDatabase(): Promise<void> {
         throw error;
       }
     }
-    
-    // UPDATED: Insert default data in correct order
+
+    // Insert default data in correct order
     try {
       console.log('Inserting default employee types...');
       await db.run(`INSERT OR IGNORE INTO employee_types (type, category, has_contract_type) VALUES ('manager', 'internal', 1)`);
@@ -132,7 +156,7 @@ export async function initializeDatabase(): Promise<void> {
       await db.run(`INSERT OR IGNORE INTO employee_types (type, category, has_contract_type) VALUES ('apprentice', 'internal', 1)`);
       await db.run(`INSERT OR IGNORE INTO employee_types (type, category, has_contract_type) VALUES ('guest', 'external', 0)`);
       console.log('✅ Default employee types inserted');
-      
+
       console.log('Inserting default roles...');
       await db.run(`INSERT OR IGNORE INTO roles (role, authority_level, description) VALUES ('admin', 100, 'Vollzugriff')`);
       await db.run(`INSERT OR IGNORE INTO roles (role, authority_level, description) VALUES ('maintenance', 50, 'Wartungszugriff')`);
@@ -143,13 +167,13 @@ export async function initializeDatabase(): Promise<void> {
       await db.run('ROLLBACK');
       throw error;
     }
-    
+
     await db.run('COMMIT');
     console.log('✅ Database schema successfully initialized');
-    
+
     // Give a small delay to ensure all transactions are properly closed
     await new Promise(resolve => setTimeout(resolve, 100));
-    
+
   } catch (error) {
     console.error('Error during database initialization:', error);
     throw error;
