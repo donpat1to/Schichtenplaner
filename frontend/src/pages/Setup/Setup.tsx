@@ -32,7 +32,7 @@ const useSetup = () => {
 
   const steps: SetupStep[] = [
     {
-      id: 'profile-setup', 
+      id: 'profile-setup',
       title: 'Profilinformationen',
       subtitle: 'Geben Sie Ihre persönlichen Daten ein'
     },
@@ -62,8 +62,8 @@ const useSetup = () => {
   };
 
   const validateStep2 = (): boolean => {
-    if (formData.password.length < 6) {
-      setError('Das Passwort muss mindestens 6 Zeichen lang sein.');
+    if (formData.password.length < 8) {
+      setError('Das Passwort muss mindestens 8 Zeichen lang sein.');
       return false;
     }
     if (formData.password !== formData.confirmPassword) {
@@ -87,7 +87,7 @@ const useSetup = () => {
   // ===== NAVIGATIONS-FUNKTIONEN =====
   const goToNextStep = async (): Promise<void> => {
     setError('');
-    
+
     if (!validateCurrentStep(currentStep)) {
       return;
     }
@@ -111,7 +111,7 @@ const useSetup = () => {
 
   const handleStepChange = (stepIndex: number): void => {
     setError('');
-    
+
     // Nur erlauben, zu bereits validierten Schritten zu springen
     // oder zum nächsten Schritt nach dem aktuellen
     if (stepIndex <= currentStep + 1) {
@@ -163,7 +163,7 @@ const useSetup = () => {
 
       // Setup Status neu prüfen
       await checkSetupStatus();
-      
+
     } catch (err: any) {
       console.error('❌ Setup error:', err);
       setError(err.message || 'Ein unerwarteter Fehler ist aufgetreten');
@@ -177,7 +177,7 @@ const useSetup = () => {
     if (!formData.firstname.trim() || !formData.lastname.trim()) {
       return 'vorname.nachname@sp.de';
     }
-    
+
     const cleanFirstname = formData.firstname.toLowerCase().replace(/[^a-z0-9]/g, '');
     const cleanLastname = formData.lastname.toLowerCase().replace(/[^a-z0-9]/g, '');
     return `${cleanFirstname}.${cleanLastname}@sp.de`;
@@ -186,8 +186,8 @@ const useSetup = () => {
   const isStepCompleted = (stepIndex: number): boolean => {
     switch (stepIndex) {
       case 0:
-        return formData.password.length >= 6 && 
-               formData.password === formData.confirmPassword;
+        return formData.password.length >= 8 &&
+          formData.password === formData.confirmPassword;
       case 1:
         return !!formData.firstname.trim() && !!formData.lastname.trim();
       default:
@@ -202,13 +202,13 @@ const useSetup = () => {
     loading,
     error,
     steps,
-    
+
     // Actions
     goToNextStep,
     goToPrevStep,
     handleStepChange,
     handleInputChange,
-    
+
     // Helpers
     getEmailPreview,
     isStepCompleted
@@ -223,16 +223,16 @@ interface StepContentProps {
   currentStep: number;
 }
 
-const Step1Content: React.FC<StepContentProps> = ({ 
-  formData, 
+const Step1Content: React.FC<StepContentProps> = ({
+  formData,
   onInputChange,
-  getEmailPreview 
+  getEmailPreview
 }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
     <div>
-      <label style={{ 
-        display: 'block', 
-        marginBottom: '0.5rem', 
+      <label style={{
+        display: 'block',
+        marginBottom: '0.5rem',
         fontWeight: '600',
         color: '#495057'
       }}>
@@ -257,9 +257,9 @@ const Step1Content: React.FC<StepContentProps> = ({
     </div>
 
     <div>
-      <label style={{ 
-        display: 'block', 
-        marginBottom: '0.5rem', 
+      <label style={{
+        display: 'block',
+        marginBottom: '0.5rem',
         fontWeight: '600',
         color: '#495057'
       }}>
@@ -284,17 +284,17 @@ const Step1Content: React.FC<StepContentProps> = ({
     </div>
 
     <div>
-      <label style={{ 
-        display: 'block', 
-        marginBottom: '0.5rem', 
+      <label style={{
+        display: 'block',
+        marginBottom: '0.5rem',
         fontWeight: '600',
         color: '#495057'
       }}>
         Automatisch generierte E-Mail
       </label>
-      <div style={{ 
-        padding: '0.75rem', 
-        backgroundColor: '#e9ecef', 
+      <div style={{
+        padding: '0.75rem',
+        backgroundColor: '#e9ecef',
         border: '1px solid #ced4da',
         borderRadius: '6px',
         color: '#495057',
@@ -303,8 +303,8 @@ const Step1Content: React.FC<StepContentProps> = ({
       }}>
         {getEmailPreview()}
       </div>
-      <div style={{ 
-        fontSize: '0.875rem', 
+      <div style={{
+        fontSize: '0.875rem',
         color: '#6c757d',
         marginTop: '0.25rem'
       }}>
@@ -315,15 +315,15 @@ const Step1Content: React.FC<StepContentProps> = ({
 );
 
 
-const Step2Content: React.FC<StepContentProps> = ({ 
-  formData, 
-  onInputChange 
+const Step2Content: React.FC<StepContentProps> = ({
+  formData,
+  onInputChange
 }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
     <div>
-      <label style={{ 
-        display: 'block', 
-        marginBottom: '0.5rem', 
+      <label style={{
+        display: 'block',
+        marginBottom: '0.5rem',
         fontWeight: '600',
         color: '#495057'
       }}>
@@ -342,16 +342,16 @@ const Step2Content: React.FC<StepContentProps> = ({
           fontSize: '1rem',
           transition: 'border-color 0.3s ease'
         }}
-        placeholder="Mindestens 6 Zeichen"
+        placeholder="Mindestens 8 Zeichen"
         required
         autoComplete="new-password"
       />
     </div>
-    
+
     <div>
-      <label style={{ 
-        display: 'block', 
-        marginBottom: '0.5rem', 
+      <label style={{
+        display: 'block',
+        marginBottom: '0.5rem',
         fontWeight: '600',
         color: '#495057'
       }}>
@@ -378,26 +378,26 @@ const Step2Content: React.FC<StepContentProps> = ({
   </div>
 );
 
-const Step3Content: React.FC<StepContentProps> = ({ 
+const Step3Content: React.FC<StepContentProps> = ({
   formData,
-  getEmailPreview 
+  getEmailPreview
 }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-    <div style={{ 
-      backgroundColor: '#f8f9fa', 
-      padding: '1.5rem', 
+    <div style={{
+      backgroundColor: '#f8f9fa',
+      padding: '1.5rem',
       borderRadius: '8px',
       border: '1px solid #e9ecef'
     }}>
-      <h3 style={{ 
-        marginBottom: '1rem', 
+      <h3 style={{
+        marginBottom: '1rem',
         color: '#2c3e50',
         fontSize: '1.1rem',
         fontWeight: '600'
       }}>
         Zusammenfassung
       </h3>
-      
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <span style={{ color: '#6c757d' }}>E-Mail:</span>
@@ -413,15 +413,15 @@ const Step3Content: React.FC<StepContentProps> = ({
         </div>
       </div>
     </div>
-    
-    <div style={{ 
+
+    <div style={{
       padding: '1rem',
       backgroundColor: '#e7f3ff',
       borderRadius: '6px',
       border: '1px solid #b6d7e8',
       color: '#2c3e50'
     }}>
-      <strong>💡 Wichtig:</strong> Nach dem Setup können Sie sich mit Ihrer 
+      <strong>💡 Wichtig:</strong> Nach dem Setup können Sie sich mit Ihrer
       automatisch generierten E-Mail anmelden.
     </div>
   </div>
@@ -464,7 +464,7 @@ const Setup: React.FC = () => {
 
   const getNextButtonText = (): string => {
     if (loading) return '⏳ Wird verarbeitet...';
-    
+
     switch (currentStep) {
       case 0:
         return 'Weiter →';
@@ -479,9 +479,9 @@ const Setup: React.FC = () => {
 
   // Inline Step Indicator Komponente
   const StepIndicator: React.FC = () => (
-    <div style={{ 
-      display: 'flex', 
-      justifyContent: 'space-between', 
+    <div style={{
+      display: 'flex',
+      justifyContent: 'space-between',
       alignItems: 'center',
       marginBottom: '2.5rem',
       position: 'relative',
@@ -497,18 +497,18 @@ const Setup: React.FC = () => {
         backgroundColor: '#e9ecef',
         zIndex: 1
       }} />
-      
+
       {steps.map((step, index) => {
         const isCompleted = index < currentStep;
         const isCurrent = index === currentStep;
         const isClickable = index <= currentStep + 1;
-        
+
         return (
-          <div 
+          <div
             key={step.id}
-            style={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
               zIndex: 2,
               position: 'relative',
@@ -538,10 +538,10 @@ const Setup: React.FC = () => {
             >
               {index + 1}
             </button>
-            
+
             <div style={{ textAlign: 'center' }}>
-              <div style={{ 
-                fontSize: '14px', 
+              <div style={{
+                fontSize: '14px',
                 fontWeight: isCurrent ? '600' : '400',
                 color: isCurrent ? '#51258f' : '#6c757d'
               }}>
@@ -555,8 +555,8 @@ const Setup: React.FC = () => {
   );
 
   return (
-    <div style={{ 
-      minHeight: '100vh', 
+    <div style={{
+      minHeight: '100vh',
       backgroundColor: '#f8f9fa',
       display: 'flex',
       alignItems: 'center',
@@ -573,15 +573,15 @@ const Setup: React.FC = () => {
         border: '1px solid #e9ecef'
       }}>
         <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
-          <h1 style={{ 
-            fontSize: '2rem', 
-            fontWeight: 'bold', 
+          <h1 style={{
+            fontSize: '2rem',
+            fontWeight: 'bold',
             marginBottom: '0.5rem',
             color: '#2c3e50'
           }}>
             🚀 Erstkonfiguration
           </h1>
-          <p style={{ 
+          <p style={{
             color: '#6c757d',
             fontSize: '1.1rem',
             marginBottom: '2rem'
@@ -592,16 +592,16 @@ const Setup: React.FC = () => {
 
         {/* Aktueller Schritt Titel und Beschreibung */}
         <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-          <h2 style={{ 
-            fontSize: '1.5rem', 
-            fontWeight: 'bold', 
+          <h2 style={{
+            fontSize: '1.5rem',
+            fontWeight: 'bold',
             marginBottom: '0.5rem',
             color: '#2c3e50'
           }}>
             {steps[currentStep].title}
           </h2>
           {steps[currentStep].subtitle && (
-            <p style={{ 
+            <p style={{
               color: '#6c757d',
               fontSize: '1rem'
             }}>
@@ -633,9 +633,9 @@ const Setup: React.FC = () => {
         </div>
 
         {/* Navigations-Buttons */}
-        <div style={{ 
-          marginTop: '2rem', 
-          display: 'flex', 
+        <div style={{
+          marginTop: '2rem',
+          display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center'
         }}>
@@ -655,7 +655,7 @@ const Setup: React.FC = () => {
           >
             ← Zurück
           </button>
-          
+
           <button
             onClick={goToNextStep}
             disabled={loading}
@@ -677,10 +677,10 @@ const Setup: React.FC = () => {
 
         {/* Zusätzliche Informationen */}
         {currentStep === 2 && !loading && (
-          <div style={{ 
-            marginTop: '1.5rem', 
-            textAlign: 'center', 
-            color: '#6c757d', 
+          <div style={{
+            marginTop: '1.5rem',
+            textAlign: 'center',
+            color: '#6c757d',
             fontSize: '0.9rem',
             padding: '1rem',
             backgroundColor: '#f8f9fa',

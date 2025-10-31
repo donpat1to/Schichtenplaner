@@ -14,7 +14,7 @@ function generateEmail(firstname: string, lastname: string): string {
 
   const cleanFirstname = convertUmlauts(firstname).replace(/[^a-z0-9]/g, '');
   const cleanLastname = convertUmlauts(lastname).replace(/[^a-z0-9]/g, '');
-  
+
   return `${cleanFirstname}.${cleanLastname}@sp.de`;
 }
 
@@ -22,8 +22,8 @@ function generateEmail(firstname: string, lastname: string): string {
 export function validateEmployeeData(employee: CreateEmployeeRequest): string[] {
   const errors: string[] = [];
 
-  if (employee.password?.length < 6) {
-    errors.push('Password must be at least 6 characters long');
+  if (employee.password?.length < 8) {
+    errors.push('Password must be at least 8 characters long');
   }
 
   if (!employee.firstname?.trim() || employee.firstname.trim().length < 2) {
@@ -72,16 +72,16 @@ export function generateEmployeeEmail(firstname: string, lastname: string): stri
 }
 
 // UPDATED: Business logic helpers for new employee types
-export const isManager = (employee: Employee): boolean => 
+export const isManager = (employee: Employee): boolean =>
   employee.employeeType === 'manager';
 
-export const isPersonell = (employee: Employee): boolean => 
+export const isPersonell = (employee: Employee): boolean =>
   employee.employeeType === 'personell';
 
-export const isApprentice = (employee: Employee): boolean => 
+export const isApprentice = (employee: Employee): boolean =>
   employee.employeeType === 'apprentice';
 
-export const isGuest = (employee: Employee): boolean => 
+export const isGuest = (employee: Employee): boolean =>
   employee.employeeType === 'guest';
 
 export const isInternal = (employee: Employee): boolean =>
@@ -91,24 +91,24 @@ export const isExternal = (employee: Employee): boolean =>
   employee.employeeType === 'guest';
 
 // UPDATED: Trainee logic - now based on isTrainee field for personell type
-export const isTrainee = (employee: Employee): boolean => 
+export const isTrainee = (employee: Employee): boolean =>
   employee.employeeType === 'personell' && employee.isTrainee;
 
-export const isExperienced = (employee: Employee): boolean => 
+export const isExperienced = (employee: Employee): boolean =>
   employee.employeeType === 'personell' && !employee.isTrainee;
 
 // Role-based helpers
-export const isAdmin = (employee: Employee): boolean => 
+export const isAdmin = (employee: Employee): boolean =>
   employee.roles?.includes('admin') || false;
 
-export const isMaintenance = (employee: Employee): boolean => 
+export const isMaintenance = (employee: Employee): boolean =>
   employee.roles?.includes('maintenance') || false;
 
-export const isUser = (employee: Employee): boolean => 
+export const isUser = (employee: Employee): boolean =>
   employee.roles?.includes('user') || false;
 
 // UPDATED: Work alone permission - managers and experienced personell can work alone
-export const canEmployeeWorkAlone = (employee: Employee): boolean => 
+export const canEmployeeWorkAlone = (employee: Employee): boolean =>
   employee.canWorkAlone && (isManager(employee) || isExperienced(employee));
 
 // Helper for full name display

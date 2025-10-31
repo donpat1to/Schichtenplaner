@@ -16,7 +16,7 @@ function generateEmail(firstname: string, lastname: string): string {
 
   const cleanFirstname = convertUmlauts(firstname).replace(/[^a-z0-9]/g, '');
   const cleanLastname = convertUmlauts(lastname).replace(/[^a-z0-9]/g, '');
-  
+
   return `${cleanFirstname}.${cleanLastname}@sp.de`;
 }
 
@@ -31,15 +31,15 @@ export const checkSetupStatus = async (req: Request, res: Response): Promise<voi
     );
 
     console.log('Admin exists check:', adminExists);
-    
+
     const needsSetup = !adminExists || adminExists['COUNT(*)'] === 0;
-    
+
     res.json({
       needsSetup: needsSetup
     });
   } catch (error) {
     console.error('Error checking setup status:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Internal server error during setup check'
     });
   }
@@ -75,8 +75,8 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
     }
 
     // Password length validation
-    if (password.length < 6) {
-      res.status(400).json({ error: 'Das Passwort muss mindestens 6 Zeichen lang sein' });
+    if (password.length < 8) {
+      res.status(400).json({ error: 'Das Passwort muss mindestens 8 Zeichen lang sein' });
       return;
     }
 
@@ -125,15 +125,15 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
     } catch (dbError) {
       await db.run('ROLLBACK');
       console.error('❌ Database error during admin creation:', dbError);
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Fehler beim Erstellen des Admin-Accounts'
       });
     }
   } catch (error) {
     console.error('❌ Error in setup:', error);
-    
+
     if (!res.headersSent) {
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Ein unerwarteter Fehler ist aufgetreten'
       });
     }

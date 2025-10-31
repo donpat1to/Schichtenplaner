@@ -23,7 +23,7 @@
 ### \[CREATE\] Employee
 * `firstname` 1-100 characters and must not be empty
 * `lastname` 1-100 characters and must not be empty
-* `password` must be at least 6 characters (in create mode)
+* `password` must be at least 8 characters (in create mode)
 * `employeeType` must be `manager`, `personell`, `apprentice`, or `guest`
 * `canWorkAlone` optional boolean
 * `isTrainee` optional boolean

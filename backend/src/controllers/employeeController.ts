@@ -766,7 +766,7 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
     }
 
     // Validate new password
-    if (!newPassword || newPassword.length < 6) {
+    if (!newPassword || newPassword.length < 8) {
       res.status(400).json({ error: 'New password must be at least 8 characters long' });
       return;
     }

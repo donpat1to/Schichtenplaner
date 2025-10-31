@@ -203,11 +203,11 @@ const Settings: React.FC = () => {
       return;
     }
 
-    if (passwordForm.newPassword.length < 6) {
+    if (passwordForm.newPassword.length < 8) {
       showNotification({
         type: 'error',
         title: 'Fehler',
-        message: 'Das neue Passwort muss mindestens 6 Zeichen lang sein'
+        message: 'Das neue Passwort muss mindestens 8 Zeichen lang sein'
       });
       return;
     }
@@ -600,9 +600,9 @@ const Settings: React.FC = () => {
                       value={passwordForm.newPassword}
                       onChange={handlePasswordChange}
                       required
-                      minLength={6}
+                      minLength={8}
                       style={styles.fieldInputWithIcon}
-                      placeholder="Mindestens 6 Zeichen"
+                      placeholder="Mindestens 8 Zeichen"
                       onFocus={(e) => {
                         e.target.style.borderColor = '#1a1325';
                         e.target.style.boxShadow = '0 0 0 3px rgba(26, 19, 37, 0.1)';
@@ -631,7 +631,7 @@ const Settings: React.FC = () => {
                     </button>
                   </div>
                   <div style={styles.fieldHint}>
-                    Das Passwort muss mindestens 6 Zeichen lang sein.
+                    Das Passwort muss mindestens 8 Zeichen lang sein.
                   </div>
                 </div>
 
