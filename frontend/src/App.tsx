@@ -15,6 +15,7 @@ import EmployeeManagement from './pages/Employees/EmployeeManagement';
 import Settings from './pages/Settings/Settings';
 import Help from './pages/Help/Help';
 import Setup from './pages/Setup/Setup';
+import ErrorBoundary from './components/ErrorBoundary/ErrorBoundary';
 
 // Free Footer Link Pages (always available)
 import FAQ from './components/Layout/FooterLinks/FAQ/FAQ';
@@ -160,14 +161,16 @@ const AppContent: React.FC = () => {
 
 function App() {
   return (
-    <NotificationProvider>
-      <AuthProvider>
-        <Router>
-          <NotificationContainer />
-          <AppContent />
-        </Router>
-      </AuthProvider>
-    </NotificationProvider>
+    <ErrorBoundary>
+      <NotificationProvider>
+        <AuthProvider>
+          <Router>
+            <NotificationContainer />
+            <AppContent />
+          </Router>
+        </AuthProvider>
+      </NotificationProvider>
+    </ErrorBoundary>
   );
 }
 

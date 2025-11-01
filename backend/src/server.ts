@@ -85,7 +85,7 @@ if (process.env.NODE_ENV === 'production') {
 
 const configureTrustProxy = (): string | string[] | boolean | number => {
   const trustedProxyIps = process.env.TRUSTED_PROXY_IPS;
-  const trustProxyEnabled = process.env.TRUST_PROXY_ENABLED !== 'false'; // Default true for production
+  const trustProxyEnabled = process.env.TRUST_PROXY_ENABLED !== 'false';
 
   // If explicitly disabled
   if (!trustProxyEnabled) {
@@ -106,21 +106,9 @@ const configureTrustProxy = (): string | string[] | boolean | number => {
     return trustedProxyIps.trim();
   }
 
-  // Default behavior based on environment
-  if (process.env.NODE_ENV === 'production') {
-    console.log('🔒 Trust proxy: Using production defaults (private networks)');
-    return [
-      'loopback', 
-      'linklocal', 
-      'uniquelocal',
-      '10.0.0.0/8',
-      '172.16.0.0/12', 
-      '192.168.0.0/16'
-    ];
-  } else {
-    console.log('🔒 Trust proxy: Development mode (disabled)');
-    return false;
-  }
+  // Default behavior for reverse proxy setup
+  console.log('🔒 Trust proxy: Using reverse proxy defaults (trust all)');
+  return true; // Trust all proxies when behind nginx
 };
 
 app.set('trust proxy', configureTrustProxy());
@@ -140,7 +128,11 @@ app.use(helmet({
       frameSrc: ["'none'"],
     },
   },
-  hsts: false,
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true
+  }, // Enable HSTS for HTTPS
   crossOriginEmbedderPolicy: false
 }));
 

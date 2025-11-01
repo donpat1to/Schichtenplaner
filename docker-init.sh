@@ -3,17 +3,15 @@ set -e
 
 echo "🚀 Container Initialisierung gestartet..."
 
-# Funktion zum Generieren eines sicheren Secrets
 generate_secret() {
     length=$1
     tr -dc 'A-Za-z0-9!@#$%^&*()_+-=' < /dev/urandom | head -c $length
 }
 
-# Prüfe ob .env existiert
+# Create .env if it doesn't exist
 if [ ! -f /app/.env ]; then
     echo "📝 Erstelle .env Datei..."
     
-    # Verwende vorhandenes JWT_SECRET oder generiere ein neues
     if [ -z "$JWT_SECRET" ] || [ "$JWT_SECRET" = "your-secret-key-please-change" ]; then
         export JWT_SECRET=$(generate_secret 64)
         echo "🔑 Automatisch sicheres JWT Secret generiert"
@@ -21,30 +19,37 @@ if [ ! -f /app/.env ]; then
         echo "🔑 Verwende vorhandenes JWT Secret aus Umgebungsvariable"
     fi
     
-    # Erstelle .env aus Template mit envsubst
-    envsubst < /app/.env.template > /app/.env
-    echo "✅ .env Datei erstellt"
+    # Create .env with all proxy settings
+    cat > /app/.env << EOF
+NODE_ENV=production
+JWT_SECRET=${JWT_SECRET}
+TRUST_PROXY_ENABLED=${TRUST_PROXY_ENABLED:-true}
+TRUSTED_PROXY_IPS=${TRUSTED_PROXY_IPS:-172.0.0.0/8,10.0.0.0/8,192.168.0.0/16}
+HOSTNAME=${HOSTNAME:-localhost}
+EOF
     
+    echo "✅ .env Datei erstellt"
 else
     echo "ℹ️  .env Datei existiert bereits"
     
-    # Wenn .env existiert, aber JWT_SECRET Umgebungsvariable gesetzt ist, aktualisiere sie
+    # Update JWT_SECRET if provided
     if [ -n "$JWT_SECRET" ] && [ "$JWT_SECRET" != "your-secret-key-please-change" ]; then
         echo "🔑 Aktualisiere JWT Secret in .env Datei"
-        # Aktualisiere nur das JWT_SECRET in der .env Datei
         sed -i "s/^JWT_SECRET=.*/JWT_SECRET=$JWT_SECRET/" /app/.env
     fi
 fi
 
-# Validiere dass JWT_SECERT nicht der Standardwert ist
+# Validate JWT_SECRET
 if grep -q "JWT_SECRET=your-secret-key-please-change" /app/.env; then
     echo "❌ FEHLER: Standard JWT Secret in .env gefunden!"
     echo "❌ Bitte setzen Sie JWT_SECRET Umgebungsvariable"
     exit 1
 fi
 
-# Setze sichere Berechtigungen
 chmod 600 /app/.env
 
+echo "🔧 Proxy Configuration:"
+echo "   - TRUST_PROXY_ENABLED: ${TRUST_PROXY_ENABLED:-true}"
+echo "   - TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-172.0.0.0/8,10.0.0.0/8,192.168.0.0/16}"
 echo "🔧 Starte Anwendung..."
 exec "$@"
