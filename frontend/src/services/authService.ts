@@ -1,8 +1,5 @@
-// frontend/src/services/authService.ts - UPDATED
 import { Employee } from '../models/Employee';
-import { ErrorService } from './errorService';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+import { apiClient } from './apiClient';
 
 export interface LoginRequest {
   email: string;
@@ -25,31 +22,8 @@ export interface AuthResponse {
 class AuthService {
   private token: string | null = null;
 
-  private async handleApiResponse<T>(response: Response): Promise<T> {
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      const validationErrors = ErrorService.extractValidationErrors(errorData);
-
-      if (validationErrors.length > 0) {
-        const error = new Error('Validation failed');
-        (error as any).validationErrors = validationErrors;
-        throw error;
-      }
-
-      throw new Error(errorData.error || errorData.message || 'Authentication failed');
-    }
-
-    return response.json();
-  }
-
   async login(credentials: LoginRequest): Promise<AuthResponse> {
-    const response = await fetch(`${API_BASE_URL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(credentials)
-    });
-
-    const data = await this.handleApiResponse<AuthResponse>(response);
+    const data = await apiClient.post<AuthResponse>('/auth/login', credentials);
     this.token = data.token;
     localStorage.setItem('token', data.token);
     localStorage.setItem('employee', JSON.stringify(data.employee));
@@ -57,13 +31,7 @@ class AuthService {
   }
 
   async register(userData: RegisterRequest): Promise<AuthResponse> {
-    const response = await fetch(`${API_BASE_URL}/employees`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(userData)
-    });
-
-    const data = await this.handleApiResponse<AuthResponse>(response);
+    await apiClient.post('/employees', userData);
     return this.login({
       email: userData.email,
       password: userData.password
@@ -77,28 +45,16 @@ class AuthService {
 
   async fetchCurrentEmployee(): Promise<Employee | null> {
     const token = this.getToken();
-    if (!token) {
-      return null;
-    }
+    if (!token) return null;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/me`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const user = data.user;
-        localStorage.setItem('user', JSON.stringify(user));
-        return user;
-      }
+      const data = await apiClient.get<{ user: Employee }>('/auth/me');
+      localStorage.setItem('user', JSON.stringify(data.user));
+      return data.user;
     } catch (error) {
       console.error('Error fetching current user:', error);
+      return null;
     }
-
-    return null;
   }
 
   logout(): void {

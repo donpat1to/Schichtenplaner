@@ -51,39 +51,26 @@ if (isDevelopment) {
 }
 
 const configureStaticFiles = () => {
-  const possiblePaths = [
-    // Production path (Docker)
-    '/app/frontend-build',
-    // Development paths
-    path.resolve(__dirname, '../../frontend/dist'),
-    path.resolve(__dirname, '../frontend/dist'), // Added for monorepo
-    path.resolve(process.cwd(), 'frontend/dist'), // Current directory
-    path.resolve(process.cwd(), '../frontend/dist'), // Parent directory
-    // Vite dev server fallback
-    ...(isDevelopment ? [path.resolve(__dirname, '../../frontend')] : [])
-  ];
+  const staticConfig = {
+    maxAge: '1y',
+    etag: false,
+    immutable: true,
+    index: false
+  };
 
-  for (const testPath of possiblePaths) {
-    try {
-      if (fs.existsSync(testPath)) {
-        // In development, check for dist or direct source
-        if (fs.existsSync(path.join(testPath, 'index.html'))) {
-          console.log('✅ Found frontend at:', testPath);
-          app.use(express.static(testPath));
-          return testPath;
-        }
-        // For Vite dev server in development
-        else if (isDevelopment && fs.existsSync(path.join(testPath, 'index.html'))) {
-          console.log('🔧 Development: Serving frontend source from:', testPath);
-          app.use(express.static(testPath));
-          return testPath;
-        }
-      }
-    } catch (error) {
-      // Silent catch
-    }
+  // Serve frontend build
+  const frontendPath = '/app/frontend-build';
+  if (fs.existsSync(frontendPath)) {
+    console.log('✅ Serving frontend from:', frontendPath);
+    app.use(express.static(frontendPath, staticConfig));
   }
-  return null;
+
+  // Serve premium assets if available
+  const premiumPath = '/app/premium-dist';
+  if (fs.existsSync(premiumPath)) {
+    console.log('✅ Serving premium assets from:', premiumPath);
+    app.use('/premium-assets', express.static(premiumPath, staticConfig));
+  }
 };
 
 // Security configuration
@@ -225,7 +212,7 @@ const findFrontendBuildPath = (): string | null => {
 };
 
 const frontendBuildPath = findFrontendBuildPath();
-const staticPath = configureStaticFiles();
+configureStaticFiles();
 
 if (frontendBuildPath) {
   app.use(express.static(frontendBuildPath));
@@ -264,32 +251,26 @@ app.get('/', async (req, res) => {
 });
 
 // Client-side routing fallback
-app.get('*', async (req, res, next) => {
+app.get('*', (req, res, next) => {
+  // Skip API routes
   if (req.path.startsWith('/api/')) {
-    return next(); // API routes handled normally
+    return next();
   }
 
-  // Vite dev server handling
-  if (vite) {
-    try {
-      const template = fs.readFileSync(
-        path.resolve(__dirname, '../../frontend/index.html'),
-        'utf-8'
-      );
-      const html = await vite.transformIndexHtml(req.url, template);
-      return res.send(html);
-    } catch (error) {
-      console.error('Vite transformation error:', error);
-    }
+  // Skip file extensions (assets)
+  if (req.path.match(/\.[a-z0-9]+$/i)) {
+    return next();
   }
 
-  // Static file fallback
-  if (staticPath) {
-    const indexPath = path.join(staticPath, 'index.html');
-    return res.sendFile(indexPath);
+  // Serve React app for all other routes
+  const frontendPath = '/app/frontend-build';
+  const indexPath = path.join(frontendPath, 'index.html');
+  
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.status(404).send('Frontend not available');
   }
-
-  res.status(500).send('Frontend not available');
 });
 
 // Error handling

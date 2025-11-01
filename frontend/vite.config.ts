@@ -59,7 +59,13 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         '@': resolve(__dirname, './src'),
-        // ... other aliases
+        '@/components': resolve(__dirname, './src/components'),
+        '@/pages': resolve(__dirname, './src/pages'),
+        '@/contexts': resolve(__dirname, './src/contexts'),
+        '@/models': resolve(__dirname, './src/models'),
+        '@/utils': resolve(__dirname, './src/utils'),
+        '@/services': resolve(__dirname, './src/services'),
+        '@/design': resolve(__dirname, './src/design')
       }
     },
 

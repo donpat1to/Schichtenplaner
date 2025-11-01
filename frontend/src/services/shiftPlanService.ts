@@ -1,199 +1,115 @@
-// frontend/src/services/shiftPlanService.ts
-import { authService } from './authService';
 import { ShiftPlan, CreateShiftPlanRequest } from '../models/ShiftPlan';
-import { TEMPLATE_PRESETS } from '../models/defaults/shiftPlanDefaults';  
-
-const API_BASE_URL = '/api/shift-plans';
-
-// Helper function to get auth headers
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('token');
-  return {
-    'Content-Type': 'application/json',
-    ...(token && { 'Authorization': `Bearer ${token}` })
-  };
-};
-
-// Helper function to handle responses
-const handleResponse = async (response: Response) => {
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-  }
-  return response.json();
-};
+import { TEMPLATE_PRESETS } from '../models/defaults/shiftPlanDefaults';
+import { apiClient } from './apiClient';
 
 export const shiftPlanService = {
   async getShiftPlans(): Promise<ShiftPlan[]> {
-    const response = await fetch(API_BASE_URL, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...authService.getAuthHeaders()
-      }
-    });
-    
-    if (!response.ok) {
-      if (response.status === 401) {
-        authService.logout();
+    try {
+      const plans = await apiClient.get<ShiftPlan[]>('/shift-plans');
+      
+      // Ensure scheduledShifts is always an array
+      return plans.map((plan: any) => ({
+        ...plan,
+        scheduledShifts: plan.scheduledShifts || []
+      }));
+    } catch (error: any) {
+      if (error.statusCode === 401) {
+        // You might want to import and use authService here if needed
+        localStorage.removeItem('token');
+        localStorage.removeItem('employee');
         throw new Error('Nicht authorisiert - bitte erneut anmelden');
       }
       throw new Error('Fehler beim Laden der Schichtpläne');
     }
-    
-    const plans = await response.json();
-    
-    // Ensure scheduledShifts is always an array
-    return plans.map((plan: any) => ({
-      ...plan,
-      scheduledShifts: plan.scheduledShifts || []
-    }));
   },
 
   async getShiftPlan(id: string): Promise<ShiftPlan> {
-    const response = await fetch(`${API_BASE_URL}/${id}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...authService.getAuthHeaders()
-      }
-    });
-    
-    if (!response.ok) {
-      if (response.status === 401) {
-        authService.logout();
+    try {
+      return await apiClient.get<ShiftPlan>(`/shift-plans/${id}`);
+    } catch (error: any) {
+      if (error.statusCode === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('employee');
         throw new Error('Nicht authorisiert - bitte erneut anmelden');
       }
       throw new Error('Schichtplan nicht gefunden');
     }
-    
-    return await response.json();
   },
 
   async createShiftPlan(plan: CreateShiftPlanRequest): Promise<ShiftPlan> {
-    const response = await fetch(API_BASE_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...authService.getAuthHeaders()
-      },
-      body: JSON.stringify(plan)
-    });
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        authService.logout();
+    try {
+      return await apiClient.post<ShiftPlan>('/shift-plans', plan);
+    } catch (error: any) {
+      if (error.statusCode === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('employee');
         throw new Error('Nicht authorisiert - bitte erneut anmelden');
       }
       throw new Error('Fehler beim Erstellen des Schichtplans');
     }
-
-    return response.json();
   },
 
   async updateShiftPlan(id: string, plan: Partial<ShiftPlan>): Promise<ShiftPlan> {
-    const response = await fetch(`${API_BASE_URL}/${id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...authService.getAuthHeaders()
-      },
-      body: JSON.stringify(plan)
-    });
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        authService.logout();
+    try {
+      return await apiClient.put<ShiftPlan>(`/shift-plans/${id}`, plan);
+    } catch (error: any) {
+      if (error.statusCode === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('employee');
         throw new Error('Nicht authorisiert - bitte erneut anmelden');
       }
       throw new Error('Fehler beim Aktualisieren des Schichtplans');
     }
-
-    return response.json();
   },
 
   async deleteShiftPlan(id: string): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/${id}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        ...authService.getAuthHeaders()
-      }
-    });
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        authService.logout();
+    try {
+      await apiClient.delete(`/shift-plans/${id}`);
+    } catch (error: any) {
+      if (error.statusCode === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('employee');
         throw new Error('Nicht authorisiert - bitte erneut anmelden');
       }
       throw new Error('Fehler beim Löschen des Schichtplans');
     }
   },
 
-  // Get specific template or plan
-  getTemplate: async (id: string): Promise<ShiftPlan> => {
-    const response = await fetch(`${API_BASE_URL}/${id}`, {
-      headers: getAuthHeaders()
-    });
-    return handleResponse(response);
+  async getTemplate(id: string): Promise<ShiftPlan> {
+    return await apiClient.get<ShiftPlan>(`/shift-plans/${id}`);
   },
 
-
-  async regenerateScheduledShifts(planId: string):Promise<void> {
+  async regenerateScheduledShifts(planId: string): Promise<void> {
     try {
-        console.log('🔄 Attempting to regenerate scheduled shifts...');
-        
-        // You'll need to add this API endpoint to your backend
-        const response = await fetch(`${API_BASE_URL}/${planId}/regenerate-shifts`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-        });
-
-        if (response.ok) {
-        console.log('✅ Scheduled shifts regenerated');
-        } else {
-        console.error('❌ Failed to regenerate shifts');
-        }
+      console.log('🔄 Attempting to regenerate scheduled shifts...');
+      await apiClient.post(`/shift-plans/${planId}/regenerate-shifts`);
+      console.log('✅ Scheduled shifts regenerated');
     } catch (error) {
-        console.error('❌ Error regenerating shifts:', error);
+      console.error('❌ Error regenerating shifts:', error);
+      throw error;
     }
   },
 
-  // Create new plan
-  createPlan: async (data: CreateShiftPlanRequest): Promise<ShiftPlan> => {
-    const response = await fetch(`${API_BASE_URL}`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(data),
-    });
-    return handleResponse(response);
+  async createPlan(data: CreateShiftPlanRequest): Promise<ShiftPlan> {
+    return await apiClient.post<ShiftPlan>('/shift-plans', data);
   },
 
-  createFromPreset: async (data: {
+  async createFromPreset(data: {
     presetName: string;
     name: string;
     startDate: string;
     endDate: string;
     isTemplate?: boolean;
-  }): Promise<ShiftPlan> => {
-    const response = await fetch(`${API_BASE_URL}/from-preset`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(data),
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+  }): Promise<ShiftPlan> {
+    try {
+      return await apiClient.post<ShiftPlan>('/shift-plans/from-preset', data);
+    } catch (error: any) {
+      throw new Error(error.message || `HTTP error! status: ${error.statusCode}`);
     }
-    
-    return response.json();
   },
 
-  getTemplatePresets: async (): Promise<{name: string, label: string, description: string}[]> => {
-    // name = label
-     return Object.entries(TEMPLATE_PRESETS).map(([key, preset]) => ({
+  async getTemplatePresets(): Promise<{name: string, label: string, description: string}[]> {
+    return Object.entries(TEMPLATE_PRESETS).map(([key, preset]) => ({
       name: key,
       label: preset.name,
       description: preset.description
@@ -203,22 +119,8 @@ export const shiftPlanService = {
   async clearAssignments(planId: string): Promise<void> {
     try {
       console.log('🔄 Clearing assignments for plan:', planId);
-      
-      const response = await fetch(`${API_BASE_URL}/${planId}/clear-assignments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...authService.getAuthHeaders()
-        }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || `Failed to clear assignments: ${response.status}`);
-      }
-
+      await apiClient.post(`/shift-plans/${planId}/clear-assignments`);
       console.log('✅ Assignments cleared successfully');
-      
     } catch (error) {
       console.error('❌ Error clearing assignments:', error);
       throw error;
