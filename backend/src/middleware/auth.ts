@@ -52,3 +52,43 @@ export const requireRole = (roles: string[]) => {
     next();
   };
 };
+
+// Add this function to your existing auth.ts
+export const getClientIP = (req: Request): string => {
+  const trustedHeader = process.env.TRUSTED_PROXY_HEADER || 'x-forwarded-for';
+  const forwarded = req.headers[trustedHeader];
+  const realIp = req.headers['x-real-ip'];
+  
+  if (forwarded) {
+    if (Array.isArray(forwarded)) {
+      return forwarded[0].split(',')[0].trim();
+    } else if (typeof forwarded === 'string') {
+      return forwarded.split(',')[0].trim();
+    }
+  }
+  
+  if (realIp) {
+    return realIp.toString();
+  }
+  
+  return req.socket.remoteAddress || req.ip || 'unknown';
+};
+
+// Add IP-based security checks
+export const ipSecurityCheck = (req: AuthRequest, res: Response, next: NextFunction): void => {
+  const clientIP = getClientIP(req);
+  
+  // Log suspicious activity
+  const suspiciousPaths = ['/api/auth/login', '/api/auth/register'];
+  if (suspiciousPaths.includes(req.path)) {
+    console.log(`🔐 Auth attempt from IP: ${clientIP}, Path: ${req.path}`);
+  }
+  
+  // Block known malicious IPs (you can expand this)
+  const blockedIPs = process.env.BLOCKED_IPS?.split(',') || [];
+  if (blockedIPs.includes(clientIP)) {
+    console.warn(`🚨 Blocked request from banned IP: ${clientIP}`);
+    res.status(403).json({ error: 'Access denied' });
+    return;
+  }
+}

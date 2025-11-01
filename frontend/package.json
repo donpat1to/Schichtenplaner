@@ -28,7 +28,7 @@
     "framer-motion": "12.23.24"
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "vite dev",
     "build": "tsc && vite build",
     "preview": "vite preview"
   }

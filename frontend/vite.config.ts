@@ -14,14 +14,14 @@ export default defineConfig(({ mode }) => {
     NODE_ENV: mode,
     ENABLE_PRO: env.ENABLE_PRO || 'false',
     VITE_APP_TITLE: env.APP_TITLE || 'Shift Planning App',
-    VITE_API_URL: isProduction ? '/api' : 'http://localhost:3002/api',
+    VITE_API_URL: isProduction ? '/api' : '/api',
   }
 
   return {
     plugins: [react()],
 
-    server: isDevelopment ? undefined : {
-      port: 3002,
+    server: isDevelopment ? {
+      port: 3003,
       host: true,
       open: true,
       proxy: {
@@ -31,7 +31,7 @@ export default defineConfig(({ mode }) => {
           secure: false,
         }
       }
-    },
+    } : undefined,
 
     build: {
       outDir: 'dist',

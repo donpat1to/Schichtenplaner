@@ -14,7 +14,12 @@ import shiftPlanRoutes from './routes/shiftPlans.js';
 import setupRoutes from './routes/setup.js';
 import scheduledShifts from './routes/scheduledShifts.js';
 import schedulingRoutes from './routes/scheduling.js';
-import { authLimiter, apiLimiter } from './middleware/rateLimit.js';
+import { 
+  apiLimiter, 
+  authLimiter, 
+  expensiveEndpointLimiter
+} from './middleware/rateLimit.js';
+import { ipSecurityCheck as authIpCheck } from './middleware/auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,6 +27,8 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = 3002;
 const isDevelopment = process.env.NODE_ENV === 'development';
+
+app.use(authIpCheck);
 
 let vite: ViteDevServer | undefined;
 
@@ -79,8 +86,6 @@ const configureStaticFiles = () => {
   return null;
 };
 
-app.set('trust proxy', true);
-
 // Security configuration
 if (process.env.NODE_ENV === 'production') {
   console.info('Checking for JWT_SECRET');
@@ -90,6 +95,48 @@ if (process.env.NODE_ENV === 'production') {
     process.exit(1);
   }
 }
+
+const configureTrustProxy = (): string | string[] | boolean | number => {
+  const trustedProxyIps = process.env.TRUSTED_PROXY_IPS;
+  const trustProxyEnabled = process.env.TRUST_PROXY_ENABLED !== 'false'; // Default true for production
+
+  // If explicitly disabled
+  if (!trustProxyEnabled) {
+    console.log('🔒 Trust proxy: Disabled');
+    return false;
+  }
+
+  // If specific IPs are provided via environment variable
+  if (trustedProxyIps) {
+    console.log('🔒 Trust proxy: Using configured IPs:', trustedProxyIps);
+    
+    // Handle comma-separated list of IPs/CIDR ranges
+    if (trustedProxyIps.includes(',')) {
+      return trustedProxyIps.split(',').map(ip => ip.trim());
+    }
+    
+    // Handle single IP/CIDR
+    return trustedProxyIps.trim();
+  }
+
+  // Default behavior based on environment
+  if (process.env.NODE_ENV === 'production') {
+    console.log('🔒 Trust proxy: Using production defaults (private networks)');
+    return [
+      'loopback', 
+      'linklocal', 
+      'uniquelocal',
+      '10.0.0.0/8',
+      '172.16.0.0/12', 
+      '192.168.0.0/16'
+    ];
+  } else {
+    console.log('🔒 Trust proxy: Development mode (disabled)');
+    return false;
+  }
+};
+
+app.set('trust proxy', configureTrustProxy());
 
 // Security headers
 app.use(helmet({
@@ -123,9 +170,12 @@ app.use(express.json());
 
 // Rate limiting - weniger restriktiv in Development
 if (process.env.NODE_ENV === 'production') {
+  console.log('🔒 Applying production rate limiting');
   app.use('/api/', apiLimiter);
 } else {
-  console.log('🔧 Development: Rate limiting relaxed');
+  console.log('🔧 Development: Relaxed rate limiting applied');
+  // In development, you might want to be more permissive
+  app.use('/api/', apiLimiter);
 }
 
 // API Routes
@@ -134,7 +184,7 @@ app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/shift-plans', shiftPlanRoutes);
 app.use('/api/scheduled-shifts', scheduledShifts);
-app.use('/api/scheduling', schedulingRoutes);
+app.use('/api/scheduling', expensiveEndpointLimiter, schedulingRoutes);
 
 // Health route
 app.get('/api/health', (req: express.Request, res: express.Response) => {
@@ -279,7 +329,7 @@ const initializeApp = async () => {
       if (frontendBuildPath) {
         console.log(`📍 Frontend: http://localhost:${PORT}`);
       } else if (isDevelopment) {
-        console.log(`📍 Frontend (Vite): http://localhost:3002`);
+        console.log(`📍 Frontend (Vite): http://localhost:3003`);
       }
       console.log(`📍 API: http://localhost:${PORT}/api`);
     });
