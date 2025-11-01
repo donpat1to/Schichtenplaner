@@ -84,11 +84,5 @@ export const ipSecurityCheck = (req: AuthRequest, res: Response, next: NextFunct
     console.log(`🔐 Auth attempt from IP: ${clientIP}, Path: ${req.path}`);
   }
   
-  // Block known malicious IPs (you can expand this)
-  const blockedIPs = process.env.BLOCKED_IPS?.split(',') || [];
-  if (blockedIPs.includes(clientIP)) {
-    console.warn(`🚨 Blocked request from banned IP: ${clientIP}`);
-    res.status(403).json({ error: 'Access denied' });
-    return;
-  }
+  next();
 }

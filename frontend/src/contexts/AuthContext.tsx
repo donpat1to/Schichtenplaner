@@ -49,12 +49,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const checkSetupStatus = async (): Promise<void> => {
     try {
       console.log('🔍 Checking setup status...');
-      const response = await fetch(`${API_BASE_URL}/setup/status`);
+      const startTime = Date.now();
+      
+      const response = await fetch(`${API_BASE_URL}/setup/status`, {
+        signal: AbortSignal.timeout(5000) // 5 second timeout
+      });
+      
+      console.log(`✅ Setup status response received in ${Date.now() - startTime}ms`);
+      
       if (!response.ok) {
+        console.error('❌ Setup status response not OK:', response.status, response.statusText);
         throw new Error('Setup status check failed');
       }
+      
       const data = await response.json();
-      console.log('✅ Setup status response:', data);
+      console.log('✅ Setup status response data:', data);
       setNeedsSetup(data.needsSetup === true);
     } catch (error) {
       console.error('❌ Error checking setup status:', error);
@@ -95,7 +104,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  // Add the updateUser function
   const updateUser = (userData: Employee) => {
     console.log('🔄 Updating user in auth context:', userData);
     setUser(userData);
@@ -161,6 +169,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     initializeAuth();
   }, []);
 
+  const calculatedNeedsSetup = needsSetup === null ? true : needsSetup;
+
   const value: AuthContextType = {
     user,
     login,
@@ -168,7 +178,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     hasRole,
     loading,
     refreshUser,
-    needsSetup: needsSetup === null ? true : needsSetup,
+    needsSetup: calculatedNeedsSetup,
     checkSetupStatus,
     updateUser,
   };
