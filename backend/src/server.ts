@@ -113,6 +113,21 @@ const configureTrustProxy = (): string | string[] | boolean | number => {
 
 app.set('trust proxy', configureTrustProxy());
 
+app.use((req, res, next) => {
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+  const isHttps = protocol === 'https';
+  
+  // Add security warning for HTTP requests
+  if (!isHttps && process.env.NODE_ENV === 'production') {
+    res.setHeader('X-Security-Warning', 'This application is being accessed over HTTP. For secure communication, please use HTTPS.');
+    
+    // Log HTTP access in production
+    console.warn(`⚠️  HTTP access detected: ${req.method} ${req.path} from ${req.ip}`);
+  }
+  
+  next();
+});
+
 // Security headers
 app.use(helmet({
   contentSecurityPolicy: {
@@ -126,6 +141,7 @@ app.use(helmet({
       objectSrc: ["'none'"],
       mediaSrc: ["'self'"],
       frameSrc: ["'none'"],
+      upgradeInsecureRequests: process.env.FORCE_HTTPS === 'true' ? [] : null
     },
   },
   hsts: {

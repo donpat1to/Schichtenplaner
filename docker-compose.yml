@@ -6,17 +6,22 @@ services:
     image: ghcr.io/donpat1to/schichtenplaner:v1.0.0
     environment:
       - NODE_ENV=production
-      - JWT_SECRET=${JWT_SECRET:-your-secret-key-please-change}
-    ports:
-      - "3002:3002"
+      - JWT_SECRET=${JWT_SECRET}
+      - TRUST_PROXY_ENABLED=true
+      - TRUSTED_PROXY_IPS=nginx-proxy,172.0.0.0/8,10.0.0.0/8,192.168.0.0/16
+      - FORCE_HTTPS=${FORCE_HTTPS:-false}
+    networks:
+      - app-network
     volumes:
       - app_data:/app/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3002/api/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3002/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+    expose:
+      - "3002"
 
 volumes:
   app_data:

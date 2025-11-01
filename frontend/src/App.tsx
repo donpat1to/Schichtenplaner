@@ -16,6 +16,7 @@ import Settings from './pages/Settings/Settings';
 import Help from './pages/Help/Help';
 import Setup from './pages/Setup/Setup';
 import ErrorBoundary from './components/ErrorBoundary/ErrorBoundary';
+import SecurityWarning from './components/SecurityWarning/SecurityWarning';
 
 // Free Footer Link Pages (always available)
 import FAQ from './components/Layout/FooterLinks/FAQ/FAQ';
@@ -165,6 +166,7 @@ function App() {
       <NotificationProvider>
         <AuthProvider>
           <Router>
+            <SecurityWarning />
             <NotificationContainer />
             <AppContent />
           </Router>
