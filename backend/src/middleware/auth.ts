@@ -53,7 +53,6 @@ export const requireRole = (roles: string[]) => {
   };
 };
 
-// Add this function to your existing auth.ts
 export const getClientIP = (req: Request): string => {
   const trustedHeader = process.env.TRUSTED_PROXY_HEADER || 'x-forwarded-for';
   const forwarded = req.headers[trustedHeader];
@@ -74,7 +73,6 @@ export const getClientIP = (req: Request): string => {
   return req.socket.remoteAddress || req.ip || 'unknown';
 };
 
-// Add IP-based security checks
 export const ipSecurityCheck = (req: AuthRequest, res: Response, next: NextFunction): void => {
   const clientIP = getClientIP(req);
   

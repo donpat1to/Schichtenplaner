@@ -18,7 +18,7 @@ function generateEmail(firstname: string, lastname: string): string {
   return `${cleanFirstname}.${cleanLastname}@sp.de`;
 }
 
-// UPDATED: Validation for new employee model with employee types
+// Validation for new employee model with employee types
 export function validateEmployeeData(employee: CreateEmployeeRequest): string[] {
   const errors: string[] = [];
 
@@ -71,7 +71,7 @@ export function generateEmployeeEmail(firstname: string, lastname: string): stri
   return generateEmail(firstname, lastname);
 }
 
-// UPDATED: Business logic helpers for new employee types
+// Business logic helpers for new employee types
 export const isManager = (employee: Employee): boolean =>
   employee.employeeType === 'manager';
 
@@ -90,7 +90,7 @@ export const isInternal = (employee: Employee): boolean =>
 export const isExternal = (employee: Employee): boolean =>
   employee.employeeType === 'guest';
 
-// UPDATED: Trainee logic - now based on isTrainee field for personell type
+// Trainee logic - now based on isTrainee field for personell type
 export const isTrainee = (employee: Employee): boolean =>
   employee.employeeType === 'personell' && employee.isTrainee;
 
@@ -107,7 +107,7 @@ export const isMaintenance = (employee: Employee): boolean =>
 export const isUser = (employee: Employee): boolean =>
   employee.roles?.includes('user') || false;
 
-// UPDATED: Work alone permission - managers and experienced personell can work alone
+// Work alone permission - managers and experienced personell can work alone
 export const canEmployeeWorkAlone = (employee: Employee): boolean =>
   employee.canWorkAlone && (isManager(employee) || isExperienced(employee));
 
@@ -134,7 +134,7 @@ export function validateAvailabilityData(availability: Omit<EmployeeAvailability
   return errors;
 }
 
-// UPDATED: Helper to get employee type category
+// Helper to get employee type category
 export const getEmployeeCategory = (employee: Employee): 'internal' | 'external' => {
   return isInternal(employee) ? 'internal' : 'external';
 };

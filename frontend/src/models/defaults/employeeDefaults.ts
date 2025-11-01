@@ -102,7 +102,7 @@ export const AVAILABILITY_PREFERENCES = {
 } as const;
 
 // Default availability for new employees (all shifts unavailable as level 3)
-// UPDATED: Now uses shiftId instead of timeSlotId + dayOfWeek
+// Now uses shiftId instead of timeSlotId + dayOfWeek
 export function createDefaultAvailabilities(employeeId: string, planId: string, shiftIds: string[]): Omit<EmployeeAvailability, 'id'>[] {
   const availabilities: Omit<EmployeeAvailability, 'id'>[] = [];
   

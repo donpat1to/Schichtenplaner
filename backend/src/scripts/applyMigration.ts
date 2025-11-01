@@ -53,7 +53,7 @@ async function markMigrationAsApplied(migrationName: string) {
   );
 }
 
-// UPDATED: Function to handle schema changes for the new employee type system
+// Function to handle schema changes for the new employee type system
 async function applySchemaUpdates() {
   console.log('🔄 Applying schema updates for new employee type system...');
   
@@ -80,7 +80,7 @@ async function applySchemaUpdates() {
       PRAGMA table_info(employees)
     `);
     
-    // FIXED: Check for employee_type column (not roles column)
+    // Check for employee_type column (not roles column)
     const hasEmployeeType = employeesTableInfo.some((col: TableColumnInfo) => col.name === 'employee_type');
     const hasIsTrainee = employeesTableInfo.some((col: TableColumnInfo) => col.name === 'is_trainee');
     

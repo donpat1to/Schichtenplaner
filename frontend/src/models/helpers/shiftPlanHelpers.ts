@@ -78,7 +78,7 @@ export function calculateTotalRequiredEmployees(plan: ShiftPlan): number {
   return plan.shifts.reduce((total, shift) => total + shift.requiredEmployees, 0);
 }
 
-// UPDATED: Get scheduled shift by date and time slot
+// Get scheduled shift by date and time slot
 export function getScheduledShiftByDateAndTime(
   plan: ShiftPlan, 
   date: string, 

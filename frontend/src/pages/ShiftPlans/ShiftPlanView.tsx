@@ -1,4 +1,4 @@
-// frontend/src/pages/ShiftPlans/ShiftPlanView.tsx - UPDATED
+// frontend/src/pages/ShiftPlans/ShiftPlanView.tsx
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -1118,7 +1118,7 @@ const ShiftPlanView: React.FC = () => {
         </div>
       )}
 
-      {/* Assignment Preview Modal - FIXED CONDITION */}
+      {/* Assignment Preview Modal */}
       {(showAssignmentPreview || assignmentResult) && (
         <div style={{
           position: 'fixed',

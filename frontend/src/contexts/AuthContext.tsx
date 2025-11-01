@@ -52,7 +52,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const startTime = Date.now();
       
       const response = await fetch(`${API_BASE_URL}/setup/status`, {
-        signal: AbortSignal.timeout(5000) // 5 second timeout
+        signal: AbortSignal.timeout(5000)
       });
       
       console.log(`✅ Setup status response received in ${Date.now() - startTime}ms`);

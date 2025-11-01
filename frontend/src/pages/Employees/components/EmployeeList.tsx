@@ -15,7 +15,7 @@ interface EmployeeListProps {
 type SortField = 'name' | 'employeeType' | 'canWorkAlone' | 'role' | 'lastLogin';
 type SortDirection = 'asc' | 'desc';
 
-// FIXED: Use the actual employee types from the Employee interface
+// Use the actual employee types from the Employee interface
 type EmployeeType = 'manager' | 'personell' | 'apprentice' | 'guest';
 
 const EmployeeList: React.FC<EmployeeListProps> = ({
@@ -130,7 +130,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
   const getEmployeeTypeBadge = (type: EmployeeType, isTrainee: boolean = false) => {
     const config = EMPLOYEE_TYPE_CONFIG[type];
 
-    // FIXED: Updated color mapping for actual employee types
+    // Color mapping for actual employee types
     const bgColor =
       type === 'manager'
         ? '#fadbd8' // light red
@@ -326,7 +326,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
         </div>
 
         {sortedEmployees.map(employee => {
-          // FIXED: Type assertion to ensure type safety
+          // Type assertion to ensure type safety
           const employeeType = getEmployeeTypeBadge(employee.employeeType as EmployeeType, employee.isTrainee);
           const independence = getIndependenceBadge(employee.canWorkAlone);
           const roleInfo = getRoleBadge(employee.roles);

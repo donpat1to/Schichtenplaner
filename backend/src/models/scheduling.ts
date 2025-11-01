@@ -2,7 +2,7 @@
 import { Employee } from './Employee.js';
 import { ShiftPlan } from './ShiftPlan.js';
 
-// Updated Availability interface to match new schema
+// Availability interface
 export interface Availability {
   id: string;
   employeeId: string;

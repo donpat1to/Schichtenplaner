@@ -64,7 +64,7 @@ export const login = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'E-Mail und Passwort sind erforderlich' });
     }
 
-    // UPDATED: Get user from database with role from employee_roles table
+    // Get user from database with role from employee_roles table
     const user = await db.get<any>(
       `SELECT 
         e.id, e.email, e.password, e.firstname, e.lastname, 
@@ -155,7 +155,7 @@ export const getCurrentUser = async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Nicht authentifiziert' });
     }
 
-    // UPDATED: Get user with role from employee_roles table
+    // Get user with role from employee_roles table
     const user = await db.get<any>(
       `SELECT 
         e.id, e.email, e.firstname, e.lastname,
