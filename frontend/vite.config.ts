@@ -1,29 +1,18 @@
-// vite.config.ts
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { resolve } from 'path'
 
 export default defineConfig(({ mode }) => {
   const isProduction = mode === 'production'
-  const isDevelopment = mode === 'development'
-
   const env = loadEnv(mode, process.cwd(), '')
-
-  // 🆕 WICHTIG: Relative Pfade für Production
-  const clientEnv = {
-    NODE_ENV: mode,
-    ENABLE_PRO: env.ENABLE_PRO || 'false',
-    VITE_APP_TITLE: env.APP_TITLE || 'Shift Planning App',
-    VITE_API_URL: isProduction ? '/api' : '/api',
-  }
 
   return {
     plugins: [react()],
 
-    server: isDevelopment ? {
+    // Development proxy
+    server: isProduction ? undefined : {
       port: 3003,
       host: true,
-      open: true,
       proxy: {
         '/api': {
           target: 'http://localhost:3002',
@@ -31,45 +20,54 @@ export default defineConfig(({ mode }) => {
           secure: false,
         }
       }
-    } : undefined,
+    },
 
+    // Production build optimized for Express serving
     build: {
       outDir: 'dist',
-      sourcemap: isDevelopment,
-      base: isProduction ? '/' : '/',
+      sourcemap: false, // Disable in production
+      minify: 'terser',
+      
+      // Bundle optimization
       rollupOptions: {
         output: {
+          // Efficient chunking
+          manualChunks: {
+            vendor: ['react', 'react-dom', 'react-router-dom'],
+            utils: ['date-fns']
+          },
+          // Cache-friendly naming
           chunkFileNames: 'assets/[name]-[hash].js',
           entryFileNames: 'assets/[name]-[hash].js',
           assetFileNames: 'assets/[name]-[hash].[ext]',
         }
       },
-      minify: isProduction ? 'terser' : false,
-      terserOptions: isProduction ? {
+      
+      // Performance optimizations
+      terserOptions: {
         compress: {
           drop_console: true,
           drop_debugger: true,
-          pure_funcs: ['console.log', 'console.debug', 'console.info']
+          pure_funcs: ['console.log', 'console.debug']
         }
-      } : undefined,
+      },
+      
+      // Reduce chunking overhead
+      chunkSizeWarningLimit: 800
     },
 
     resolve: {
       alias: {
         '@': resolve(__dirname, './src'),
-        '@/components': resolve(__dirname, './src/components'),
-        '@/pages': resolve(__dirname, './src/pages'),
-        '@/contexts': resolve(__dirname, './src/contexts'),
-        '@/models': resolve(__dirname, './src/models'),
-        '@/utils': resolve(__dirname, './src/utils'),
-        '@/services': resolve(__dirname, './src/services'),
-        '@/design': resolve(__dirname, './src/design')
+        // ... other aliases
       }
     },
 
-    define: Object.keys(clientEnv).reduce((acc, key) => {
-      acc[`import.meta.env.${key}`] = JSON.stringify(clientEnv[key])
-      return acc
-    }, {} as Record<string, string>)
+    // Environment variables
+    define: {
+      'import.meta.env.VITE_API_URL': JSON.stringify(isProduction ? '/api' : '/api'),
+      'import.meta.env.ENABLE_PRO': JSON.stringify(env.ENABLE_PRO || 'false'),
+      'import.meta.env.NODE_ENV': JSON.stringify(mode)
+    }
   }
 })
