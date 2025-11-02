@@ -57,6 +57,7 @@ yarn-error.log*
 # Build outputs
 dist/
 build/
+package-lock.json
 
 # Environment variables
 .env
