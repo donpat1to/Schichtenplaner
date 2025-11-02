@@ -85,7 +85,7 @@ jobs:
 
       - name: Create package-lock.json
         working-directory: .
-        run: RUN npm i --package-lock-only
+        run: npm i --package-lock-only
 
       - name: Install backend dependencies
         working-directory: ./backend
