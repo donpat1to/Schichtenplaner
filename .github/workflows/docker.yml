@@ -83,6 +83,10 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Create package-lock.json
+        working-directory: .
+        run: RUN npm i --package-lock-only
+
       - name: Install backend dependencies
         working-directory: ./backend
         run: npm ci
