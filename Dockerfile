@@ -16,7 +16,8 @@ COPY tsconfig.base.json ./
 COPY ecosystem.config.cjs ./
 
 # Install root dependencies
-RUN npm install --only=production
+#RUN npm install --only=production
+RUN npm ci
 
 # Copy workspace files
 COPY backend/ ./backend/
@@ -30,7 +31,7 @@ RUN npm install --workspace=frontend
 RUN npm run build --only=production --workspace=backend
 
 # Build frontend
-RUN npm run build --workspace=frontend
+RUN npm run build --only=production --workspace=frontend
 
 # Verify Python and OR-Tools installation
 RUN python -c "from ortools.sat.python import cp_model; print('OR-Tools installed successfully')"
