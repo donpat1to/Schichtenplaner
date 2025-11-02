@@ -17,6 +17,7 @@ COPY ecosystem.config.cjs ./
 
 # Install root dependencies
 #RUN npm install --only=production
+RUN npm i --package-lock-only
 RUN npm ci
 
 # Copy workspace files
