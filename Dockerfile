@@ -27,9 +27,6 @@ RUN npm run build --only=production --workspace=backend
 # Build frontend
 RUN npm run build --only=production --workspace=frontend
 
-# Verify Python and OR-Tools installation
-RUN python -c "from ortools.sat.python import cp_model; print('OR-Tools installed successfully')"
-
 # Production stage
 FROM node:20-bookworm
 
@@ -52,7 +49,10 @@ COPY --from=builder /app/frontend/dist/ ./frontend-build/
 COPY --from=builder /app/ecosystem.config.cjs ./
 
 COPY --from=builder /app/backend/src/database/ ./dist/database/
-COPY --from=builder /app/backend/src/database/ ./database/
+# should be obsolete with the line above
+#COPY --from=builder /app/backend/src/database/ ./database/
+
+COPY --from=builder /app/backend/src/python-scripts/ ./python-scripts/
 
 # Install Python + OR-Tools
 RUN apt-get update && apt-get install -y python3 python3-pip build-essential \
@@ -60,6 +60,9 @@ RUN apt-get update && apt-get install -y python3 python3-pip build-essential \
 
 # Create symlink so python3 is callable as python
 RUN ln -sf /usr/bin/python3 /usr/bin/python
+
+# Verify Python and OR-Tools installation
+RUN python -c "from ortools.sat.python import cp_model; print('OR-Tools installed successfully')"
 
 # Copy init script and env template
 COPY docker-init.sh /usr/local/bin/
