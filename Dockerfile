@@ -3,13 +3,6 @@ FROM node:20-bullseye AS builder
 
 WORKDIR /app
 
-# Install Python + OR-Tools
-RUN apt-get update && apt-get install -y python3 python3-pip build-essential \
-  && pip install --no-cache-dir ortools
-
-# Create symlink so python3 is callable as python
-RUN ln -sf /usr/bin/python3 /usr/bin/python
-
 # Copy root package files first
 COPY package*.json ./
 COPY tsconfig.base.json ./
@@ -60,6 +53,13 @@ COPY --from=builder /app/ecosystem.config.cjs ./
 
 COPY --from=builder /app/backend/src/database/ ./dist/database/
 COPY --from=builder /app/backend/src/database/ ./database/
+
+# Install Python + OR-Tools
+RUN apt-get update && apt-get install -y python3 python3-pip build-essential \
+  && pip install --no-cache-dir ortools
+
+# Create symlink so python3 is callable as python
+RUN ln -sf /usr/bin/python3 /usr/bin/python
 
 # Copy init script and env template
 COPY docker-init.sh /usr/local/bin/
