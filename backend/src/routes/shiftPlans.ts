@@ -7,7 +7,9 @@ import {
   updateShiftPlan, 
   deleteShiftPlan,
   createFromPreset,
-  clearAssignments
+  clearAssignments,
+  exportShiftPlanToExcel,
+  exportShiftPlanToPDF
 } from '../controllers/shiftPlanController.js';
 import { 
   validateShiftPlan, 
@@ -29,5 +31,8 @@ router.post('/from-preset', validateCreateFromPreset, handleValidationErrors, re
 router.put('/:id', validateId, validateShiftPlanUpdate, handleValidationErrors, requireRole(['admin', 'maintenance']), updateShiftPlan);
 router.delete('/:id', validateId, handleValidationErrors, requireRole(['admin', 'maintenance']), deleteShiftPlan);
 router.post('/:id/clear-assignments', validateId, handleValidationErrors, requireRole(['admin', 'maintenance']), clearAssignments);
+
+router.get('/:id/export/excel', validateId, handleValidationErrors, requireRole(['admin', 'maintenance']), exportShiftPlanToExcel);
+router.get('/:id/export/pdf', validateId, handleValidationErrors, requireRole(['admin', 'maintenance']), exportShiftPlanToPDF);
 
 export default router;

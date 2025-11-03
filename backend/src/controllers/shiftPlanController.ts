@@ -592,6 +592,14 @@ async function getShiftPlanById(planId: string): Promise<any> {
     `, [planId]);
   }
 
+  // NEW: Load employees for export functionality
+  const employees = await db.all<any>(`
+    SELECT id, firstname, lastname, email, role, isActive 
+    FROM employees 
+    WHERE isActive = 1
+    ORDER BY firstname, lastname
+  `, []);
+
   return {
     ...plan,
     isTemplate: plan.is_template === 1,
@@ -629,6 +637,14 @@ async function getShiftPlanById(planId: string): Promise<any> {
       requiredEmployees: shift.required_employees,
       assignedEmployees: JSON.parse(shift.assigned_employees || '[]'),
       timeSlotName: shift.time_slot_name
+    })),
+    employees: employees.map(emp => ({
+      id: emp.id,
+      firstname: emp.firstname,
+      lastname: emp.lastname,
+      email: emp.email,
+      role: emp.role,
+      isActive: emp.isActive === 1
     }))
   };
 }
@@ -933,3 +949,246 @@ export const clearAssignments = async (req: Request, res: Response): Promise<voi
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+export const exportShiftPlanToExcel = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    console.log('📊 Starting Excel export for plan:', id);
+
+    // Check if plan exists
+    const plan = await getShiftPlanById(id);
+    if (!plan) {
+      res.status(404).json({ error: 'Shift plan not found' });
+      return;
+    }
+
+    if (plan.status !== 'published') {
+      res.status(400).json({ error: 'Can only export published shift plans' });
+      return;
+    }
+
+    // For now, return a simple CSV as placeholder
+    // In a real implementation, you would use a library like exceljs or xlsx
+    
+    const csvData = generateCSVFromPlan(plan);
+    
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="Schichtplan_${plan.name}_${new Date().toISOString().split('T')[0]}.xlsx"`);
+    
+    // For now, return CSV as placeholder - replace with actual Excel generation
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="Schichtplan_${plan.name}_${new Date().toISOString().split('T')[0]}.csv"`);
+    res.send(csvData);
+
+    console.log('✅ Excel export completed for plan:', id);
+
+  } catch (error) {
+    console.error('❌ Error exporting to Excel:', error);
+    res.status(500).json({ error: 'Internal server error during Excel export' });
+  }
+};
+
+export const exportShiftPlanToPDF = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    console.log('📄 Starting PDF export for plan:', id);
+
+    // Check if plan exists
+    const plan = await getShiftPlanById(id);
+    if (!plan) {
+      res.status(404).json({ error: 'Shift plan not found' });
+      return;
+    }
+
+    if (plan.status !== 'published') {
+      res.status(400).json({ error: 'Can only export published shift plans' });
+      return;
+    }
+
+    // For now, return a simple HTML as placeholder
+    // In a real implementation, you would use a library like pdfkit, puppeteer, or html-pdf
+    
+    const pdfData = generateHTMLFromPlan(plan);
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Schichtplan_${plan.name}_${new Date().toISOString().split('T')[0]}.pdf"`);
+    
+    // For now, return HTML as placeholder - replace with actual PDF generation
+    res.setHeader('Content-Type', 'text/html');
+    res.setHeader('Content-Disposition', `attachment; filename="Schichtplan_${plan.name}_${new Date().toISOString().split('T')[0]}.html"`);
+    res.send(pdfData);
+
+    console.log('✅ PDF export completed for plan:', id);
+
+  } catch (error) {
+    console.error('❌ Error exporting to PDF:', error);
+    res.status(500).json({ error: 'Internal server error during PDF export' });
+  }
+};
+
+// Helper function to generate CSV data
+function generateCSVFromPlan(plan: any): string {
+  const headers = ['Datum', 'Tag', 'Schicht', 'Zeit', 'Zugewiesene Mitarbeiter', 'Benötigte Mitarbeiter'];
+  const rows: string[] = [headers.join(';')];
+
+  // Group scheduled shifts by date for better organization
+  const shiftsByDate = new Map();
+  
+  plan.scheduledShifts?.forEach((scheduledShift: any) => {
+    const date = scheduledShift.date;
+    if (!shiftsByDate.has(date)) {
+      shiftsByDate.set(date, []);
+    }
+    shiftsByDate.get(date).push(scheduledShift);
+  });
+
+  // Sort dates chronologically
+  const sortedDates = Array.from(shiftsByDate.keys()).sort();
+
+  sortedDates.forEach(date => {
+    const dateShifts = shiftsByDate.get(date);
+    const dateObj = new Date(date);
+    const dayName = getGermanDayName(dateObj.getDay());
+
+    dateShifts.forEach((scheduledShift: any) => {
+      const timeSlot = plan.timeSlots?.find((ts: any) => ts.id === scheduledShift.timeSlotId);
+      const employeeNames = scheduledShift.assignedEmployees.map((empId: string) => {
+        const employee = plan.employees?.find((emp: any) => emp.id === empId);
+        return employee ? `${employee.firstname} ${employee.lastname}` : 'Unbekannt';
+      }).join(', ');
+
+      const row = [
+        date,
+        dayName,
+        timeSlot?.name || 'Unbekannt',
+        timeSlot ? `${timeSlot.startTime} - ${timeSlot.endTime}` : '',
+        employeeNames || 'Keine Zuweisungen',
+        scheduledShift.requiredEmployees || 2
+      ].map(field => `"${field}"`).join(';');
+
+      rows.push(row);
+    });
+  });
+
+  // Add plan summary
+  rows.push('');
+  rows.push('Plan Zusammenfassung');
+  rows.push(`"Plan Name";"${plan.name}"`);
+  rows.push(`"Zeitraum";"${plan.startDate} bis ${plan.endDate}"`);
+  rows.push(`"Status";"${plan.status}"`);
+  rows.push(`"Erstellt von";"${plan.created_by_name || 'Unbekannt'}"`);
+  rows.push(`"Erstellt am";"${plan.createdAt}"`);
+  rows.push(`"Anzahl Schichten";"${plan.scheduledShifts?.length || 0}"`);
+
+  return rows.join('\n');
+}
+
+// Helper function to generate HTML data
+function generateHTMLFromPlan(plan: any): string {
+  const shiftsByDate = new Map();
+  
+  plan.scheduledShifts?.forEach((scheduledShift: any) => {
+    const date = scheduledShift.date;
+    if (!shiftsByDate.has(date)) {
+      shiftsByDate.set(date, []);
+    }
+    shiftsByDate.get(date).push(scheduledShift);
+  });
+
+  const sortedDates = Array.from(shiftsByDate.keys()).sort();
+
+  let html = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Schichtplan: ${plan.name}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { color: #2c3e50; }
+        h2 { color: #34495e; margin-top: 30px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #f2f2f2; font-weight: bold; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        .summary { background-color: #e8f4fd; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+        .date-section { margin-bottom: 30px; }
+    </style>
+</head>
+<body>
+    <h1>Schichtplan: ${plan.name}</h1>
+    
+    <div class="summary">
+        <h2>Plan Informationen</h2>
+        <p><strong>Zeitraum:</strong> ${plan.startDate} bis ${plan.endDate}</p>
+        <p><strong>Status:</strong> ${plan.status}</p>
+        <p><strong>Erstellt von:</strong> ${plan.created_by_name || 'Unbekannt'}</p>
+        <p><strong>Erstellt am:</strong> ${plan.createdAt}</p>
+        <p><strong>Anzahl Schichten:</strong> ${plan.scheduledShifts?.length || 0}</p>
+    </div>
+
+    <h2>Schichtzuweisungen</h2>
+  `;
+
+  sortedDates.forEach(date => {
+    const dateShifts = shiftsByDate.get(date);
+    const dateObj = new Date(date);
+    const dayName = getGermanDayName(dateObj.getDay());
+    
+    html += `
+    <div class="date-section">
+        <h3>${date} (${dayName})</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Schicht</th>
+                    <th>Zeit</th>
+                    <th>Zugewiesene Mitarbeiter</th>
+                    <th>Benötigte Mitarbeiter</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    dateShifts.forEach((scheduledShift: any) => {
+      const timeSlot = plan.timeSlots?.find((ts: any) => ts.id === scheduledShift.timeSlotId);
+      const employeeNames = scheduledShift.assignedEmployees.map((empId: string) => {
+        const employee = plan.employees?.find((emp: any) => emp.id === empId);
+        return employee ? `${employee.firstname} ${employee.lastname}` : 'Unbekannt';
+      }).join(', ') || 'Keine Zuweisungen';
+
+      html += `
+                <tr>
+                    <td>${timeSlot?.name || 'Unbekannt'}</td>
+                    <td>${timeSlot ? `${timeSlot.startTime} - ${timeSlot.endTime}` : ''}</td>
+                    <td>${employeeNames}</td>
+                    <td>${scheduledShift.requiredEmployees || 2}</td>
+                </tr>
+      `;
+    });
+
+    html += `
+            </tbody>
+        </table>
+    </div>
+    `;
+  });
+
+  html += `
+    <div style="margin-top: 40px; font-size: 12px; color: #666; text-align: center;">
+        Erstellt am: ${new Date().toLocaleString('de-DE')}
+    </div>
+</body>
+</html>
+  `;
+
+  return html;
+}
+
+// Helper function to get German day names
+function getGermanDayName(dayIndex: number): string {
+  const days = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+  return days[dayIndex];
+}
