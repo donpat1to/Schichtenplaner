@@ -592,12 +592,24 @@ async function getShiftPlanById(planId: string): Promise<any> {
     `, [planId]);
   }
 
-  // NEW: Load employees for export functionality
+  // Load employees without role column + join with employee_roles
   const employees = await db.all<any>(`
-    SELECT id, firstname, lastname, email, role, isActive 
-    FROM employees 
-    WHERE isActive = 1
-    ORDER BY firstname, lastname
+    SELECT 
+      e.id, 
+      e.firstname, 
+      e.lastname, 
+      e.email, 
+      e.employee_type,
+      e.contract_type,
+      e.can_work_alone,
+      e.is_trainee,
+      e.is_active as isActive,
+      GROUP_CONCAT(er.role) as roles
+    FROM employees e
+    LEFT JOIN employee_roles er ON e.id = er.employee_id
+    WHERE e.is_active = 1
+    GROUP BY e.id
+    ORDER BY e.firstname, e.lastname
   `, []);
 
   return {
@@ -638,13 +650,18 @@ async function getShiftPlanById(planId: string): Promise<any> {
       assignedEmployees: JSON.parse(shift.assigned_employees || '[]'),
       timeSlotName: shift.time_slot_name
     })),
+    // Include employees with proper role handling
     employees: employees.map(emp => ({
       id: emp.id,
       firstname: emp.firstname,
       lastname: emp.lastname,
       email: emp.email,
-      role: emp.role,
-      isActive: emp.isActive === 1
+      employeeType: emp.employee_type,
+      contractType: emp.contract_type,
+      canWorkAlone: emp.can_work_alone === 1,
+      isTrainee: emp.is_trainee === 1,
+      isActive: emp.isActive === 1,
+      roles: emp.roles ? emp.roles.split(',') : [] // Convert comma-separated roles to array
     }))
   };
 }
