@@ -10,6 +10,7 @@ import { ShiftPlan, TimeSlot, ScheduledShift } from '../../models/ShiftPlan';
 import { Employee, EmployeeAvailability } from '../../models/Employee';
 import { useNotification } from '../../contexts/NotificationContext';
 import { formatDate, formatTime } from '../../utils/foramatters';
+import { saveAs } from 'file-saver';
 
 // Local interface extensions (same as AvailabilityManager)
 interface ExtendedTimeSlot extends TimeSlot {
@@ -54,6 +55,7 @@ const ShiftPlanView: React.FC = () => {
   const [scheduledShifts, setScheduledShifts] = useState<ScheduledShift[]>([]);
   const [showAssignmentPreview, setShowAssignmentPreview] = useState(false);
   const [recreating, setRecreating] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     loadShiftPlanData();
@@ -240,6 +242,66 @@ const ShiftPlanView: React.FC = () => {
     };
   };
 
+  const handleExportExcel = async () => {
+    if (!shiftPlan) return;
+
+    try {
+      setExporting(true);
+      
+      // Call the export service
+      const blob = await shiftPlanService.exportShiftPlanToExcel(shiftPlan.id);
+      
+      // Use file-saver to download the file
+      saveAs(blob, `Schichtplan_${shiftPlan.name}_${new Date().toISOString().split('T')[0]}.xlsx`);
+      
+      showNotification({
+        type: 'success',
+        title: 'Export erfolgreich',
+        message: 'Der Schichtplan wurde als Excel-Datei exportiert.'
+      });
+      
+    } catch (error) {
+      console.error('Error exporting to Excel:', error);
+      showNotification({
+        type: 'error',
+        title: 'Export fehlgeschlagen',
+        message: 'Der Excel-Export konnte nicht durchgeführt werden.'
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportPDF = async () => {
+    if (!shiftPlan) return;
+
+    try {
+      setExporting(true);
+      
+      // Call the PDF export service
+      const blob = await shiftPlanService.exportShiftPlanToPDF(shiftPlan.id);
+      
+      // Use file-saver to download the file
+      saveAs(blob, `Schichtplan_${shiftPlan.name}_${new Date().toISOString().split('T')[0]}.pdf`);
+      
+      showNotification({
+        type: 'success',
+        title: 'Export erfolgreich',
+        message: 'Der Schichtplan wurde als PDF exportiert.'
+      });
+      
+    } catch (error) {
+      console.error('Error exporting to PDF:', error);
+      showNotification({
+        type: 'error',
+        title: 'Export fehlgeschlagen',
+        message: 'Der PDF-Export konnte nicht durchgeführt werden.'
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const loadShiftPlanData = async () => {
     if (!id) return;
     
@@ -399,12 +461,12 @@ const ShiftPlanView: React.FC = () => {
       console.log('- Scheduled Shifts:', scheduledShifts.length);
 
       // DEBUG: Show shift pattern IDs
-      if (shiftPlan.shifts) {
+      /*if (shiftPlan.shifts) {
         console.log('📋 SHIFT PATTERN IDs:');
         shiftPlan.shifts.forEach((shift, index) => {
           console.log(`   ${index + 1}. ${shift.id} (Day ${shift.dayOfWeek}, TimeSlot ${shift.timeSlotId})`);
         });
-      }
+      }*/
 
       const constraints = {
         enforceNoTraineeAlone: true,
@@ -648,6 +710,20 @@ const ShiftPlanView: React.FC = () => {
     });
 
     return employeesWithoutAvailabilities.length === 0;
+  };
+
+  const canPublishAssignment = (): boolean => {
+    if (!assignmentResult) return false;
+    
+    // Check if assignment was successful
+    if (assignmentResult.success === false) return false;
+    
+    // Check if there are any critical violations
+    const hasCriticalViolations = assignmentResult.violations.some(v => 
+      v.includes('ERROR:') || v.includes('KRITISCH:')
+    );
+    
+    return !hasCriticalViolations;
   };
 
   const getAvailabilityStatus = () => {
@@ -1005,7 +1081,50 @@ const ShiftPlanView: React.FC = () => {
           </div>
         </div>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            {shiftPlan.status === 'published' && hasRole(['admin', 'maintenance']) && (
+          {shiftPlan.status === 'published' && hasRole(['admin', 'maintenance']) && (
+            <>
+              <button
+                onClick={handleExportExcel}
+                disabled={exporting}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#27ae60',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: exporting ? 'not-allowed' : 'pointer',
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                {exporting ? '🔄' : '📊'} {exporting ? 'Exportiert...' : 'Excel Export'}
+              </button>
+              
+              <button
+                onClick={handleExportPDF}
+                disabled={exporting}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#e74c3c',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: exporting ? 'not-allowed' : 'pointer',
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                {exporting ? '🔄' : '📄'} {exporting ? 'Exportiert...' : 'PDF Export'}
+              </button>
+            </>
+          )}
+          
+          {/* Your existing "Zuweisungen neu berechnen" button */}
+          {shiftPlan.status === 'published' && hasRole(['admin', 'maintenance']) && (
             <button
               onClick={handleRecreateAssignments}
               disabled={recreating}
@@ -1197,15 +1316,13 @@ const ShiftPlanView: React.FC = () => {
               </div>
             )}
               
-            {/* KORRIGIERTE ZUSAMMENFASSUNG */}
+            {/* ZUSAMMENFASSUNG */}
             {assignmentResult && (
               <div style={{ marginBottom: '20px' }}>
                 <h4>Zusammenfassung:</h4>
                 
                 {/* Entscheidung basierend auf tatsächlichen kritischen Problemen */}
-                {assignmentResult.violations.filter(v => 
-                  v.includes('ERROR:') || v.includes('❌ KRITISCH:')
-                ).length === 0 ? (
+                {(assignmentResult.violations.length === 0) || assignmentResult.success == true ? (
                   <div style={{
                     padding: '15px',
                     backgroundColor: '#d4edda',
@@ -1291,29 +1408,21 @@ const ShiftPlanView: React.FC = () => {
               {/* KORRIGIERTER BUTTON MIT TYPESCRIPT-FIX */}
               <button
                 onClick={handlePublish}
-                disabled={publishing || (assignmentResult ? assignmentResult.violations.filter(v => 
-                  v.includes('ERROR:') || v.includes('❌ KRITISCH:')
-                ).length > 0 : true)}
+                disabled={publishing || !canPublishAssignment()}
                 style={{
                   padding: '10px 20px',
-                  backgroundColor: assignmentResult ? (assignmentResult.violations.filter(v => 
-                    v.includes('ERROR:') || v.includes('❌ KRITISCH:')
-                  ).length === 0 ? '#2ecc71' : '#95a5a6') : '#95a5a6',
+                  backgroundColor: canPublishAssignment() ? '#2ecc71' : '#95a5a6',
                   color: 'white',
                   border: 'none',
                   borderRadius: '4px',
-                  cursor: assignmentResult ? (assignmentResult.violations.filter(v => 
-                    v.includes('ERROR:') || v.includes('❌ KRITISCH:')
-                  ).length === 0 ? 'pointer' : 'not-allowed') : 'not-allowed',
+                  cursor: canPublishAssignment() ? 'pointer' : 'not-allowed',
                   fontWeight: 'bold',
                   fontSize: '16px'
                 }}
               >
                 {publishing ? 'Veröffentliche...' : (
                   assignmentResult ? (
-                    assignmentResult.violations.filter(v => 
-                      v.includes('ERROR:') || v.includes('❌ KRITISCH:')
-                    ).length === 0 
+                    canPublishAssignment() 
                       ? 'Schichtplan veröffentlichen' 
                       : 'Kritische Probleme müssen behoben werden'
                   ) : 'Lade Zuordnungen...'

@@ -26,7 +26,7 @@ export class ApiClient {
     return token ? { 'Authorization': `Bearer ${token}` } : {};
   }
 
-  private async handleApiResponse<T>(response: Response): Promise<T> {
+  private async handleApiResponse<T>(response: Response, responseType: 'json' | 'blob' = 'json'): Promise<T> {
     if (!response.ok) {
       let errorData;
       
@@ -61,7 +61,12 @@ export class ApiClient {
       );
     }
 
-    // For successful responses, try to parse as JSON
+    // Handle blob responses (for file downloads)
+    if (responseType === 'blob') {
+      return response.blob() as Promise<T>;
+    }
+
+    // For successful JSON responses, try to parse as JSON
     try {
       const responseText = await response.text();
       return responseText ? JSON.parse(responseText) : {} as T;
@@ -71,7 +76,7 @@ export class ApiClient {
     }
   }
 
-  async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  async request<T>(endpoint: string, options: RequestInit = {}, responseType: 'json' | 'blob' = 'json'): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
     
     const config: RequestInit = {
@@ -85,7 +90,7 @@ export class ApiClient {
 
     try {
       const response = await fetch(url, config);
-      return await this.handleApiResponse<T>(response);
+      return await this.handleApiResponse<T>(response, responseType);
     } catch (error) {
       // Re-throw the error to be caught by useBackendValidation
       if (error instanceof ApiError) {

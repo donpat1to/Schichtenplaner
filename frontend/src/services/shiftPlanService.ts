@@ -126,4 +126,60 @@ export const shiftPlanService = {
       throw error;
     }
   },
+
+  async exportShiftPlanToExcel(planId: string): Promise<Blob> {
+    try {
+      console.log('📊 Exporting shift plan to Excel:', planId);
+      
+      // Use the apiClient with blob response handling
+      const blob = await apiClient.request<Blob>(`/shift-plans/${planId}/export/excel`, {
+        method: 'GET',
+      }, 'blob');
+      
+      console.log('✅ Excel export successful');
+      return blob;
+    } catch (error: any) {
+      console.error('❌ Error exporting to Excel:', error);
+      
+      if (error.statusCode === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('employee');
+        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+      }
+      
+      if (error.statusCode === 404) {
+        throw new Error('Schichtplan nicht gefunden');
+      }
+      
+      throw new Error('Fehler beim Excel-Export des Schichtplans');
+    }
+  },
+
+  async exportShiftPlanToPDF(planId: string): Promise<Blob> {
+    try {
+      console.log('📄 Exporting shift plan to PDF:', planId);
+      
+      // Use the apiClient with blob response handling
+      const blob = await apiClient.request<Blob>(`/shift-plans/${planId}/export/pdf`, {
+        method: 'GET',
+      }, 'blob');
+      
+      console.log('✅ PDF export successful');
+      return blob;
+    } catch (error: any) {
+      console.error('❌ Error exporting to PDF:', error);
+      
+      if (error.statusCode === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('employee');
+        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+      }
+      
+      if (error.statusCode === 404) {
+        throw new Error('Schichtplan nicht gefunden');
+      }
+      
+      throw new Error('Fehler beim PDF-Export des Schichtplans');
+    }
+  },
 };
