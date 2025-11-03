@@ -1,5 +1,5 @@
 # Single stage build for workspaces
-FROM node:20-bullseye AS builder
+FROM node:20-bookworm AS builder
 
 WORKDIR /app
 
@@ -28,7 +28,7 @@ RUN npm run build --only=production --workspace=backend
 RUN npm run build --only=production --workspace=frontend
 
 # Production stage
-FROM node:20-bullseye
+FROM node:20-bookworm
 
 WORKDIR /app
 
@@ -56,7 +56,7 @@ COPY --from=builder /app/backend/src/python-scripts/ ./python-scripts/
 
 # Install Python + OR-Tools
 RUN apt-get update && apt-get install -y python3 python3-pip build-essential \
-  && pip install --no-cache-dir ortools
+  && pip install --no-cache-dir --break-system-packages ortools
 
 # Create symlink so python3 is callable as python
 RUN ln -sf /usr/bin/python3 /usr/bin/python
