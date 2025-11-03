@@ -28,7 +28,7 @@ RUN npm run build --only=production --workspace=backend
 RUN npm run build --only=production --workspace=frontend
 
 # Production stage
-FROM node:20-bookworm
+FROM node:20-bullseye
 
 WORKDIR /app
 
