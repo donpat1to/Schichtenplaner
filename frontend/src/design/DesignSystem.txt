@@ -19,6 +19,8 @@ export const designTokens = {
       9: '#cda8f0',
       10: '#ebd7fa',
     },
+
+    manager: '#CC0000',
     
     // Semantic Colors
     primary: '#51258f',
