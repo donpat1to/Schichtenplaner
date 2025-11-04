@@ -2,12 +2,14 @@
 import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../services/databaseService.js';
-import { 
-  CreateShiftPlanRequest, 
+import {
+  CreateShiftPlanRequest,
   UpdateShiftPlanRequest,
 } from '../models/ShiftPlan.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { TEMPLATE_PRESETS } from '../models/defaults/shiftPlanDefaults.js';
+import ExcelJS from 'exceljs';
+import PDFDocument from 'pdfkit';
 
 async function getPlanWithDetails(planId: string) {
   const plan = await db.get<any>(`
@@ -182,7 +184,7 @@ export const getShiftPlan = async (req: Request, res: Response): Promise<void> =
 export const createDefaultTemplate = async (userId: string): Promise<string> => {
   try {
     const planId = uuidv4();
-    
+
     await db.run('BEGIN TRANSACTION');
 
     try {
@@ -278,7 +280,7 @@ export const createShiftPlan = async (req: Request, res: Response): Promise<void
            VALUES (?, ?, ?, ?, ?, ?)`,
           [timeSlotId, planId, timeSlot.name, timeSlot.startTime, timeSlot.endTime, timeSlot.description || '']
         );
-        
+
         // Store the mapping if the timeSlot had a temporary ID
         if ((timeSlot as any).id) {
           timeSlotIdMap.set((timeSlot as any).id, timeSlotId);
@@ -289,12 +291,12 @@ export const createShiftPlan = async (req: Request, res: Response): Promise<void
       for (const shift of shifts) {
         const shiftId = uuidv4();
         let finalTimeSlotId = shift.timeSlotId;
-        
+
         // If timeSlotId exists in mapping, use the new ID
         if (timeSlotIdMap.has(shift.timeSlotId)) {
           finalTimeSlotId = timeSlotIdMap.get(shift.timeSlotId)!;
         }
-        
+
         await db.run(
           `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, required_employees, color) 
            VALUES (?, ?, ?, ?, ?, ?)`,
@@ -368,7 +370,7 @@ export const createFromPreset = async (req: Request, res: Response): Promise<voi
       // Insert time slots and create mapping
       for (const timeSlot of preset.timeSlots) {
         const timeSlotId = uuidv4();
-        
+
         await db.run(
           `INSERT INTO time_slots (id, plan_id, name, start_time, end_time, description) 
            VALUES (?, ?, ?, ?, ?, ?)`,
@@ -381,7 +383,7 @@ export const createFromPreset = async (req: Request, res: Response): Promise<voi
           timeSlotMap.set((timeSlot as any).timeSlotId, timeSlotId);
         }
         timeSlotMap.set(timeSlot.name, timeSlotId);
-        
+
         console.log(`✅ Created time slot: ${timeSlot.name} -> ${timeSlotId}`);
       }
 
@@ -391,14 +393,14 @@ export const createFromPreset = async (req: Request, res: Response): Promise<voi
       let shiftCount = 0;
       for (const shift of preset.shifts) {
         const shiftId = uuidv4();
-        
+
         // Try to find the timeSlotId using different strategies
         let timeSlotId = timeSlotMap.get(shift.timeSlotId);
-        
+
         if (!timeSlotId) {
           // Fallback: try to find by name or other properties
           console.warn(`⚠️ Time slot not found by ID: ${shift.timeSlotId}, trying fallback...`);
-          
+
           // Look for time slot by name or other matching logic
           for (const [key, value] of timeSlotMap.entries()) {
             if (key.includes(shift.timeSlotId) || shift.timeSlotId.includes(key)) {
@@ -421,7 +423,7 @@ export const createFromPreset = async (req: Request, res: Response): Promise<voi
            VALUES (?, ?, ?, ?, ?, ?)`,
           [shiftId, planId, shift.dayOfWeek, timeSlotId, shift.requiredEmployees, shift.color || '#3498db']
         );
-        
+
         shiftCount++;
         console.log(`✅ Created shift ${shiftCount}: day ${shift.dayOfWeek}, timeSlot ${timeSlotId}`);
       }
@@ -667,10 +669,10 @@ async function getShiftPlanById(planId: string): Promise<any> {
 }
 
 // Helper function to generate scheduled shifts from template
-export const generateScheduledShifts = async(planId: string, startDate: string, endDate: string): Promise<void> => {
+export const generateScheduledShifts = async (planId: string, startDate: string, endDate: string): Promise<void> => {
   try {
     console.log(`🔄 Generating scheduled shifts for Plan ${planId} from ${startDate} to ${endDate}`);
-    
+
     // Get plan with shifts and time slots
     const plan = await getShiftPlanById(planId);
     if (!plan) {
@@ -694,7 +696,7 @@ export const generateScheduledShifts = async(planId: string, startDate: string, 
 
       for (const shift of shiftsForDay) {
         const scheduledShiftId = uuidv4();
-        
+
         await db.run(
           `INSERT INTO scheduled_shifts (id, plan_id, date, time_slot_id, required_employees, assigned_employees) 
            VALUES (?, ?, ?, ?, ?, ?)`,
@@ -707,13 +709,13 @@ export const generateScheduledShifts = async(planId: string, startDate: string, 
             JSON.stringify([]) // Start with empty assignments
           ]
         );
-        
+
         console.log(`✅ Created scheduled shift: ${scheduledShiftId}`);
       }
     }
 
     console.log(`✅ Scheduled shifts generated for Plan ${planId}`);
-    
+
   } catch (error) {
     console.error('❌ Error generating scheduled shifts:', error);
     throw error;
@@ -759,7 +761,7 @@ export const generateScheduledShiftsForPlan = async (req: Request, res: Response
 
     // Return updated plan
     const updatedPlan = await getShiftPlanById(id);
-    
+
     console.log('✅ Successfully generated scheduled shifts:', {
       scheduledShifts: updatedPlan.scheduledShifts?.length || 0
     });
@@ -793,7 +795,7 @@ export const regenerateScheduledShifts = async (req: Request, res: Response): Pr
     }
 
     console.log(`✅ Regenerated scheduled shifts for plan ${id}`);
-    
+
     // Return updated plan
     const updatedPlan = await getShiftPlanById(id);
     res.json(updatedPlan);
@@ -807,7 +809,7 @@ export const regenerateScheduledShifts = async (req: Request, res: Response): Pr
 export const getScheduledShiftsFromPlan = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { planId } = req.params;
-    
+
     const shifts = await db.all(
       `SELECT * FROM scheduled_shifts WHERE plan_id = ? ORDER BY date, time_slot_id`,
       [planId]
@@ -839,7 +841,7 @@ export const getScheduledShiftsFromPlan = async (req: AuthRequest, res: Response
 export const getScheduledShift = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    
+
     const shift = await db.get(
       'SELECT * FROM scheduled_shifts WHERE id = ?',
       [id]
@@ -867,10 +869,10 @@ export const updateScheduledShift = async (req: AuthRequest, res: Response): Pro
     const { id } = req.params;
     const { assignedEmployees } = req.body;
 
-    console.log('🔄 Updating scheduled shift:', { 
-      id, 
+    console.log('🔄 Updating scheduled shift:', {
+      id,
       assignedEmployees,
-      body: req.body 
+      body: req.body
     });
 
     if (!Array.isArray(assignedEmployees)) {
@@ -895,8 +897,8 @@ export const updateScheduledShift = async (req: AuthRequest, res: Response): Pro
     );
 
     console.log('✅ Scheduled shift updated successfully');
-    
-    res.json({ 
+
+    res.json({
       message: 'Scheduled shift updated successfully',
       id: id,
       assignedEmployees: assignedEmployees
@@ -951,9 +953,9 @@ export const clearAssignments = async (req: Request, res: Response): Promise<voi
 
       console.log(`✅ Successfully cleared all assignments for plan ${id}`);
 
-      res.json({ 
-        message: 'Assignments cleared successfully', 
-        clearedShifts: scheduledShifts.length 
+      res.json({
+        message: 'Assignments cleared successfully',
+        clearedShifts: scheduledShifts.length
       });
 
     } catch (error) {
@@ -985,18 +987,148 @@ export const exportShiftPlanToExcel = async (req: Request, res: Response): Promi
       return;
     }
 
-    // For now, return a simple CSV as placeholder
-    // In a real implementation, you would use a library like exceljs or xlsx
-    
-    const csvData = generateCSVFromPlan(plan);
-    
+    // Create workbook
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Schichtplaner System';
+    workbook.created = new Date();
+
+    // Add Summary Sheet
+    const summarySheet = workbook.addWorksheet('Planübersicht');
+
+    // Summary data
+    summarySheet.columns = [
+      { header: 'Eigenschaft', key: 'property', width: 20 },
+      { header: 'Wert', key: 'value', width: 30 }
+    ];
+
+    summarySheet.addRows([
+      { property: 'Plan Name', value: plan.name },
+      { property: 'Beschreibung', value: plan.description || 'Keine' },
+      { property: 'Zeitraum', value: `${plan.startDate} bis ${plan.endDate}` },
+      { property: 'Status', value: plan.status },
+      { property: 'Erstellt von', value: plan.created_by_name || 'Unbekannt' },
+      { property: 'Erstellt am', value: plan.createdAt },
+      { property: 'Anzahl Schichten', value: plan.scheduledShifts?.length || 0 },
+      { property: 'Anzahl Mitarbeiter', value: plan.employees?.length || 0 }
+    ]);
+
+    // Style summary sheet
+    summarySheet.getRow(1).font = { bold: true };
+    summarySheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF2C3E50' }
+    };
+    summarySheet.getRow(1).font = { color: { argb: 'FFFFFFFF' }, bold: true };
+
+    // Add Assignments Sheet
+    const assignmentsSheet = workbook.addWorksheet('Schichtzuweisungen');
+
+    assignmentsSheet.columns = [
+      { header: 'Datum', key: 'date', width: 12 },
+      { header: 'Tag', key: 'day', width: 10 },
+      { header: 'Schicht', key: 'shift', width: 15 },
+      { header: 'Zeit', key: 'time', width: 15 },
+      { header: 'Zugewiesene Mitarbeiter', key: 'employees', width: 30 },
+      { header: 'Benötigte Mitarbeiter', key: 'required', width: 18 }
+    ];
+
+    // Group scheduled shifts by date
+    const shiftsByDate = new Map();
+    plan.scheduledShifts?.forEach((scheduledShift: any) => {
+      const date = scheduledShift.date;
+      if (!shiftsByDate.has(date)) {
+        shiftsByDate.set(date, []);
+      }
+      shiftsByDate.get(date).push(scheduledShift);
+    });
+
+    // Sort dates chronologically
+    const sortedDates = Array.from(shiftsByDate.keys()).sort();
+
+    // Add data to sheet
+    sortedDates.forEach(date => {
+      const dateShifts = shiftsByDate.get(date);
+      const dateObj = new Date(date);
+      const dayName = getGermanDayName(dateObj.getDay());
+
+      dateShifts.forEach((scheduledShift: any) => {
+        const timeSlot = plan.timeSlots?.find((ts: any) => ts.id === scheduledShift.timeSlotId);
+        const employeeNames = scheduledShift.assignedEmployees.map((empId: string) => {
+          const employee = plan.employees?.find((emp: any) => emp.id === empId);
+          return employee ? `${employee.firstname} ${employee.lastname}` : 'Unbekannt';
+        }).join(', ') || 'Keine Zuweisungen';
+
+        assignmentsSheet.addRow({
+          date: date,
+          day: dayName,
+          shift: timeSlot?.name || 'Unbekannt',
+          time: timeSlot ? `${timeSlot.startTime} - ${timeSlot.endTime}` : '',
+          employees: employeeNames,
+          required: scheduledShift.requiredEmployees || 2
+        });
+      });
+    });
+
+    // Style assignments sheet
+    assignmentsSheet.getRow(1).font = { bold: true };
+    assignmentsSheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF34495E' }
+    };
+    assignmentsSheet.getRow(1).font = { color: { argb: 'FFFFFFFF' }, bold: true };
+
+    // Add border to all cells with data
+    assignmentsSheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 1) {
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
+          };
+        });
+      }
+    });
+
+    // Add Employee Overview Sheet
+    const employeeSheet = workbook.addWorksheet('Mitarbeiterübersicht');
+
+    employeeSheet.columns = [
+      { header: 'Name', key: 'name', width: 25 },
+      { header: 'E-Mail', key: 'email', width: 25 },
+      { header: 'Rolle', key: 'role', width: 15 },
+      { header: 'Mitarbeiter Typ', key: 'type', width: 15 },
+      { header: 'Vertragstyp', key: 'contract', width: 15 }
+    ];
+
+    plan.employees?.forEach((employee: any) => {
+      employeeSheet.addRow({
+        name: `${employee.firstname} ${employee.lastname}`,
+        email: employee.email,
+        role: employee.roles?.join(', ') || 'Benutzer',
+        type: employee.employeeType,
+        contract: employee.contractType || 'Nicht angegeben'
+      });
+    });
+
+    // Style employee sheet
+    employeeSheet.getRow(1).font = { bold: true };
+    employeeSheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF34495E' }
+    };
+    employeeSheet.getRow(1).font = { color: { argb: 'FFFFFFFF' }, bold: true };
+
+    // Set response headers
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="Schichtplan_${plan.name}_${new Date().toISOString().split('T')[0]}.xlsx"`);
-    
-    // For now, return CSV as placeholder - replace with actual Excel generation
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="Schichtplan_${plan.name}_${new Date().toISOString().split('T')[0]}.csv"`);
-    res.send(csvData);
+
+    // Write to response
+    await workbook.xlsx.write(res);
 
     console.log('✅ Excel export completed for plan:', id);
 
@@ -1024,18 +1156,191 @@ export const exportShiftPlanToPDF = async (req: Request, res: Response): Promise
       return;
     }
 
-    // For now, return a simple HTML as placeholder
-    // In a real implementation, you would use a library like pdfkit, puppeteer, or html-pdf
-    
-    const pdfData = generateHTMLFromPlan(plan);
-    
+    // Create PDF document
+    const doc = new PDFDocument({ margin: 50 });
+
+    // Set response headers
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="Schichtplan_${plan.name}_${new Date().toISOString().split('T')[0]}.pdf"`);
-    
-    // For now, return HTML as placeholder - replace with actual PDF generation
-    res.setHeader('Content-Type', 'text/html');
-    res.setHeader('Content-Disposition', `attachment; filename="Schichtplan_${plan.name}_${new Date().toISOString().split('T')[0]}.html"`);
-    res.send(pdfData);
+
+    // Pipe PDF to response
+    doc.pipe(res);
+
+    // Add title
+    doc.fontSize(20).font('Helvetica-Bold').text(`Schichtplan: ${plan.name}`, 50, 50);
+    doc.fontSize(12).font('Helvetica').text(`Erstellt am: ${new Date().toLocaleDateString('de-DE')}`, 50, 80);
+
+    // Plan summary
+    let yPosition = 120;
+    doc.fontSize(14).font('Helvetica-Bold').text('Plan Informationen', 50, yPosition);
+    yPosition += 30;
+
+    doc.fontSize(10).font('Helvetica');
+    doc.text(`Plan Name: ${plan.name}`, 50, yPosition);
+    yPosition += 20;
+
+    if (plan.description) {
+      doc.text(`Beschreibung: ${plan.description}`, 50, yPosition);
+      yPosition += 20;
+    }
+
+    doc.text(`Zeitraum: ${plan.startDate} bis ${plan.endDate}`, 50, yPosition);
+    yPosition += 20;
+    doc.text(`Status: ${plan.status}`, 50, yPosition);
+    yPosition += 20;
+    doc.text(`Erstellt von: ${plan.created_by_name || 'Unbekannt'}`, 50, yPosition);
+    yPosition += 20;
+    doc.text(`Erstellt am: ${plan.createdAt}`, 50, yPosition);
+    yPosition += 20;
+    doc.text(`Anzahl Schichten: ${plan.scheduledShifts?.length || 0}`, 50, yPosition);
+    yPosition += 20;
+    doc.text(`Anzahl Mitarbeiter: ${plan.employees?.length || 0}`, 50, yPosition);
+    yPosition += 40;
+
+    // Group scheduled shifts by date
+    const shiftsByDate = new Map();
+    plan.scheduledShifts?.forEach((scheduledShift: any) => {
+      const date = scheduledShift.date;
+      if (!shiftsByDate.has(date)) {
+        shiftsByDate.set(date, []);
+      }
+      shiftsByDate.get(date).push(scheduledShift);
+    });
+
+    // Sort dates chronologically
+    const sortedDates = Array.from(shiftsByDate.keys()).sort();
+
+    // Add assignments section
+    doc.addPage();
+    doc.fontSize(16).font('Helvetica-Bold').text('Schichtzuweisungen', 50, 50);
+
+    let currentY = 80;
+
+    sortedDates.forEach(date => {
+      const dateShifts = shiftsByDate.get(date);
+      const dateObj = new Date(date);
+      const dayName = getGermanDayName(dateObj.getDay());
+
+      // Check if we need a new page
+      if (currentY > 650) {
+        doc.addPage();
+        currentY = 50;
+      }
+
+      // Date header
+      doc.fontSize(12).font('Helvetica-Bold').text(`${date} (${dayName})`, 50, currentY);
+      currentY += 20;
+
+      // Table headers
+      doc.fontSize(10).font('Helvetica-Bold');
+      doc.text('Schicht', 50, currentY);
+      doc.text('Zeit', 150, currentY);
+      doc.text('Mitarbeiter', 250, currentY);
+      doc.text('Benötigt', 450, currentY);
+      currentY += 15;
+
+      // Horizontal line
+      doc.moveTo(50, currentY).lineTo(550, currentY).stroke();
+      currentY += 10;
+
+      doc.fontSize(9).font('Helvetica');
+
+      dateShifts.forEach((scheduledShift: any) => {
+        // Check if we need a new page for this shift
+        if (currentY > 700) {
+          doc.addPage();
+          currentY = 50;
+          // Re-add headers for new page
+          doc.fontSize(10).font('Helvetica-Bold');
+          doc.text('Schicht', 50, currentY);
+          doc.text('Zeit', 150, currentY);
+          doc.text('Mitarbeiter', 250, currentY);
+          doc.text('Benötigt', 450, currentY);
+          currentY += 25;
+        }
+
+        const timeSlot = plan.timeSlots?.find((ts: any) => ts.id === scheduledShift.timeSlotId);
+        const employeeNames = scheduledShift.assignedEmployees.map((empId: string) => {
+          const employee = plan.employees?.find((emp: any) => emp.id === empId);
+          return employee ? `${employee.firstname} ${employee.lastname}` : 'Unbekannt';
+        }).join(', ') || 'Keine Zuweisungen';
+
+        // Split employee names if too long
+        const employeesLines = doc.heightOfString(employeeNames, { width: 190 });
+
+        doc.text(timeSlot?.name || 'Unbekannt', 50, currentY);
+        doc.text(timeSlot ? `${timeSlot.startTime} - ${timeSlot.endTime}` : '', 150, currentY);
+
+        // Handle multi-line employee names
+        const employeeText = doc.heightOfString(employeeNames, { width: 190 }) > 20 ?
+          employeeNames.split(', ').join(',\n') : employeeNames;
+
+        doc.text(employeeText, 250, currentY, { width: 190, align: 'left' });
+        doc.text(String(scheduledShift.requiredEmployees || 2), 450, currentY);
+
+        currentY += Math.max(20, employeesLines) + 5;
+      });
+
+      currentY += 20; // Space between dates
+    });
+
+    // Add employee overview page
+    doc.addPage();
+    doc.fontSize(16).font('Helvetica-Bold').text('Mitarbeiterübersicht', 50, 50);
+
+    currentY = 80;
+
+    // Table headers
+    doc.fontSize(10).font('Helvetica-Bold');
+    doc.text('Name', 50, currentY);
+    doc.text('E-Mail', 200, currentY);
+    doc.text('Rolle', 350, currentY);
+    doc.text('Typ', 450, currentY);
+    currentY += 15;
+
+    // Horizontal line
+    doc.moveTo(50, currentY).lineTo(550, currentY).stroke();
+    currentY += 10;
+
+    doc.fontSize(9).font('Helvetica');
+
+    plan.employees?.forEach((employee: any) => {
+      if (currentY > 700) {
+        doc.addPage();
+        currentY = 50;
+        // Re-add headers
+        doc.fontSize(10).font('Helvetica-Bold');
+        doc.text('Name', 50, currentY);
+        doc.text('E-Mail', 200, currentY);
+        doc.text('Rolle', 350, currentY);
+        doc.text('Typ', 450, currentY);
+        currentY += 25;
+      }
+
+      doc.text(`${employee.firstname} ${employee.lastname}`, 50, currentY);
+      doc.text(employee.email, 200, currentY, { width: 140 });
+      doc.text(employee.roles?.join(', ') || 'Benutzer', 350, currentY, { width: 90 });
+      doc.text(employee.employeeType, 450, currentY);
+
+      currentY += 20;
+    });
+
+    // Add footer to each page
+    const pages = doc.bufferedPageRange();
+    for (let i = 0; i < pages.count; i++) {
+      doc.switchToPage(i);
+
+      doc.fontSize(8).font('Helvetica');
+      doc.text(
+        `Seite ${i + 1} von ${pages.count} • Erstellt am: ${new Date().toLocaleString('de-DE')} • Schichtplaner System`,
+        50,
+        800,
+        { align: 'center', width: 500 }
+      );
+    }
+
+    // Finalize PDF
+    doc.end();
 
     console.log('✅ PDF export completed for plan:', id);
 
@@ -1045,67 +1350,10 @@ export const exportShiftPlanToPDF = async (req: Request, res: Response): Promise
   }
 };
 
-// Helper function to generate CSV data
-function generateCSVFromPlan(plan: any): string {
-  const headers = ['Datum', 'Tag', 'Schicht', 'Zeit', 'Zugewiesene Mitarbeiter', 'Benötigte Mitarbeiter'];
-  const rows: string[] = [headers.join(';')];
-
-  // Group scheduled shifts by date for better organization
-  const shiftsByDate = new Map();
-  
-  plan.scheduledShifts?.forEach((scheduledShift: any) => {
-    const date = scheduledShift.date;
-    if (!shiftsByDate.has(date)) {
-      shiftsByDate.set(date, []);
-    }
-    shiftsByDate.get(date).push(scheduledShift);
-  });
-
-  // Sort dates chronologically
-  const sortedDates = Array.from(shiftsByDate.keys()).sort();
-
-  sortedDates.forEach(date => {
-    const dateShifts = shiftsByDate.get(date);
-    const dateObj = new Date(date);
-    const dayName = getGermanDayName(dateObj.getDay());
-
-    dateShifts.forEach((scheduledShift: any) => {
-      const timeSlot = plan.timeSlots?.find((ts: any) => ts.id === scheduledShift.timeSlotId);
-      const employeeNames = scheduledShift.assignedEmployees.map((empId: string) => {
-        const employee = plan.employees?.find((emp: any) => emp.id === empId);
-        return employee ? `${employee.firstname} ${employee.lastname}` : 'Unbekannt';
-      }).join(', ');
-
-      const row = [
-        date,
-        dayName,
-        timeSlot?.name || 'Unbekannt',
-        timeSlot ? `${timeSlot.startTime} - ${timeSlot.endTime}` : '',
-        employeeNames || 'Keine Zuweisungen',
-        scheduledShift.requiredEmployees || 2
-      ].map(field => `"${field}"`).join(';');
-
-      rows.push(row);
-    });
-  });
-
-  // Add plan summary
-  rows.push('');
-  rows.push('Plan Zusammenfassung');
-  rows.push(`"Plan Name";"${plan.name}"`);
-  rows.push(`"Zeitraum";"${plan.startDate} bis ${plan.endDate}"`);
-  rows.push(`"Status";"${plan.status}"`);
-  rows.push(`"Erstellt von";"${plan.created_by_name || 'Unbekannt'}"`);
-  rows.push(`"Erstellt am";"${plan.createdAt}"`);
-  rows.push(`"Anzahl Schichten";"${plan.scheduledShifts?.length || 0}"`);
-
-  return rows.join('\n');
-}
-
 // Helper function to generate HTML data
 function generateHTMLFromPlan(plan: any): string {
   const shiftsByDate = new Map();
-  
+
   plan.scheduledShifts?.forEach((scheduledShift: any) => {
     const date = scheduledShift.date;
     if (!shiftsByDate.has(date)) {
@@ -1153,7 +1401,7 @@ function generateHTMLFromPlan(plan: any): string {
     const dateShifts = shiftsByDate.get(date);
     const dateObj = new Date(date);
     const dayName = getGermanDayName(dateObj.getDay());
-    
+
     html += `
     <div class="date-section">
         <h3>${date} (${dayName})</h3>
