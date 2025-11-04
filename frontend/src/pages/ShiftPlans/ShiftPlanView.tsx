@@ -896,9 +896,6 @@ const ShiftPlanView: React.FC = () => {
                     <div style={{ fontSize: '14px', color: '#666' }}>
                       {formatTime(timeSlot.startTime)} - {formatTime(timeSlot.endTime)}
                     </div>
-                    <div style={{ fontSize: '11px', color: '#999', marginTop: '4px' }}>
-                      ID: {timeSlot.id.substring(0, 8)}...
-                    </div>
                   </td>
                   {days.map(weekday => {
                     const shift = timeSlot.shiftsByDay[weekday.id];
@@ -922,7 +919,55 @@ const ShiftPlanView: React.FC = () => {
                     const isValidShift = shift.timeSlotId === timeSlot.id && shift.dayOfWeek === weekday.id;
                     
                     let assignedEmployees: string[] = [];
-                    let displayText = '';
+                    let displayContent: React.ReactNode = null;
+
+                    // Helper function to create employee boxes
+                    const createEmployeeBoxes = (employeeIds: string[]) => {
+                      return employeeIds.map(empId => {
+                        const employee = employees.find(emp => emp.id === empId);
+                        if (!employee) return null;
+                        
+                        // Determine background color based on employee role
+                        let backgroundColor = '#642ab5'; // Default: non-trainee personnel (purple)
+                        
+                        if (employee.isTrainee) {
+                          backgroundColor = '#cda8f0'; // Trainee
+                        } else if (employee.roles?.includes('manager')) {
+                          backgroundColor = '#CC0000'; // Manager
+                        }
+                        
+                        return (
+                          <div
+                            key={empId}
+                            style={{
+                              backgroundColor,
+                              color: 'white',
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              marginBottom: '2px',
+                              fontSize: '12px',
+                              textAlign: 'center',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis'
+                            }}
+                            title={`${employee.firstname} ${employee.lastname}${employee.isTrainee ? ' (Trainee)' : ''}`}
+                          >
+                            {employee.firstname} {employee.lastname}
+                          </div>
+                        );
+                      }).filter(Boolean);
+                    };
+
+                    // Helper function to get fallback content
+                    const getFallbackContent = () => {
+                      const shiftsForSlot = shiftPlan?.shifts?.filter(s => 
+                        s.dayOfWeek === weekday.id && 
+                        s.timeSlotId === timeSlot.id
+                      ) || [];
+                      const totalRequired = shiftsForSlot.reduce((sum, s) => sum + s.requiredEmployees, 0);
+                      return totalRequired === 0 ? '-' : `0/${totalRequired}`;
+                    };
 
                     if (shiftPlan?.status === 'published') {
                       // For published plans, use actual assignments from scheduled shifts
@@ -935,15 +980,21 @@ const ShiftPlanView: React.FC = () => {
                       if (scheduledShift) {
                         assignedEmployees = scheduledShift.assignedEmployees || [];
                         
-                        // DEBUG: Log if we're still seeing old data
+                        // Log if we're still seeing old data
                         if (assignedEmployees.length > 0) {
                           console.warn(`⚠️ Found non-empty assignments for ${weekday.name} ${timeSlot.name}:`, assignedEmployees);
                         }
                         
-                        displayText = assignedEmployees.map(empId => {
-                          const employee = employees.find(emp => emp.id === empId);
-                          return employee ? `${employee.firstname} ${employee.lastname}` : 'Unbekannt';
-                        }).join(', ');
+                        const employeeBoxes = createEmployeeBoxes(assignedEmployees);
+                        displayContent = employeeBoxes.length > 0 ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            {employeeBoxes}
+                          </div>
+                        ) : (
+                          <div style={{ color: '#666', fontStyle: 'italic' }}>
+                            {getFallbackContent()}
+                          </div>
+                        );
                       }
                     } else if (assignmentResult) {
                       // For draft with preview, use assignment result
@@ -955,30 +1006,26 @@ const ShiftPlanView: React.FC = () => {
                       
                       if (scheduledShift) {
                         assignedEmployees = getAssignmentsForScheduledShift(scheduledShift);
-                        displayText = assignedEmployees.map(empId => {
-                          const employee = employees.find(emp => emp.id === empId);
-                          return employee ? `${employee.firstname} ${employee.lastname}` : 'Unbekannt';
-                        }).join(', ');
+                        const employeeBoxes = createEmployeeBoxes(assignedEmployees);
+                        displayContent = employeeBoxes.length > 0 ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            {employeeBoxes}
+                          </div>
+                        ) : (
+                          <div style={{ color: '#666', fontStyle: 'italic' }}>
+                            {getFallbackContent()}
+                          </div>
+                        );
                       }
                     }
 
-                    // If no assignments yet, show empty or required count
-                    if (!displayText) {
-                      const shiftsForSlot = shiftPlan?.shifts?.filter(s => 
-                        s.dayOfWeek === weekday.id && 
-                        s.timeSlotId === timeSlot.id
-                      ) || [];
-                      
-                      const totalRequired = shiftsForSlot.reduce((sum, s) => 
-                        sum + s.requiredEmployees, 0);
-                      
-                      // Show "0/2" instead of just "0" to indicate it's empty
-                      displayText = `0/${totalRequired}`;
-                      
-                      // Optional: Show empty state more clearly
-                      if (totalRequired === 0) {
-                        displayText = '-';
-                      }
+                    // If no display content set yet, use fallback
+                    if (!displayContent) {
+                      displayContent = (
+                        <div style={{ color: '#666', fontStyle: 'italic' }}>
+                          {getFallbackContent()}
+                        </div>
+                      );
                     }
 
                     return (
@@ -1013,7 +1060,7 @@ const ShiftPlanView: React.FC = () => {
                           </div>
                         )}
 
-                        {displayText}
+                        {displayContent}
 
                         {/* Shift debug info - SAME AS AVAILABILITYMANAGER */}
                         <div style={{ 
@@ -1023,8 +1070,6 @@ const ShiftPlanView: React.FC = () => {
                           textAlign: 'left',
                           fontFamily: 'monospace'
                         }}>
-                          <div>Shift: {shift.id.substring(0, 6)}...</div>
-                          <div>Day: {shift.dayOfWeek}</div>
                           {!isValidShift && (
                             <div style={{ color: '#e74c3c', fontWeight: 'bold' }}>
                               VALIDATION ERROR
@@ -1039,7 +1084,6 @@ const ShiftPlanView: React.FC = () => {
             </tbody>
           </table>
         </div>
-
       </div>
     );
   };
@@ -1123,7 +1167,7 @@ const ShiftPlanView: React.FC = () => {
             </>
           )}
           
-          {/* Your existing "Zuweisungen neu berechnen" button */}
+          {/* "Zuweisungen neu berechnen" button */}
           {shiftPlan.status === 'published' && hasRole(['admin', 'maintenance']) && (
             <button
               onClick={handleRecreateAssignments}
@@ -1405,7 +1449,7 @@ const ShiftPlanView: React.FC = () => {
                 Abbrechen
               </button>
               
-              {/* KORRIGIERTER BUTTON MIT TYPESCRIPT-FIX */}
+              {/* BUTTON zum publishen */}
               <button
                 onClick={handlePublish}
                 disabled={publishing || !canPublishAssignment()}
