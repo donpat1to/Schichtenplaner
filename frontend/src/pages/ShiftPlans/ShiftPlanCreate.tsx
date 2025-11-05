@@ -18,7 +18,7 @@ const ShiftPlanCreate: React.FC = () => {
   const [searchParams] = useSearchParams();
   const { showNotification } = useNotification();
   const { executeWithValidation, isSubmitting } = useBackendValidation();
-  
+
   const [planName, setPlanName] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -35,9 +35,9 @@ const ShiftPlanCreate: React.FC = () => {
       console.log('🔄 Lade verfügbare Vorlagen-Presets...');
       const data = await shiftPlanService.getTemplatePresets();
       console.log('✅ Presets geladen:', data);
-      
+
       setPresets(data);
-      
+
       // Setze das erste Preset als Standard, falls vorhanden
       if (data.length > 0) {
         setSelectedPreset(data[0].name);
@@ -75,7 +75,7 @@ const ShiftPlanCreate: React.FC = () => {
     if (!endDate) {
       showNotification({
         type: 'error',
-        title: 'Fehlende Angaben', 
+        title: 'Fehlende Angaben',
         message: 'Bitte wählen Sie ein Enddatum'
       });
       return;
@@ -115,14 +115,14 @@ const ShiftPlanCreate: React.FC = () => {
       });
 
       console.log('✅ Plan erstellt:', createdPlan);
-      
+
       // Erfolgsmeldung und Weiterleitung
       showNotification({
         type: 'success',
         title: 'Erfolg',
         message: 'Schichtplan erfolgreich erstellt!'
       });
-      
+
       setTimeout(() => {
         navigate(`/shift-plans/${createdPlan.id}`);
       }, 1500);
@@ -146,20 +146,20 @@ const ShiftPlanCreate: React.FC = () => {
     <div className={styles.container}>
       <div className={styles.header}>
         <h1>Neuen Schichtplan erstellen</h1>
-        <button 
-          onClick={() => navigate(-1)} 
+        <button
+          onClick={() => navigate(-1)}
           className={styles.backButton}
           disabled={isSubmitting}
         >
           Zurück
         </button>
       </div>
-      
+
       <div className={styles.form}>
         <div className={styles.formGroup}>
           <label>Plan Name:</label>
-          <input 
-            type="text" 
+          <input
+            type="text"
             value={planName}
             onChange={(e) => setPlanName(e.target.value)}
             placeholder="z.B. KW 42 2025"
@@ -171,8 +171,8 @@ const ShiftPlanCreate: React.FC = () => {
         <div className={styles.dateGroup}>
           <div className={styles.formGroup}>
             <label>Von:</label>
-            <input 
-              type="date" 
+            <input
+              type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
               className={styles.input}
@@ -182,8 +182,8 @@ const ShiftPlanCreate: React.FC = () => {
 
           <div className={styles.formGroup}>
             <label>Bis:</label>
-            <input 
-              type="date" 
+            <input
+              type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
               className={styles.input}
@@ -194,8 +194,8 @@ const ShiftPlanCreate: React.FC = () => {
 
         <div className={styles.formGroup}>
           <label>Vorlage verwenden:</label>
-          <select 
-            value={selectedPreset} 
+          <select
+            value={selectedPreset}
             onChange={(e) => setSelectedPreset(e.target.value)}
             className={`${styles.select} ${presets.length === 0 ? styles.empty : ''}`}
             disabled={isSubmitting}
@@ -207,7 +207,7 @@ const ShiftPlanCreate: React.FC = () => {
               </option>
             ))}
           </select>
-          
+
           {selectedPreset && (
             <div className={styles.presetDescription}>
               {getSelectedPresetDescription()}
@@ -222,9 +222,9 @@ const ShiftPlanCreate: React.FC = () => {
         </div>
 
         <div className={styles.actions}>
-          <button 
-            onClick={handleCreate} 
-            className={styles.createButton} 
+          <button
+            onClick={handleCreate}
+            className={styles.createButton}
             disabled={isSubmitting || !selectedPreset || !planName.trim() || !startDate || !endDate}
           >
             {isSubmitting ? 'Wird erstellt...' : 'Schichtplan erstellen'}

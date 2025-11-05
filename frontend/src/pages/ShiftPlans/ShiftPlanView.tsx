@@ -56,11 +56,9 @@ const ShiftPlanView: React.FC = () => {
   const [showAssignmentPreview, setShowAssignmentPreview] = useState(false);
   const [recreating, setRecreating] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [selectedExportType, setSelectedExportType] = useState('');
+  const [exportType, setExportType] = useState<'pdf' | 'excel' | null>(null);
   const [dropdownWidth, setDropdownWidth] = useState(0);
-
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadShiftPlanData();
@@ -95,13 +93,6 @@ const ShiftPlanView: React.FC = () => {
     };
   }, []);
 
-  // Measure dropdown width when component mounts or selectedExportType changes
-  useEffect(() => {
-    if (dropdownRef.current) {
-      setDropdownWidth(dropdownRef.current.offsetWidth);
-    }
-  }, [selectedExportType]);
-
   // Add this useEffect to debug state changes
   useEffect(() => {
     console.log('🔍 STATE DEBUG - showAssignmentPreview:', showAssignmentPreview);
@@ -132,6 +123,12 @@ const ShiftPlanView: React.FC = () => {
       debugAvailabilityShiftIds();
     }
   }, [availabilities]);
+
+  useEffect(() => {
+    if (dropdownRef.current) {
+      setDropdownWidth(dropdownRef.current.offsetWidth);
+    }
+  }, [exportType]);
 
   // Create a data structure that maps days to their shifts with time slot info - SAME AS AVAILABILITYMANAGER
   const getTimetableData = () => {
@@ -255,48 +252,36 @@ const ShiftPlanView: React.FC = () => {
   };
 
   const handleExport = async () => {
-    if (!shiftPlan || !selectedExportType) return;
+    if (!shiftPlan || !exportType) return;
 
     try {
       setExporting(true);
 
       let blob: Blob;
-      if (selectedExportType === 'PDF') {
-        // Call the PDF export service
-        blob = await shiftPlanService.exportShiftPlanToPDF(shiftPlan.id);
-      } else {
-        // Call the Excel export service
+      if (exportType === 'excel') {
         blob = await shiftPlanService.exportShiftPlanToExcel(shiftPlan.id);
+        saveAs(blob, `Schichtplan_${shiftPlan.name}_${new Date().toISOString().split('T')[0]}.xlsx`);
+      } else {
+        blob = await shiftPlanService.exportShiftPlanToPDF(shiftPlan.id);
+        saveAs(blob, `Schichtplan_${shiftPlan.name}_${new Date().toISOString().split('T')[0]}.pdf`);
       }
-
-      // Use file-saver to download the file
-      const fileExtension = selectedExportType.toLowerCase();
-      saveAs(blob, `Schichtplan_${shiftPlan.name}_${new Date().toISOString().split('T')[0]}.${fileExtension}`);
 
       showNotification({
         type: 'success',
         title: 'Export erfolgreich',
-        message: `Der Schichtplan wurde als ${selectedExportType}-Datei exportiert.`
+        message: `Der Schichtplan wurde als ${exportType === 'excel' ? 'Excel' : 'PDF'} exportiert.`
       });
 
     } catch (error) {
-      console.error(`Error exporting to ${selectedExportType}:`, error);
+      console.error(`Error exporting to ${exportType}:`, error);
       showNotification({
         type: 'error',
         title: 'Export fehlgeschlagen',
-        message: `Der ${selectedExportType}-Export konnte nicht durchgeführt werden.`
+        message: `Der ${exportType === 'excel' ? 'Excel' : 'PDF'}-Export konnte nicht durchgeführt werden.`
       });
     } finally {
       setExporting(false);
     }
-  };
-
-  const handleExportTypeChange = (type: string) => {
-    setSelectedExportType(type);
-  };
-
-  const handleCancelExport = () => {
-    setSelectedExportType('');
   };
 
   const loadShiftPlanData = async () => {
@@ -366,7 +351,426 @@ const ShiftPlanView: React.FC = () => {
     }
   };
 
-  // ... (rest of the functions remain the same as in the original file)
+  const handleRecreateAssignments = async () => {
+    if (!shiftPlan) return;
+
+    try {
+      setRecreating(true);
+
+      if (!window.confirm('Möchten Sie die aktuellen Zuweisungen wirklich zurücksetzen? Alle vorhandenen Zuweisungen werden gelöscht.')) {
+        return;
+      }
+
+      console.log('🔄 STARTING COMPLETE ASSIGNMENT CLEARING PROCESS');
+
+      // STEP 1: Get current scheduled shifts
+      const currentScheduledShifts = await shiftAssignmentService.getScheduledShiftsForPlan(shiftPlan.id);
+      console.log(`📋 Found ${currentScheduledShifts.length} shifts to clear`);
+
+      // STEP 2: Clear ALL assignments by setting empty arrays
+      const clearPromises = currentScheduledShifts.map(async (scheduledShift) => {
+        console.log(`🗑️ Clearing assignments for shift: ${scheduledShift.id}`);
+        await shiftAssignmentService.updateScheduledShift(scheduledShift.id, {
+          assignedEmployees: [] // EMPTY ARRAY - this clears the assignments
+        });
+      });
+
+      await Promise.all(clearPromises);
+      console.log('✅ All assignments cleared from database');
+
+      // STEP 3: Update plan status to draft
+      await shiftPlanService.updateShiftPlan(shiftPlan.id, {
+        status: 'draft'
+      });
+      console.log('📝 Plan status set to draft');
+
+      // STEP 4: CRITICAL - Force reload of scheduled shifts to get EMPTY assignments
+      const refreshedShifts = await shiftAssignmentService.getScheduledShiftsForPlan(shiftPlan.id);
+      setScheduledShifts(refreshedShifts); // Update state with EMPTY assignments
+
+      // STEP 5: Clear any previous assignment results
+      setAssignmentResult(null);
+      setShowAssignmentPreview(false);
+
+      // STEP 6: Force complete data refresh
+      await loadShiftPlanData();
+
+      console.log('🎯 ASSIGNMENT CLEARING COMPLETE - Table should now be empty');
+
+      showNotification({
+        type: 'success',
+        title: 'Zuweisungen gelöscht',
+        message: 'Alle Zuweisungen wurden erfolgreich gelöscht. Die Tabelle sollte jetzt leer sein.'
+      });
+
+    } catch (error) {
+      console.error('❌ Error clearing assignments:', error);
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: `Löschen der Zuweisungen fehlgeschlagen: ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`
+      });
+    } finally {
+      setRecreating(false);
+    }
+  };
+
+  const getDayOfWeek = (dateString: string): number => {
+    const date = new Date(dateString);
+    return date.getDay() === 0 ? 7 : date.getDay();
+  };
+
+  const handlePreviewAssignment = async () => {
+    if (!shiftPlan) return;
+
+    try {
+      setPublishing(true);
+      setAssignmentResult(null); // Reset previous results
+      setShowAssignmentPreview(false); // Reset preview
+
+      console.log('🔄 STARTING ASSIGNMENT PREVIEW...');
+
+      // FORCE COMPLETE REFRESH - don't rely on cached state
+      const [refreshedEmployees, refreshedAvailabilities] = await Promise.all([
+        employeeService.getEmployees().then(emps => emps.filter(emp => emp.isActive)),
+        refreshAllAvailabilities()
+      ]);
+
+      console.log('🔄 USING FRESH DATA:');
+      console.log('- Employees:', refreshedEmployees.length);
+      console.log('- Availabilities:', refreshedAvailabilities.length);
+      console.log('- Shift Patterns:', shiftPlan.shifts?.length || 0);
+      console.log('- Scheduled Shifts:', scheduledShifts.length);
+
+      // DEBUG: Show shift pattern IDs
+      /*if (shiftPlan.shifts) {
+        console.log('📋 SHIFT PATTERN IDs:');
+        shiftPlan.shifts.forEach((shift, index) => {
+          console.log(`   ${index + 1}. ${shift.id} (Day ${shift.dayOfWeek}, TimeSlot ${shift.timeSlotId})`);
+        });
+      }*/
+
+      const constraints = {
+        enforceNoTraineeAlone: true,
+        enforceExperiencedWithChef: true,
+        maxRepairAttempts: 50,
+        targetEmployeesPerShift: 2
+      };
+
+      console.log('🧠 Calling shift assignment service...');
+
+      // Use the freshly loaded data, not the state
+      const result = await shiftAssignmentService.assignShifts(
+        shiftPlan,
+        refreshedEmployees,
+        refreshedAvailabilities,
+        constraints
+      );
+
+      console.log("🎯 RAW ASSIGNMENT RESULT FROM API:", {
+        success: result.success,
+        assignmentsCount: Object.keys(result.assignments).length,
+        assignmentKeys: Object.keys(result.assignments),
+        violations: result.violations.length,
+        resolutionReport: result.resolutionReport?.length || 0
+      });
+
+      // Log assignments with shift pattern context
+      console.log('🔍 ASSIGNMENTS BY SHIFT PATTERN:');
+      Object.entries(result.assignments).forEach(([shiftId, empIds]) => {
+        const shiftPattern = shiftPlan.shifts?.find(s => s.id === shiftId);
+
+        if (shiftPattern) {
+          console.log(`   ✅ Shift Pattern: ${shiftId}`);
+          console.log(`      - Day: ${shiftPattern.dayOfWeek}, TimeSlot: ${shiftPattern.timeSlotId}`);
+          console.log(`      - Employees: ${empIds.join(', ')}`);
+        } else {
+          console.log(`   ❌ UNKNOWN ID: ${shiftId}`);
+          console.log(`      - Employees: ${empIds.join(', ')}`);
+          console.log(`      - This ID does not match any shift pattern!`);
+        }
+      });
+
+      // CRITICAL: Update state and show preview
+      console.log('🔄 Setting assignment result and showing preview...');
+      setAssignmentResult(result);
+      setShowAssignmentPreview(true);
+
+      console.log('✅ Assignment preview ready, modal should be visible');
+
+    } catch (error) {
+      console.error('❌ Error during assignment:', error);
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: 'Automatische Zuordnung fehlgeschlagen.'
+      });
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const handlePublish = async () => {
+    if (!shiftPlan || !assignmentResult) return;
+
+    try {
+      setPublishing(true);
+
+      console.log('🔄 Starting to publish assignments...');
+
+      // Get fresh scheduled shifts
+      const updatedShifts = await shiftAssignmentService.getScheduledShiftsForPlan(shiftPlan.id);
+
+      if (!updatedShifts || updatedShifts.length === 0) {
+        throw new Error('No scheduled shifts found in the plan');
+      }
+
+      console.log(`📊 Found ${updatedShifts.length} scheduled shifts to update`);
+      console.log('🎯 Assignment keys from algorithm:', Object.keys(assignmentResult.assignments));
+
+      const updatePromises = updatedShifts.map(async (scheduledShift) => {
+        const dayOfWeek = getDayOfWeek(scheduledShift.date);
+
+        // Find the corresponding shift pattern for this day and time slot
+        const shiftPattern = shiftPlan?.shifts?.find(shift =>
+          shift.dayOfWeek === dayOfWeek &&
+          shift.timeSlotId === scheduledShift.timeSlotId
+        );
+
+        let assignedEmployees: string[] = [];
+
+        if (shiftPattern) {
+          assignedEmployees = assignmentResult.assignments[shiftPattern.id] || [];
+          console.log(`📝 Updating scheduled shift ${scheduledShift.id} (Day ${dayOfWeek}, TimeSlot ${scheduledShift.timeSlotId}) with`, assignedEmployees, 'employees');
+
+          if (assignedEmployees.length === 0) {
+            console.warn(`⚠️ No assignments found for shift pattern ${shiftPattern.id}`);
+            console.log('🔍 Available assignment keys:', Object.keys(assignmentResult.assignments));
+          }
+        } else {
+          console.warn(`⚠️ No shift pattern found for scheduled shift ${scheduledShift.id} (Day ${dayOfWeek}, TimeSlot ${scheduledShift.timeSlotId})`);
+        }
+
+        try {
+          // Update the scheduled shift with assigned employees
+          await shiftAssignmentService.updateScheduledShift(scheduledShift.id, {
+            assignedEmployees
+          });
+
+          console.log(`✅ Successfully updated scheduled shift ${scheduledShift.id}`);
+        } catch (error) {
+          console.error(`❌ Failed to update shift ${scheduledShift.id}:`, error);
+          throw error;
+        }
+      });
+
+      await Promise.all(updatePromises);
+
+      // Update plan status to published
+      console.log('🔄 Updating plan status to published...');
+      await shiftPlanService.updateShiftPlan(shiftPlan.id, {
+        status: 'published'
+      });
+
+      // Reload all data to reflect changes
+      const [reloadedPlan, reloadedShifts] = await Promise.all([
+        shiftPlanService.getShiftPlan(shiftPlan.id),
+        shiftAssignmentService.getScheduledShiftsForPlan(shiftPlan.id)
+      ]);
+
+      setShiftPlan(reloadedPlan);
+      setScheduledShifts(reloadedShifts);
+
+      setShowAssignmentPreview(false);
+      setAssignmentResult(null);
+
+      console.log('✅ Publishing completed, modal closed');
+
+      showNotification({
+        type: 'success',
+        title: 'Erfolg',
+        message: 'Schichtplan wurde erfolgreich veröffentlicht!'
+      });
+
+    } catch (error) {
+      console.error('❌ Error publishing shift plan:', error);
+
+      let message = 'Unbekannter Fehler';
+      if (error instanceof Error) {
+        message = error.message;
+      }
+
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: `Schichtplan konnte nicht veröffentlicht werden: ${message}`
+      });
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const refreshAllAvailabilities = async (): Promise<EmployeeAvailability[]> => {
+    try {
+      console.log('🔄 Force refreshing ALL availabilities with error handling...');
+
+      if (!id) {
+        console.error('❌ No plan ID available');
+        return [];
+      }
+
+      const availabilityPromises = employees
+        .filter(emp => emp.isActive)
+        .map(async (emp) => {
+          try {
+            return await employeeService.getAvailabilities(emp.id);
+          } catch (error) {
+            console.error(`❌ Failed to load availabilities for ${emp.email}:`, error);
+            return []; // Return empty array instead of failing entire operation
+          }
+        });
+
+      const allAvailabilities = await Promise.all(availabilityPromises);
+      const flattenedAvailabilities = allAvailabilities.flat();
+
+      // More robust filtering
+      const planAvailabilities = flattenedAvailabilities.filter(
+        availability => availability && availability.planId === id
+      );
+
+      console.log(`✅ Successfully refreshed ${planAvailabilities.length} availabilities for plan ${id}`);
+
+      // IMMEDIATELY update state
+      setAvailabilities(planAvailabilities);
+
+      return planAvailabilities;
+    } catch (error) {
+      console.error('❌ Critical error refreshing availabilities:', error);
+      // DON'T return old data - throw error or return empty array
+      throw new Error('Failed to refresh availabilities: ' + error);
+    }
+  };
+
+  const debugShiftMatching = () => {
+    if (!shiftPlan || !scheduledShifts.length) return;
+
+    console.log('🔍 DEBUG: Shift Pattern to Scheduled Shift Matching');
+    console.log('==================================================');
+
+    shiftPlan.shifts?.forEach(shiftPattern => {
+      const matchingScheduledShifts = scheduledShifts.filter(scheduled => {
+        const dayOfWeek = getDayOfWeek(scheduled.date);
+        return dayOfWeek === shiftPattern.dayOfWeek &&
+          scheduled.timeSlotId === shiftPattern.timeSlotId;
+      });
+
+      console.log(`📅 Shift Pattern: ${shiftPattern.id}`);
+      console.log(`   - Day: ${shiftPattern.dayOfWeek}, TimeSlot: ${shiftPattern.timeSlotId}`);
+      console.log(`   - Matching scheduled shifts: ${matchingScheduledShifts.length}`);
+
+      if (assignmentResult) {
+        const assignments = assignmentResult.assignments[shiftPattern.id] || [];
+        console.log(`   - Assignments: ${assignments.length} employees`);
+      }
+    });
+  };
+
+  // Rufe die Debug-Funktion auf, wenn Assignment-Ergebnisse geladen werden
+  useEffect(() => {
+    if (assignmentResult && shiftPlan) {
+      debugShiftMatching();
+    }
+  }, [assignmentResult, shiftPlan]);
+
+  const canPublish = () => {
+    if (!shiftPlan || shiftPlan.status === 'published') return false;
+
+    // Check if all active employees have set their availabilities
+    const employeesWithoutAvailabilities = employees.filter(emp => {
+      const empAvailabilities = availabilities.filter(avail => avail.employeeId === emp.id);
+      return empAvailabilities.length === 0;
+    });
+
+    return employeesWithoutAvailabilities.length === 0;
+  };
+
+  const canPublishAssignment = (): boolean => {
+    if (!assignmentResult) return false;
+
+    // Check if assignment was successful
+    if (assignmentResult.success === false) return false;
+
+    // Check if there are any critical violations
+    const hasCriticalViolations = assignmentResult.violations.some(v =>
+      v.includes('ERROR:') || v.includes('KRITISCH:')
+    );
+
+    return !hasCriticalViolations;
+  };
+
+  const getAvailabilityStatus = () => {
+    const totalEmployees = employees.length;
+    const employeesWithAvailabilities = new Set(
+      availabilities.map(avail => avail.employeeId)
+    ).size;
+
+    return {
+      completed: employeesWithAvailabilities,
+      total: totalEmployees,
+      percentage: Math.round((employeesWithAvailabilities / totalEmployees) * 100)
+    };
+  };
+
+  const reloadAvailabilities = async () => {
+    try {
+      console.log('🔄 Lade Verfügbarkeiten neu...');
+
+      // Load availabilities for all employees
+      const availabilityPromises = employees
+        .filter(emp => emp.isActive)
+        .map(emp => employeeService.getAvailabilities(emp.id));
+
+      const allAvailabilities = await Promise.all(availabilityPromises);
+      const flattenedAvailabilities = allAvailabilities.flat();
+
+      // Filter availabilities to only include those for the current shift plan
+      const planAvailabilities = flattenedAvailabilities.filter(
+        availability => availability.planId === id
+      );
+
+      setAvailabilities(planAvailabilities);
+      console.log('✅ Verfügbarkeiten neu geladen:', planAvailabilities.length);
+
+    } catch (error) {
+      console.error('❌ Fehler beim Neuladen der Verfügbarkeiten:', error);
+    }
+  };
+
+  const getAssignmentsForScheduledShift = (scheduledShift: ScheduledShift): string[] => {
+    if (!assignmentResult) return [];
+
+    const dayOfWeek = getDayOfWeek(scheduledShift.date);
+
+    // Find the corresponding shift pattern for this day and time slot
+    const shiftPattern = shiftPlan?.shifts?.find(shift =>
+      shift.dayOfWeek === dayOfWeek &&
+      shift.timeSlotId === scheduledShift.timeSlotId
+    );
+
+    if (shiftPattern && assignmentResult.assignments[shiftPattern.id]) {
+      console.log(`✅ Found assignments for shift pattern ${shiftPattern.id}:`, assignmentResult.assignments[shiftPattern.id]);
+      return assignmentResult.assignments[shiftPattern.id];
+    }
+
+    // Fallback: Check if there's a direct match with scheduled shift ID (unlikely)
+    if (assignmentResult.assignments[scheduledShift.id]) {
+      console.log(`⚠️ Using direct scheduled shift assignment for ${scheduledShift.id}`);
+      return assignmentResult.assignments[scheduledShift.id];
+    }
+
+    console.warn(`❌ No assignments found for scheduled shift ${scheduledShift.id} (Day ${dayOfWeek}, TimeSlot ${scheduledShift.timeSlotId})`);
+    return [];
+  };
 
   // Render timetable using the same structure as AvailabilityManager
   const renderTimetable = () => {
@@ -431,7 +835,6 @@ const ShiftPlanView: React.FC = () => {
             borderCollapse: 'collapse',
             backgroundColor: 'white'
           }}>
-            {/* Table content remains the same */}
             <thead>
               <tr style={{ backgroundColor: '#f8f9fa' }}>
                 <th style={{
@@ -663,111 +1066,9 @@ const ShiftPlanView: React.FC = () => {
             </tbody>
           </table>
         </div>
-
-        {/* Export Dropdown - Only show when plan is published */}
-        {shiftPlan?.status === 'published' && (
-          <div style={{
-            padding: '15px 20px',
-            backgroundColor: '#f8f9fa',
-            borderTop: '1px solid #e0e0e0',
-            display: 'flex',
-            justifyContent: 'flex-end',
-            alignItems: 'center'
-          }}>
-            <div
-              ref={containerRef}
-              style={{
-                position: 'relative',
-                display: 'flex',
-                gap: '10px',
-                alignItems: 'center',
-                minHeight: '40px'
-              }}
-            >
-              {/* Export Dropdown - Always visible but moves when option selected */}
-              <div
-                ref={dropdownRef}
-                style={{
-                  position: 'relative',
-                  transform: selectedExportType ? `translateX(-${dropdownWidth + 10}px)` : 'translateX(0)',
-                  transition: 'transform 0.3s ease',
-                  zIndex: selectedExportType ? 1 : 2
-                }}
-              >
-                <select
-                  value={selectedExportType}
-                  onChange={(e) => handleExportTypeChange(e.target.value)}
-                  style={{
-                    padding: '8px 16px',
-                    border: '1px solid #ddd',
-                    borderRadius: '4px',
-                    backgroundColor: 'white',
-                    cursor: 'pointer',
-                    minWidth: '120px'
-                  }}
-                >
-                  <option value="">Export</option>
-                  <option value="PDF">PDF</option>
-                  <option value="Excel">Excel</option>
-                </select>
-              </div>
-
-              {/* Export Button - Only shows when an export type is selected */}
-              {selectedExportType && (
-                <div style={{
-                  display: 'flex',
-                  gap: '8px',
-                  alignItems: 'center',
-                  position: 'absolute',
-                  right: 0,
-                  top: 0,
-                  bottom: 0,
-                  opacity: selectedExportType ? 1 : 0,
-                  transform: selectedExportType ? 'translateX(0)' : 'translateX(20px)',
-                  transition: 'all 0.3s ease'
-                }}>
-                  <button
-                    onClick={handleExport}
-                    disabled={exporting}
-                    style={{
-                      padding: '8px 16px',
-                      backgroundColor: '#51258f',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: exporting ? 'not-allowed' : 'pointer',
-                      fontWeight: 'bold',
-                      minWidth: '100px'
-                    }}
-                  >
-                    {exporting ? 'Exportiert...' : 'EXPORT'}
-                  </button>
-                  <button
-                    onClick={handleCancelExport}
-                    disabled={exporting}
-                    style={{
-                      padding: '8px 12px',
-                      backgroundColor: '#95a5a6',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: exporting ? 'not-allowed' : 'pointer',
-                      fontWeight: 'bold'
-                    }}
-                    title="Abbrechen"
-                  >
-                    ✕
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     );
   };
-
-  // ... (rest of the component remains the same, including all the other functions)
 
   if (loading) return <div>Lade Schichtplan...</div>;
   if (!shiftPlan) return <div>Schichtplan nicht gefunden</div>;
@@ -841,7 +1142,280 @@ const ShiftPlanView: React.FC = () => {
         </div>
       </div>
 
-      {/* ... (rest of the JSX remains the same) */}
+      {/* Availability Status - only show for drafts */}
+      {shiftPlan.status === 'draft' && (
+        <div style={{
+          backgroundColor: 'white',
+          borderRadius: '8px',
+          padding: '20px',
+          marginBottom: '20px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+        }}>
+          <h3>Veröffentlichungsvoraussetzungen</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '15px' }}>
+            <div>
+              <div style={{ fontSize: '14px', color: '#666', marginBottom: '5px' }}>
+                Verfügbarkeitseinträge:
+              </div>
+              <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
+                {availabilityStatus.completed} / {availabilityStatus.total} Mitarbeiter
+              </div>
+              <div style={{
+                width: '200px',
+                height: '8px',
+                backgroundColor: '#e0e0e0',
+                borderRadius: '4px',
+                marginTop: '5px',
+                overflow: 'hidden'
+              }}>
+                <div
+                  style={{
+                    width: `${availabilityStatus.percentage}%`,
+                    height: '100%',
+                    backgroundColor: availabilityStatus.percentage === 100 ? '#2ecc71' : '#f1c40f',
+                    transition: 'all 0.3s ease'
+                  }}
+                />
+              </div>
+            </div>
+
+            {hasRole(['admin', 'maintenance']) && (
+              <div>
+                <button
+                  onClick={handlePreviewAssignment}
+                  disabled={!canPublish() || publishing}
+                  style={{
+                    padding: '10px 20px',
+                    backgroundColor: canPublish() ? '#3498db' : '#95a5a6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: canPublish() ? 'pointer' : 'not-allowed',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  {publishing ? 'Berechne...' : 'Automatisch zuweisen'}
+                </button>
+
+                {!canPublish() && (
+                  <div style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
+                    {availabilityStatus.percentage === 100
+                      ? 'Bereit zur Berechnung'
+                      : `${availabilityStatus.total - availabilityStatus.completed} Mitarbeiter müssen noch Verfügbarkeit eintragen`}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Plan Structure Info */}
+          <div style={{
+            backgroundColor: '#e8f4fd',
+            border: '1px solid #b8d4f0',
+            borderRadius: '4px',
+            padding: '12px 16px',
+            fontSize: '14px'
+          }}>
+            <strong>Plan-Struktur:</strong> {allTimeSlots.length} Schichttypen an {days.length} Tagen
+          </div>
+        </div>
+      )}
+
+      {/* Assignment Preview Modal */}
+      {(showAssignmentPreview || assignmentResult) && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '8px',
+            padding: '30px',
+            maxWidth: '800px',
+            maxHeight: '80vh',
+            overflow: 'auto',
+            width: '90%'
+          }}>
+            <h2>Wochenmuster-Zuordnung</h2>
+
+            {/* Detaillierter Reparatur-Bericht anzeigen */}
+            {assignmentResult?.resolutionReport && (
+              <div style={{
+                backgroundColor: '#f8f9fa',
+                border: '1px solid #e9ecef',
+                borderRadius: '4px',
+                padding: '15px',
+                marginBottom: '20px',
+                fontSize: '14px',
+                maxHeight: '400px',
+                overflow: 'auto'
+              }}>
+                <h4 style={{ color: '#2c3e50', marginTop: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span>📋</span> Detaillierter Reparatur-Bericht
+                </h4>
+                <div style={{
+                  fontFamily: 'monospace',
+                  fontSize: '12px',
+                  lineHeight: '1.4'
+                }}>
+                  {assignmentResult.resolutionReport.map((line, index) => {
+                    let color = '#2c3e50';
+                    let fontWeight = 'normal';
+
+                    if (line.includes('✅') || line.includes('ALLES KRITISCHEN PROBLEME BEHOBEN')) {
+                      color = '#2ecc71';
+                      fontWeight = 'bold';
+                    } else if (line.includes('❌') || line.includes('KRITISCHEN PROBLEME')) {
+                      color = '#e74c3c';
+                      fontWeight = 'bold';
+                    } else if (line.includes('⚠️')) {
+                      color = '#f39c12';
+                    } else if (line.includes('📊') || line.includes('🔧') || line.includes('📅') || line.includes('🚨') || line.includes('🛠️') || line.includes('💡') || line.includes('🎯')) {
+                      color = '#3498db';
+                      fontWeight = 'bold';
+                    } else if (line.startsWith('   •') || line.startsWith('   -')) {
+                      color = '#7f8c8d';
+                    }
+
+                    return (
+                      <div key={index} style={{
+                        color,
+                        fontWeight,
+                        marginBottom: line === '' ? '5px' : '2px',
+                        paddingLeft: line.startsWith('   ') ? '20px' : '0px'
+                      }}>
+                        {line}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* ZUSAMMENFASSUNG */}
+            {assignmentResult && (
+              <div style={{ marginBottom: '20px' }}>
+                <h4>Zusammenfassung:</h4>
+
+                {/* Entscheidung basierend auf tatsächlichen kritischen Problemen */}
+                {(assignmentResult.violations.length === 0) || assignmentResult.success == true ? (
+                  <div style={{
+                    padding: '15px',
+                    backgroundColor: '#d4edda',
+                    border: '1px solid #c3e6cb',
+                    borderRadius: '4px',
+                    color: '#155724',
+                    marginBottom: '15px'
+                  }}>
+                    <h5 style={{ margin: '0 0 10px 0', color: '#155724' }}>✅ Bereit zur Veröffentlichung</h5>
+                    <p style={{ margin: 0 }}>
+                      Alle kritischen Probleme wurden behoben. Der Schichtplan kann veröffentlicht werden.
+                    </p>
+                  </div>
+                ) : (
+                  <div style={{
+                    padding: '15px',
+                    backgroundColor: '#f8d7da',
+                    border: '1px solid #f5c6cb',
+                    borderRadius: '4px',
+                    color: '#721c24',
+                    marginBottom: '15px'
+                  }}>
+                    <h5 style={{ margin: '0 0 10px 0', color: '#721c24' }}>❌ Kritische Probleme</h5>
+                    <p style={{ margin: '0 0 10px 0' }}>
+                      Folgende kritische Probleme müssen behoben werden, bevor der Plan veröffentlicht werden kann:
+                    </p>
+                    <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                      {assignmentResult.violations
+                        .filter(v => v.includes('ERROR:') || v.includes('❌ KRITISCH:'))
+                        .map((violation, index) => (
+                          <li key={index} style={{ fontSize: '14px' }}>
+                            {violation.replace('ERROR: ', '').replace('❌ KRITISCH: ', '')}
+                          </li>
+                        ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Warnungen separat anzeigen - NUR wenn welche vorhanden sind */}
+                {assignmentResult.violations.some(v => v.includes('WARNING:') || v.includes('⚠️')) && (
+                  <div style={{
+                    padding: '10px',
+                    backgroundColor: '#fff3cd',
+                    border: '1px solid #ffeaa7',
+                    borderRadius: '4px',
+                    color: '#856404'
+                  }}>
+                    <h6 style={{ margin: '0 0 5px 0', color: '#856404' }}>
+                      ⚠️ Hinweise & Warnungen
+                    </h6>
+                    <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                      {assignmentResult.violations
+                        .filter(v => v.includes('WARNING:') || v.includes('⚠️'))
+                        .map((warning, index) => (
+                          <li key={index} style={{ fontSize: '13px' }}>
+                            {warning.replace('WARNING: ', '').replace('⚠️ WARNHINWEIS: ', '')}
+                          </li>
+                        ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setShowAssignmentPreview(false);
+                  setAssignmentResult(null);
+                }}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#95a5a6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Abbrechen
+              </button>
+
+              {/* BUTTON zum publishen */}
+              <button
+                onClick={handlePublish}
+                disabled={publishing || !canPublishAssignment()}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: canPublishAssignment() ? '#2ecc71' : '#95a5a6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: canPublishAssignment() ? 'pointer' : 'not-allowed',
+                  fontWeight: 'bold',
+                  fontSize: '16px'
+                }}
+              >
+                {publishing ? 'Veröffentliche...' : (
+                  assignmentResult ? (
+                    canPublishAssignment()
+                      ? 'Schichtplan veröffentlichen'
+                      : 'Kritische Probleme müssen behoben werden'
+                  ) : 'Lade Zuordnungen...'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Timetable */}
       <div style={{
@@ -857,6 +1431,65 @@ const ShiftPlanView: React.FC = () => {
         </h3>
 
         {renderTimetable()}
+
+        {shiftPlan.status === 'published' && hasRole(['admin', 'maintenance']) && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            position: 'relative',
+            marginLeft: '10px'
+          }}>
+            {/* Export Dropdown */}
+            <div
+              ref={dropdownRef}
+              style={{
+                transform: exportType ? `translateX(-${dropdownWidth}px)` : 'translateX(0)',
+                transition: 'transform 0.3s ease-in-out',
+                position: exportType ? 'absolute' : 'relative',
+                right: exportType ? `-${dropdownWidth}px` : '0'
+              }}
+            >
+              <select
+                value={exportType || ''}
+                onChange={(e) => setExportType(e.target.value as 'pdf' | 'excel' | null)}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: 'white',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  minWidth: '120px'
+                }}
+              >
+                <option value="">Export</option>
+                <option value="pdf">PDF</option>
+                <option value="excel">Excel</option>
+              </select>
+            </div>
+
+            {/* Export Button */}
+            {exportType && (
+              <button
+                onClick={handleExport}
+                disabled={exporting}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#51258f',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: exporting ? 'not-allowed' : 'pointer',
+                  fontWeight: 'bold',
+                  marginLeft: '10px',
+                  opacity: exporting ? 0.7 : 1,
+                  transition: 'opacity 0.2s ease'
+                }}
+              >
+                {exporting ? '🔄 Exportiert...' : 'EXPORT'}
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Summary */}
         {days.length > 0 && (
