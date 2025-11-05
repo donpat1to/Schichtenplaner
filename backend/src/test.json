@@ -1,0 +1,235 @@
+{
+  "plan_name": "test",
+  "description": "Standard Vorlage für ZEBRA: Mo-Do Vormittag+Nachmittag, Fr nur Vormittag",
+  "period": "2025-10-01 bis 2026-02-01",
+  "status": "published",
+  "created_by": "Max Mustermann",
+  "shifts": {
+    "monday": {
+      "early": {
+        "time": "8:00 - 12:00",
+        "assignments": {
+          "Jerome": 2,
+          "Patrick": 2,
+          "Andrey": 1,
+          "Fabian": 2,
+          "Lu": 3,
+          "Basti": 1,
+          "Kilian": 3,
+          "Gerald": 1,
+          "Uliana": 2,
+          "Nico": 1,
+          "Linuuuus": 1
+        }
+      },
+      "late": {
+        "time": "11:30 - 15:30",
+        "assignments": {
+          "Jerome": 1,
+          "Patrick": 3,
+          "Andrey": 1,
+          "Fabian": 3,
+          "Lu": 1,
+          "Basti": 1,
+          "Kilian": 3,
+          "Gerald": 3,
+          "Uliana": 3,
+          "Nico": 1,
+          "Linuuuus": 3
+        }
+      }
+    },
+    "tuesday": {
+      "early": {
+        "time": "8:00 - 12:00",
+        "assignments": {
+          "Jerome": 2,
+          "Patrick": 2,
+          "Andrey": 1,
+          "Fabian": 2,
+          "Lu": 3,
+          "Basti": 1,
+          "Kilian": 3,
+          "Gerald": 2,
+          "Uliana": 1,
+          "Nico": 1,
+          "Linuuuus": 2
+        }
+      },
+      "late": {
+        "time": "11:30 - 15:30",
+        "assignments": {
+          "Jerome": 1,
+          "Patrick": 3,
+          "Andrey": 1,
+          "Fabian": 3,
+          "Lu": 3,
+          "Basti": 1,
+          "Kilian": 3,
+          "Gerald": 2,
+          "Uliana": 2,
+          "Nico": 3,
+          "Linuuuus": 2
+        }
+      }
+    },
+    "wednesday": {
+      "early": {
+        "time": "8:00 - 12:00",
+        "assignments": {
+          "Jerome": 2,
+          "Patrick": 2,
+          "Andrey": 1,
+          "Fabian": 2,
+          "Lu": 3,
+          "Basti": 3,
+          "Kilian": 3,
+          "Gerald": 3,
+          "Uliana": 2,
+          "Nico": 3,
+          "Linuuuus": 2
+        }
+      },
+      "late": {
+        "time": "11:30 - 15:30",
+        "assignments": {
+          "Jerome": 2,
+          "Patrick": 3,
+          "Andrey": 1,
+          "Fabian": 3,
+          "Lu": 3,
+          "Basti": 3,
+          "Kilian": 3,
+          "Gerald": 3,
+          "Uliana": 3,
+          "Nico": 1,
+          "Linuuuus": 3
+        }
+      }
+    },
+    "thursday": {
+      "early": {
+        "time": "8:00 - 12:00",
+        "assignments": {
+          "Jerome": 3,
+          "Patrick": 3,
+          "Andrey": 1,
+          "Fabian": 3,
+          "Lu": 3,
+          "Basti": 3,
+          "Kilian": 3,
+          "Gerald": 3,
+          "Uliana": 3,
+          "Nico": 2,
+          "Linuuuus": 2
+        }
+      },
+      "late": {
+        "time": "11:30 - 15:30",
+        "assignments": {
+          "Jerome": 1,
+          "Patrick": 1,
+          "Andrey": 1,
+          "Fabian": 1,
+          "Lu": 3,
+          "Basti": 3,
+          "Kilian": 1,
+          "Gerald": 2,
+          "Uliana": 3,
+          "Nico": 3,
+          "Linuuuus": 3
+        }
+      }
+    },
+    "friday": {
+      "early": {
+        "time": "8:00 - 12:00",
+        "assignments": {
+          "Jerome": 1,
+          "Patrick": 1,
+          "Andrey": 1,
+          "Fabian": 1,
+          "Lu": 1,
+          "Basti": 3,
+          "Kilian": 1,
+          "Gerald": 1,
+          "Uliana": 1,
+          "Nico": 3,
+          "Linuuuus": 3
+        }
+      }
+    }
+  },
+  "employee_info": {
+    "contract_sizes": {
+      "Jerome": "groß",
+      "Patrick": "groß",
+      "Andrey": "groß",
+      "Fabian": "klein",
+      "Lu": "klein",
+      "Basti": "flexible",
+      "Kilian": "klein",
+      "Gerald": "groß",
+      "Uliana": "groß",
+      "Nico": "klein",
+      "Linuuuus": "klein"
+    },
+    "employee_types": {
+      "Jerome": "personell",
+      "Patrick": "personell",
+      "Andrey": "personell",
+      "Fabian": "personell",
+      "Lu": "personell",
+      "Basti": "manager",
+      "Kilian": "personell",
+      "Gerald": "personell",
+      "Uliana": "personell",
+      "Nico": "personell",
+      "Linuuuus": "personell"
+    },
+    "roles": {
+      "Jerome": "user",
+      "Patrick": "maintenance",
+      "Andrey": "user",
+      "Fabian": "user",
+      "Lu": "user",
+      "Basti": "admin",
+      "Kilian": "user",
+      "Gerald": "user",
+      "Uliana": "user",
+      "Nico": "user",
+      "Linuuuus": "user"
+    },
+    "trainees": {
+      "Jerome": false,
+      "Patrick": false,
+      "Andrey": false,
+      "Fabian": false,
+      "Lu": false,
+      "Basti": false,
+      "Kilian": true,
+      "Gerald": true,
+      "Uliana": true,
+      "Nico": true,
+      "Linuuuus": false
+    },
+    "can_work_alone": {
+      "Jerome": true,
+      "Patrick": true,
+      "Andrey": false,
+      "Fabian": true,
+      "Lu": false,
+      "Basti": false,
+      "Kilian": false,
+      "Gerald": false,
+      "Uliana": false,
+      "Nico": false,
+      "Linuuuus": true
+    }
+  },
+  "availability_scale": {
+    "1": "available",
+    "2": "limited",
+    "3": "unavailable"
+  }
+}

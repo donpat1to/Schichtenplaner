@@ -14,9 +14,9 @@ import shiftPlanRoutes from './routes/shiftPlans.js';
 import setupRoutes from './routes/setup.js';
 import scheduledShifts from './routes/scheduledShifts.js';
 import schedulingRoutes from './routes/scheduling.js';
-import { 
-  apiLimiter, 
-  authLimiter, 
+import {
+  apiLimiter,
+  authLimiter,
   expensiveEndpointLimiter
 } from './middleware/rateLimit.js';
 import { ipSecurityCheck as authIpCheck } from './middleware/auth.js';
@@ -27,6 +27,15 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = 3002;
 const isDevelopment = process.env.NODE_ENV === 'development';
+if (isDevelopment) {
+  console.log('🔧 Running in Development mode');
+} else if (process.env.NODE_ENV === 'production') {
+  console.log('🚀 Running in Production mode');
+} else {
+  console.log('⚠️  NODE_ENV not set, defaulting to Development mode');
+  console.error('❌ Please set NODE_ENV to "production" or "development" for proper behavior.');
+  process.exit(1);
+}
 
 app.use(authIpCheck);
 
@@ -96,12 +105,12 @@ const configureTrustProxy = (): string | string[] | boolean | number => {
   // If specific IPs are provided via environment variable
   if (trustedProxyIps) {
     console.log('🔒 Trust proxy: Using configured IPs:', trustedProxyIps);
-    
+
     // Handle comma-separated list of IPs/CIDR ranges
     if (trustedProxyIps.includes(',')) {
       return trustedProxyIps.split(',').map(ip => ip.trim());
     }
-    
+
     // Handle single IP/CIDR
     return trustedProxyIps.trim();
   }
@@ -116,15 +125,15 @@ app.set('trust proxy', configureTrustProxy());
 app.use((req, res, next) => {
   const protocol = req.headers['x-forwarded-proto'] || req.protocol;
   const isHttps = protocol === 'https';
-  
+
   // Add security warning for HTTP requests
   if (!isHttps && process.env.NODE_ENV === 'production') {
     res.setHeader('X-Security-Warning', 'This application is being accessed over HTTP. For secure communication, please use HTTPS.');
-    
+
     // Log HTTP access in production
     console.warn(`⚠️  HTTP access detected: ${req.method} ${req.path} from ${req.ip}`);
   }
-  
+
   next();
 });
 
@@ -273,7 +282,7 @@ app.get('*', (req, res, next) => {
   // Serve React app for all other routes
   const frontendPath = '/app/frontend-build';
   const indexPath = path.join(frontendPath, 'index.html');
-  
+
   if (fs.existsSync(indexPath)) {
     res.sendFile(indexPath);
   } else {
