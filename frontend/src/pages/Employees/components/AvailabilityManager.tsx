@@ -317,7 +317,17 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
 
     // Convert to array and sort by start time
     const sortedTimeSlots = Array.from(allTimeSlots.values()).sort((a, b) => {
-      return (a.startTime || '').localeCompare(b.startTime || '');
+      // Convert time strings to minutes for proper numeric comparison
+      const timeToMinutes = (timeStr: string) => {
+        if (!timeStr) return 0;
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        return hours * 60 + minutes;
+      };
+
+      const minutesA = timeToMinutes(a.startTime);
+      const minutesB = timeToMinutes(b.startTime);
+      
+      return minutesA - minutesB; // Ascending order (earliest first)
     });
 
     return (

@@ -9,7 +9,7 @@ import {
 import { AuthRequest } from '../middleware/auth.js';
 import { TEMPLATE_PRESETS } from '../models/defaults/shiftPlanDefaults.js';
 import ExcelJS from 'exceljs';
-import { chromium } from 'playwright';
+import { chromium } from 'playwright-chromium';
 
 async function getPlanWithDetails(planId: string) {
   const plan = await db.get<any>(`
@@ -989,6 +989,20 @@ interface ExportTimetableData {
   allTimeSlots: ExportTimeSlot[];
 }
 
+function sortTimeSlotsByStartTime(timeSlots: any[]): any[] {
+  const timeToMinutes = (timeStr: string) => {
+    if (!timeStr) return 0;
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    return hours * 60 + minutes;
+  };
+
+  return [...timeSlots].sort((a, b) => {
+    const minutesA = timeToMinutes(a.startTime);
+    const minutesB = timeToMinutes(b.startTime);
+    return minutesA - minutesB; // Ascending order (earliest first)
+  });
+}
+
 function getTimetableDataForExport(plan: any): ExportTimetableData {
   const weekdays = [
     { id: 1, name: 'Montag' },
@@ -1032,9 +1046,16 @@ function getTimetableDataForExport(plan: any): ExportTimetableData {
   Object.keys(shiftsByDay).forEach(day => {
     const dayNum = parseInt(day);
     shiftsByDay[dayNum].sort((a: any, b: any) => {
-      const timeA = a.startTime || '';
-      const timeB = b.startTime || '';
-      return timeA.localeCompare(timeB);
+      // Use numeric comparison for proper time sorting
+      const timeToMinutes = (timeStr: string) => {
+        if (!timeStr) return 0;
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        return hours * 60 + minutes;
+      };
+
+      const minutesA = timeToMinutes(a.startTime);
+      const minutesB = timeToMinutes(b.startTime);
+      return minutesA - minutesB;
     });
   });
 
@@ -1073,15 +1094,12 @@ function getTimetableDataForExport(plan: any): ExportTimetableData {
     });
   });
 
-  // Convert to array and sort by start time
-  const allTimeSlots = Array.from(allTimeSlotsMap.values()).sort((a: ExportTimeSlot, b: ExportTimeSlot) => {
-    return (a.startTime || '').localeCompare(b.startTime || '');
-  });
+  // Convert to array and sort by start time using numeric comparison
+  const allTimeSlots = sortTimeSlotsByStartTime(Array.from(allTimeSlotsMap.values()));
 
   return { days, allTimeSlots };
 }
 
-// Export shift plan to Excel
 // Export shift plan to Excel
 export const exportShiftPlanToExcel = async (req: Request, res: Response): Promise<void> => {
   try {

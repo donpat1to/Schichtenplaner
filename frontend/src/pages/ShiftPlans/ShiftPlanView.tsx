@@ -126,7 +126,7 @@ const ShiftPlanView: React.FC = () => {
 
   useEffect(() => {
     if (dropdownRef.current) {
-      setDropdownWidth(dropdownRef.current.offsetWidth);
+      setDropdownWidth(dropdownRef.current.offsetWidth / 40);  // Adjust divisor for desired slide distance
     }
   }, [exportType]);
 
@@ -200,7 +200,17 @@ const ShiftPlanView: React.FC = () => {
 
     // Convert to array and sort by start time - SAME LOGIC AS AVAILABILITYMANAGER
     const allTimeSlots = Array.from(allTimeSlotsMap.values()).sort((a, b) => {
-      return (a.startTime || '').localeCompare(b.startTime || '');
+      // Convert time strings to minutes for proper numeric comparison
+      const timeToMinutes = (timeStr: string) => {
+        if (!timeStr) return 0;
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        return hours * 60 + minutes;
+      };
+
+      const minutesA = timeToMinutes(a.startTime);
+      const minutesB = timeToMinutes(b.startTime);
+      
+      return minutesA - minutesB; // Ascending order (earliest first)
     });
 
     return { days, shiftsByDay, allTimeSlots };
@@ -1436,17 +1446,17 @@ const ShiftPlanView: React.FC = () => {
           <div style={{
             display: 'flex',
             alignItems: 'center',
-            position: 'relative',
-            marginLeft: '10px'
+            justifyContent: 'flex-end',
+            marginTop: '20px',
+            gap: '10px'
           }}>
-            {/* Export Dropdown */}
+            {/* Export Dropdown Container */}
             <div
               ref={dropdownRef}
               style={{
                 transform: exportType ? `translateX(-${dropdownWidth}px)` : 'translateX(0)',
                 transition: 'transform 0.3s ease-in-out',
-                position: exportType ? 'absolute' : 'relative',
-                right: exportType ? `-${dropdownWidth}px` : '0'
+                position: 'relative' 
               }}
             >
               <select
@@ -1467,7 +1477,7 @@ const ShiftPlanView: React.FC = () => {
               </select>
             </div>
 
-            {/* Export Button */}
+            {/* Export Button - erscheint nur wenn eine Option ausgewählt ist */}
             {exportType && (
               <button
                 onClick={handleExport}
@@ -1480,7 +1490,6 @@ const ShiftPlanView: React.FC = () => {
                   borderRadius: '4px',
                   cursor: exporting ? 'not-allowed' : 'pointer',
                   fontWeight: 'bold',
-                  marginLeft: '10px',
                   opacity: exporting ? 0.7 : 1,
                   transition: 'opacity 0.2s ease'
                 }}

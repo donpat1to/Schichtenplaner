@@ -86,7 +86,8 @@ export async function seedTestData(): Promise<void> {
         console.log('🌱 Starting test data seeding...');
 
         // Read test.json file - adjust path to be relative to project root
-        const testDataPath = path.resolve(process.cwd(), 'test.json');
+        //const testDataPath = path.resolve(process.cwd(), './test.json');
+        const testDataPath = path.resolve(__dirname, './test.json');
 
         console.log('🔍 Looking for test.json at:', testDataPath);
 
@@ -95,9 +96,10 @@ export async function seedTestData(): Promise<void> {
 
             // Try alternative paths
             const alternativePaths = [
-                path.resolve(__dirname, '../../../test.json'),
-                path.resolve(process.cwd(), '../test.json'),
-                path.resolve(__dirname, '../../test.json')
+                //path.resolve(__dirname, '../../../test.json'),
+                //path.resolve(process.cwd(), '../test.json'),
+                //path.resolve(__dirname, '../../test.json'),
+                path.resolve(__dirname, './test.json')
             ];
 
             for (const altPath of alternativePaths) {
@@ -136,7 +138,7 @@ export async function seedTestData(): Promise<void> {
 
                 const [firstname, lastname = ''] = name.split(' ');
                 const email = generateEmail(firstname, lastname || 'Test');
-                const passwordHash = await bcrypt.hash('test1234', 10);
+                const passwordHash = await bcrypt.hash('ZebraAux123!', 10);
 
                 const contractType = mapContractType(testData.employee_info.contract_sizes[name]);
                 const employeeType = testData.employee_info.employee_types[name];

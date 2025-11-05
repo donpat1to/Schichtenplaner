@@ -29,7 +29,7 @@
     "helmet": "8.1.0",
     "express-validator": "7.3.0",
     "exceljs": "4.4.0",
-    "playwright": "^1.37.0"
+    "playwright-chromium": "^1.37.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.2",
