@@ -1015,7 +1015,7 @@ function getTimetableDataForExport(plan: any): ExportTimetableData {
     if (!acc[shift.dayOfWeek]) {
       acc[shift.dayOfWeek] = [];
     }
-    
+
     const timeSlot = timeSlotMap.get(shift.timeSlotId);
     const enhancedShift = {
       ...shift,
@@ -1023,7 +1023,7 @@ function getTimetableDataForExport(plan: any): ExportTimetableData {
       startTime: timeSlot?.startTime,
       endTime: timeSlot?.endTime
     };
-    
+
     acc[shift.dayOfWeek].push(enhancedShift);
     return acc;
   }, {});
@@ -1081,20 +1081,17 @@ function getTimetableDataForExport(plan: any): ExportTimetableData {
   return { days, allTimeSlots };
 }
 
-// Update the Excel export function with proper typing
+// Export shift plan to Excel
 export const exportShiftPlanToExcel = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-
     console.log('📊 Starting Excel export for plan:', id);
 
-    // Check if plan exists
     const plan = await getShiftPlanById(id);
     if (!plan) {
       res.status(404).json({ error: 'Shift plan not found' });
       return;
     }
-
     if (plan.status !== 'published') {
       res.status(400).json({ error: 'Can only export published shift plans' });
       return;
@@ -1105,13 +1102,13 @@ export const exportShiftPlanToExcel = async (req: Request, res: Response): Promi
     workbook.creator = 'Schichtplaner System';
     workbook.created = new Date();
 
-    // Add Summary Sheet
+    /* -------------------------------------------------------------------------- */
+    /*                           🧾 1. Summary Sheet                              */
+    /* -------------------------------------------------------------------------- */
     const summarySheet = workbook.addWorksheet('Planübersicht');
-
-    // Summary data
     summarySheet.columns = [
-      { header: 'Eigenschaft', key: 'property', width: 20 },
-      { header: 'Wert', key: 'value', width: 30 }
+      { header: 'Eigenschaft', key: 'property', width: 25 },
+      { header: 'Wert', key: 'value', width: 35 }
     ];
 
     summarySheet.addRows([
@@ -1120,98 +1117,81 @@ export const exportShiftPlanToExcel = async (req: Request, res: Response): Promi
       { property: 'Zeitraum', value: `${plan.startDate} bis ${plan.endDate}` },
       { property: 'Status', value: plan.status },
       { property: 'Erstellt von', value: plan.created_by_name || 'Unbekannt' },
-      { property: 'Erstellt am', value: plan.createdAt },
+      { property: 'Erstellt am', value: new Date(plan.createdAt).toLocaleString('de-DE') },
       { property: 'Anzahl Schichten', value: plan.scheduledShifts?.length || 0 },
       { property: 'Anzahl Mitarbeiter', value: plan.employees?.length || 0 }
     ]);
 
-    // Style summary sheet
-    summarySheet.getRow(1).font = { bold: true };
-    summarySheet.getRow(1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FF2C3E50' }
-    };
-    summarySheet.getRow(1).font = { color: { argb: 'FFFFFFFF' }, bold: true };
+    // Style header
+    const header1 = summarySheet.getRow(1);
+    header1.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    header1.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2C3E50' } };
+    summarySheet.columns.forEach(col => (col.alignment = { vertical: 'middle', wrapText: true }));
 
-    // Add Timetable Sheet (matching React component visualization)
+    /* -------------------------------------------------------------------------- */
+    /*                        📅 2. Timetable / Schichtplan Sheet                 */
+    /* -------------------------------------------------------------------------- */
     const timetableSheet = workbook.addWorksheet('Schichtplan');
-
-    // Get timetable data structure similar to React component
     const timetableData = getTimetableDataForExport(plan);
     const { days, allTimeSlots } = timetableData;
 
-    // Create header row
-    const headerRow = ['Schicht (Zeit)', ...days.map(day => day.name)];
-    timetableSheet.addRow(headerRow);
+    // Header
+    const headerRow = ['Schicht (Zeit)', ...days.map(d => d.name)];
+    const header = timetableSheet.addRow(headerRow);
+    header.eachCell(cell => {
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2C3E50' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+    });
 
-    // Add data rows for each time slot
-    allTimeSlots.forEach(timeSlot => {
-      const rowData: any[] = [
-        `${timeSlot.name}\n${timeSlot.startTime} - ${timeSlot.endTime}`
-      ];
+    // Content rows
+    for (const timeSlot of allTimeSlots) {
+      const rowData: any[] = [`${timeSlot.name}\n${timeSlot.startTime} - ${timeSlot.endTime}`];
 
-      days.forEach(day => {
+      for (const day of days) {
         const shift = timeSlot.shiftsByDay[day.id];
         if (!shift) {
           rowData.push('Keine Schicht');
-          return;
+          continue;
         }
 
-        // Get assignments for this time slot and day
-        const scheduledShift = plan.scheduledShifts?.find((scheduled: any) => {
-          const scheduledDayOfWeek = getDayOfWeek(scheduled.date);
-          return scheduledDayOfWeek === day.id && 
-                scheduled.timeSlotId === timeSlot.id;
-        });
+        const scheduledShift = plan.scheduledShifts?.find(
+          (s: any) => getDayOfWeek(s.date) === day.id && s.timeSlotId === timeSlot.id
+        );
 
-        if (scheduledShift && scheduledShift.assignedEmployees.length > 0) {
-          const employeeNames = scheduledShift.assignedEmployees.map((empId: string) => {
-            const employee = plan.employees?.find((emp: any) => emp.id === empId);
-            if (!employee) return 'Unbekannt';
-            
-            // Add role indicator similar to React component
-            let roleIndicator = '';
-            if (employee.isTrainee) {
-              roleIndicator = ' (Trainee)';
-            } else if (employee.roles?.includes('manager')) {
-              roleIndicator = ' (Manager)';
-            }
-            
-            return `${employee.firstname} ${employee.lastname}${roleIndicator}`;
-          }).join('\n');
-          
-          rowData.push(employeeNames);
+        if (scheduledShift && scheduledShift.assignedEmployees?.length > 0) {
+          const employees = scheduledShift.assignedEmployees.map((empId: string) => {
+            const emp = plan.employees?.find((e: any) => e.id === empId);
+            if (!emp) return { text: 'Unbekannt', color: 'FF888888' };
+
+            if (emp.isTrainee)
+              return { text: `${emp.firstname} ${emp.lastname} (T)`, color: 'FFCDA8F0' };
+            if (emp.employee_type === 'manager')
+              return { text: `${emp.firstname} ${emp.lastname} (M)`, color: 'FFCC0000' };
+            return { text: `${emp.firstname} ${emp.lastname}`, color: 'FF642AB5' };
+          });
+          rowData.push(employees);
         } else {
-          // Show required employees count like in React component
-          const shiftsForSlot = plan.shifts?.filter((s: any) => 
-            s.dayOfWeek === day.id && 
-            s.timeSlotId === timeSlot.id
-          ) || [];
-          const totalRequired = shiftsForSlot.reduce((sum: number, s: any) => sum + s.requiredEmployees, 0);
+          const shiftsForSlot =
+            plan.shifts?.filter(
+              (s: any) => s.dayOfWeek === day.id && s.timeSlotId === timeSlot.id
+            ) || [];
+          const totalRequired = shiftsForSlot.reduce(
+            (sum: number, s: any) => sum + s.requiredEmployees,
+            0
+          );
           rowData.push(totalRequired === 0 ? '-' : `0/${totalRequired}`);
         }
-      });
-
-      timetableSheet.addRow(rowData);
-    });
-
-    // Style timetable sheet
-    timetableSheet.getRow(1).font = { bold: true };
-    timetableSheet.getRow(1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FF2C3E50' }
-    };
-    timetableSheet.getRow(1).font = { color: { argb: 'FFFFFFFF' }, bold: true };
-
-    // Set row heights and wrap text
-    timetableSheet.eachRow((row, rowNumber) => {
-      if (rowNumber > 1) {
-        row.height = 60;
-        row.alignment = { vertical: 'top', wrapText: true };
       }
-      
+
+      const row = timetableSheet.addRow(rowData);
+
       row.eachCell((cell, colNumber) => {
         cell.border = {
           top: { style: 'thin' },
@@ -1219,65 +1199,98 @@ export const exportShiftPlanToExcel = async (req: Request, res: Response): Promi
           bottom: { style: 'thin' },
           right: { style: 'thin' }
         };
-        
-        if (rowNumber === 1) {
-          cell.alignment = { horizontal: 'center', vertical: 'middle' };
-        } else if (colNumber === 1) {
-          cell.alignment = { vertical: 'middle' };
-        } else {
-          cell.alignment = { vertical: 'top', wrapText: true };
+        cell.alignment = { vertical: 'top', wrapText: true };
+
+        if (cell.value === 'Keine Schicht') {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDEDED' } };
+          cell.font = { color: { argb: 'FF888888' }, italic: true };
+        }
+
+        if (Array.isArray(cell.value)) {
+          cell.value = {
+            richText: cell.value.map((e: any) => ({
+              text: e.text + '\n',
+              font: { color: { argb: e.color } }
+            }))
+          };
+        }
+
+        if (colNumber === 1) {
+          cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
         }
       });
+    }
+
+    // Adjust layout
+    timetableSheet.eachRow((row, i) => (row.height = i === 1 ? 30 : 70));
+    timetableSheet.columns.forEach(col => {
+      let max = 12;
+      col.eachCell?.({ includeEmpty: true }, c => {
+        const len = typeof c.value === 'string' ? c.value.length : 10;
+        if (len > max) max = len;
+      });
+      col.width = Math.min(max + 5, 40);
     });
 
-    // Auto-fit columns
-    timetableSheet.columns.forEach(column => {
-      if (column.width) {
-        column.width = Math.max(column.width, 12);
-      }
+    // Add legend row at bottom
+    const legendRow = timetableSheet.addRow([
+      'Legende:',
+      '■ Manager',
+      '■ Trainee',
+      '■ Mitarbeiter',
+      '■ Keine Schicht'
+    ]);
+
+    // Style each square with its respective color
+    legendRow.getCell(1).font = { bold: true };
+    legendRow.getCell(2).font = { color: { argb: 'FFCC0000' } };   // Red = Manager
+    legendRow.getCell(3).font = { color: { argb: 'FFCDA8F0' } };   // Purple = Trainee
+    legendRow.getCell(4).font = { color: { argb: 'FF642AB5' } };   // Blue = Mitarbeiter
+    legendRow.getCell(5).font = { color: { argb: 'FF888888' } };   // Gray = Keine Schicht
+
+    legendRow.eachCell(cell => {
+      cell.alignment = { vertical: 'middle', horizontal: 'left' };
+      cell.font = { ...cell.font, italic: true };
     });
 
-    // Add Employee Overview Sheet
+    /* -------------------------------------------------------------------------- */
+    /*                        👥 3. Employee Overview Sheet                       */
+    /* -------------------------------------------------------------------------- */
     const employeeSheet = workbook.addWorksheet('Mitarbeiterübersicht');
-
     employeeSheet.columns = [
       { header: 'Name', key: 'name', width: 25 },
       { header: 'E-Mail', key: 'email', width: 25 },
-      { header: 'Rolle', key: 'role', width: 15 },
+      { header: 'Rolle', key: 'role', width: 18 },
       { header: 'Mitarbeiter Typ', key: 'type', width: 15 },
-      { header: 'Vertragstyp', key: 'contract', width: 15 },
+      { header: 'Vertragstyp', key: 'contract', width: 18 },
       { header: 'Trainee', key: 'trainee', width: 10 }
     ];
 
-    plan.employees?.forEach((employee: any) => {
+    plan.employees?.forEach((e: any) =>
       employeeSheet.addRow({
-        name: `${employee.firstname} ${employee.lastname}`,
-        email: employee.email,
-        role: employee.roles?.join(', ') || 'Benutzer',
-        type: employee.employeeType,
-        contract: employee.contractType || 'Nicht angegeben',
-        trainee: employee.isTrainee ? 'Ja' : 'Nein'
-      });
-    });
+        name: `${e.firstname} ${e.lastname}`,
+        email: e.email,
+        role: e.roles?.join(', ') || 'Benutzer',
+        type: e.employee_type || 'Unbekannt',
+        contract: e.contractType || 'Nicht angegeben',
+        trainee: e.isTrainee ? 'Ja' : 'Nein'
+      })
+    );
 
-    // Style employee sheet
-    employeeSheet.getRow(1).font = { bold: true };
-    employeeSheet.getRow(1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FF34495E' }
-    };
-    employeeSheet.getRow(1).font = { color: { argb: 'FFFFFFFF' }, bold: true };
+    const empHeader = employeeSheet.getRow(1);
+    empHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    empHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF34495E' } };
+    empHeader.alignment = { horizontal: 'center', vertical: 'middle' };
 
-    // Set response headers
+    /* -------------------------------------------------------------------------- */
+    /*                            📤 4. Send Response                             */
+    /* -------------------------------------------------------------------------- */
+    const fileName = `Schichtplan_${plan.name}_${new Date().toISOString().split('T')[0]}.xlsx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="Schichtplan_${plan.name}_${new Date().toISOString().split('T')[0]}.xlsx"`);
-
-    // Write to response
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     await workbook.xlsx.write(res);
 
     console.log('✅ Excel export completed for plan:', id);
-
   } catch (error) {
     console.error('❌ Error exporting to Excel:', error);
     res.status(500).json({ error: 'Internal server error during Excel export' });
@@ -1359,11 +1372,11 @@ export const exportShiftPlanToPDF = async (req: Request, res: Response): Promise
 
     // Table headers
     doc.fontSize(10).font('Helvetica-Bold');
-    
+
     // Time slot header
     doc.rect(50, currentY, timeSlotColWidth, 20).fillAndStroke('#2c3e50', '#2c3e50');
     doc.fillColor('white').text('Schicht (Zeit)', 55, currentY + 5, { width: timeSlotColWidth - 10, align: 'left' });
-    
+
     // Day headers
     days.forEach((day, index) => {
       const xPos = 50 + timeSlotColWidth + (index * dayColWidth);
@@ -1380,25 +1393,25 @@ export const exportShiftPlanToPDF = async (req: Request, res: Response): Promise
       if (currentY > 650) {
         doc.addPage();
         currentY = 50;
-        
+
         // Redraw headers on new page
         doc.fontSize(10).font('Helvetica-Bold');
         doc.rect(50, currentY, timeSlotColWidth, 20).fillAndStroke('#2c3e50', '#2c3e50');
         doc.fillColor('white').text('Schicht (Zeit)', 55, currentY + 5, { width: timeSlotColWidth - 10, align: 'left' });
-        
+
         days.forEach((day, index) => {
           const xPos = 50 + timeSlotColWidth + (index * dayColWidth);
           doc.rect(xPos, currentY, dayColWidth, 20).fillAndStroke('#2c3e50', '#2c3e50');
           doc.fillColor('white').text(day.name, xPos + 5, currentY + 5, { width: dayColWidth - 10, align: 'center' });
         });
-        
+
         doc.fillColor('black');
         currentY += 20;
       }
 
       // Alternate row background
       const rowBgColor = rowIndex % 2 === 0 ? '#f8f9fa' : 'white';
-      
+
       // Time slot cell
       doc.rect(50, currentY, timeSlotColWidth, 40).fillAndStroke(rowBgColor, '#dee2e6');
       doc.fontSize(9).font('Helvetica-Bold').text(timeSlot.name, 55, currentY + 5, { width: timeSlotColWidth - 10 });
@@ -1408,24 +1421,24 @@ export const exportShiftPlanToPDF = async (req: Request, res: Response): Promise
       days.forEach((day, colIndex) => {
         const xPos = 50 + timeSlotColWidth + (colIndex * dayColWidth);
         const shift = timeSlot.shiftsByDay[day.id];
-        
+
         doc.rect(xPos, currentY, dayColWidth, 40).fillAndStroke(rowBgColor, '#dee2e6');
-        
+
         if (!shift) {
-          doc.fontSize(8).font('Helvetica-Oblique').fillColor('#ccc').text('Keine Schicht', xPos + 5, currentY + 15, { 
-            width: dayColWidth - 10, 
-            align: 'center' 
+          doc.fontSize(8).font('Helvetica-Oblique').fillColor('#ccc').text('Keine Schicht', xPos + 5, currentY + 15, {
+            width: dayColWidth - 10,
+            align: 'center'
           });
         } else {
           // Get assignments for this time slot and day
           const scheduledShift = plan.scheduledShifts?.find((scheduled: any) => {
             const scheduledDayOfWeek = getDayOfWeek(scheduled.date);
-            return scheduledDayOfWeek === day.id && 
-                  scheduled.timeSlotId === timeSlot.id;
+            return scheduledDayOfWeek === day.id &&
+              scheduled.timeSlotId === timeSlot.id;
           });
 
           doc.fillColor('black').fontSize(8).font('Helvetica');
-          
+
           if (scheduledShift && scheduledShift.assignedEmployees.length > 0) {
             let textY = currentY + 5;
             scheduledShift.assignedEmployees.forEach((empId: string, empIndex: number) => {
@@ -1436,13 +1449,13 @@ export const exportShiftPlanToPDF = async (req: Request, res: Response): Promise
                   if (employee.isTrainee) {
                     roleIndicator = ' (T)';
                     doc.fillColor('#cda8f0'); // Trainee color
-                  } else if (employee.roles?.includes('manager')) {
+                  } else if (employee.employee_type === 'manager') {
                     roleIndicator = ' (M)';
                     doc.fillColor('#CC0000'); // Manager color
                   } else {
                     doc.fillColor('#642ab5'); // Regular personnel color
                   }
-                  
+
                   const name = `${employee.firstname} ${employee.lastname}${roleIndicator}`;
                   doc.text(name, xPos + 5, textY, { width: dayColWidth - 10, align: 'left' });
                   textY += 10;
@@ -1452,15 +1465,15 @@ export const exportShiftPlanToPDF = async (req: Request, res: Response): Promise
             doc.fillColor('black');
           } else {
             // Show required count like in React component
-            const shiftsForSlot = plan.shifts?.filter((s: any) => 
-              s.dayOfWeek === day.id && 
+            const shiftsForSlot = plan.shifts?.filter((s: any) =>
+              s.dayOfWeek === day.id &&
               s.timeSlotId === timeSlot.id
             ) || [];
             const totalRequired = shiftsForSlot.reduce((sum: number, s: any) => sum + s.requiredEmployees, 0);
             const displayText = totalRequired === 0 ? '-' : `0/${totalRequired}`;
-            
+
             doc.fillColor('#666').fontSize(9).font('Helvetica-Oblique')
-               .text(displayText, xPos + 5, currentY + 15, { width: dayColWidth - 10, align: 'center' });
+              .text(displayText, xPos + 5, currentY + 15, { width: dayColWidth - 10, align: 'center' });
             doc.fillColor('black');
           }
         }
