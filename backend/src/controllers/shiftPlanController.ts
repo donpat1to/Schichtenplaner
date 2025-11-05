@@ -1082,6 +1082,7 @@ function getTimetableDataForExport(plan: any): ExportTimetableData {
 }
 
 // Export shift plan to Excel
+// Export shift plan to Excel
 export const exportShiftPlanToExcel = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
@@ -1103,7 +1104,7 @@ export const exportShiftPlanToExcel = async (req: Request, res: Response): Promi
     workbook.created = new Date();
 
     /* -------------------------------------------------------------------------- */
-    /*                           🧾 1. Summary Sheet                              */
+    /*                           📋 1. Summary Sheet                              */
     /* -------------------------------------------------------------------------- */
     const summarySheet = workbook.addWorksheet('Planübersicht');
     summarySheet.columns = [
@@ -1135,6 +1136,19 @@ export const exportShiftPlanToExcel = async (req: Request, res: Response): Promi
     const timetableData = getTimetableDataForExport(plan);
     const { days, allTimeSlots } = timetableData;
 
+    // Calculate max employees per shift to determine row structure
+    let maxEmployeesPerShift = 1;
+    for (const timeSlot of allTimeSlots) {
+      for (const day of days) {
+        const scheduledShift = plan.scheduledShifts?.find(
+          (s: any) => getDayOfWeek(s.date) === day.id && s.timeSlotId === timeSlot.id
+        );
+        if (scheduledShift && scheduledShift.assignedEmployees?.length > maxEmployeesPerShift) {
+          maxEmployeesPerShift = scheduledShift.assignedEmployees.length;
+        }
+      }
+    }
+
     // Header
     const headerRow = ['Schicht (Zeit)', ...days.map(d => d.name)];
     const header = timetableSheet.addRow(headerRow);
@@ -1150,87 +1164,133 @@ export const exportShiftPlanToExcel = async (req: Request, res: Response): Promi
       };
     });
 
-    // Content rows
+    // Content rows - each time slot can have multiple employee rows
     for (const timeSlot of allTimeSlots) {
-      const rowData: any[] = [`${timeSlot.name}\n${timeSlot.startTime} - ${timeSlot.endTime}`];
-
+      // Find max employees for this time slot across all days
+      let maxEmployeesInTimeSlot = 0;
       for (const day of days) {
-        const shift = timeSlot.shiftsByDay[day.id];
-        if (!shift) {
-          rowData.push('Keine Schicht');
-          continue;
-        }
-
         const scheduledShift = plan.scheduledShifts?.find(
           (s: any) => getDayOfWeek(s.date) === day.id && s.timeSlotId === timeSlot.id
         );
-
-        if (scheduledShift && scheduledShift.assignedEmployees?.length > 0) {
-          const employees = scheduledShift.assignedEmployees.map((empId: string) => {
-            const emp = plan.employees?.find((e: any) => e.id === empId);
-            if (!emp) return { text: 'Unbekannt', color: 'FF888888' };
-
-            if (emp.isTrainee)
-              return { text: `${emp.firstname} ${emp.lastname} (T)`, color: 'FFCDA8F0' };
-            if (emp.employee_type === 'manager')
-              return { text: `${emp.firstname} ${emp.lastname} (M)`, color: 'FFCC0000' };
-            return { text: `${emp.firstname} ${emp.lastname}`, color: 'FF642AB5' };
-          });
-          rowData.push(employees);
-        } else {
-          const shiftsForSlot =
-            plan.shifts?.filter(
-              (s: any) => s.dayOfWeek === day.id && s.timeSlotId === timeSlot.id
-            ) || [];
-          const totalRequired = shiftsForSlot.reduce(
-            (sum: number, s: any) => sum + s.requiredEmployees,
-            0
-          );
-          rowData.push(totalRequired === 0 ? '-' : `0/${totalRequired}`);
+        if (scheduledShift && scheduledShift.assignedEmployees?.length > maxEmployeesInTimeSlot) {
+          maxEmployeesInTimeSlot = scheduledShift.assignedEmployees.length;
         }
       }
 
-      const row = timetableSheet.addRow(rowData);
+      // If no employees assigned, show at least one row with requirement count
+      const rowsToCreate = Math.max(maxEmployeesInTimeSlot, 1);
 
-      row.eachCell((cell, colNumber) => {
-        cell.border = {
-          top: { style: 'thin' },
-          left: { style: 'thin' },
-          bottom: { style: 'thin' },
-          right: { style: 'thin' }
-        };
-        cell.alignment = { vertical: 'top', wrapText: true };
+      for (let empIndex = 0; empIndex < rowsToCreate; empIndex++) {
+        const rowData: any[] = [];
 
-        if (cell.value === 'Keine Schicht') {
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDEDED' } };
-          cell.font = { color: { argb: 'FF888888' }, italic: true };
+        // First cell: time slot name (only in first row, merged for others)
+        if (empIndex === 0) {
+          rowData.push(`${timeSlot.name}\n${timeSlot.startTime} - ${timeSlot.endTime}`);
+        } else {
+          rowData.push(''); // Empty for merged cells
         }
 
-        if (Array.isArray(cell.value)) {
-          cell.value = {
-            richText: cell.value.map((e: any) => ({
-              text: e.text + '\n',
-              font: { color: { argb: e.color } }
-            }))
+        // Day cells
+        for (const day of days) {
+          const shift = timeSlot.shiftsByDay[day.id];
+
+          if (!shift) {
+            rowData.push(empIndex === 0 ? 'Keine Schicht' : '');
+            continue;
+          }
+
+          const scheduledShift = plan.scheduledShifts?.find(
+            (s: any) => getDayOfWeek(s.date) === day.id && s.timeSlotId === timeSlot.id
+          );
+
+          if (scheduledShift && scheduledShift.assignedEmployees?.length > 0) {
+            if (empIndex < scheduledShift.assignedEmployees.length) {
+              const empId = scheduledShift.assignedEmployees[empIndex];
+              const emp = plan.employees?.find((e: any) => e.id === empId);
+
+              if (!emp) {
+                rowData.push({ text: 'Unbekannt', color: 'FF888888' });
+              } else if (emp.isTrainee) {
+                rowData.push({
+                  text: `${emp.firstname} ${emp.lastname} (T)`,
+                  color: 'FFCDA8F0'
+                });
+              } else if (emp.employeeType === 'manager') {
+                rowData.push({
+                  text: `${emp.firstname} ${emp.lastname} (M)`,
+                  color: 'FFCC0000'
+                });
+              } else {
+                rowData.push({
+                  text: `${emp.firstname} ${emp.lastname}`,
+                  color: 'FF642AB5'
+                });
+              }
+            } else {
+              rowData.push(''); // Empty cell if no more employees
+            }
+          } else {
+            // No employees assigned, show requirement count only in first row
+            if (empIndex === 0) {
+              const shiftsForSlot = plan.shifts?.filter(
+                (s: any) => s.dayOfWeek === day.id && s.timeSlotId === timeSlot.id
+              ) || [];
+              const totalRequired = shiftsForSlot.reduce(
+                (sum: number, s: any) => sum + s.requiredEmployees,
+                0
+              );
+              rowData.push(totalRequired === 0 ? '-' : `0/${totalRequired}`);
+            } else {
+              rowData.push('');
+            }
+          }
+        }
+
+        const row = timetableSheet.addRow(rowData);
+
+        row.eachCell((cell, colNumber) => {
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
           };
-        }
+          cell.alignment = { vertical: 'middle', wrapText: true, horizontal: 'center' };
 
-        if (colNumber === 1) {
-          cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
-        }
-      });
+          // Handle colored employee names
+          if (typeof cell.value === 'object' && cell.value !== null && 'text' in cell.value) {
+            const employeeData = cell.value as unknown as { text: string; color: string };
+            cell.value = employeeData.text;
+            cell.font = { color: { argb: employeeData.color } };
+            cell.alignment = { vertical: 'middle', horizontal: 'left' };
+          }
+
+          if (cell.value === 'Keine Schicht') {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDEDED' } };
+            cell.font = { color: { argb: 'FF888888' }, italic: true };
+          }
+
+          if (colNumber === 1) {
+            cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+          }
+        });
+
+        row.height = 25;
+      }
+
+      // Merge time slot cells vertically if multiple rows were created
+      if (rowsToCreate > 1) {
+        const currentRow = timetableSheet.lastRow!.number;
+        const startRow = currentRow - rowsToCreate + 1;
+        timetableSheet.mergeCells(startRow, 1, currentRow, 1);
+      }
     }
 
-    // Adjust layout
-    timetableSheet.eachRow((row, i) => (row.height = i === 1 ? 30 : 70));
-    timetableSheet.columns.forEach(col => {
-      let max = 12;
-      col.eachCell?.({ includeEmpty: true }, c => {
-        const len = typeof c.value === 'string' ? c.value.length : 10;
-        if (len > max) max = len;
-      });
-      col.width = Math.min(max + 5, 40);
-    });
+    // Adjust column widths
+    timetableSheet.getColumn(1).width = 25; // Time slot column
+    for (let i = 2; i <= days.length + 1; i++) {
+      timetableSheet.getColumn(i).width = 30;
+    }
 
     // Add legend row at bottom
     const legendRow = timetableSheet.addRow([
@@ -1271,7 +1331,7 @@ export const exportShiftPlanToExcel = async (req: Request, res: Response): Promi
         name: `${e.firstname} ${e.lastname}`,
         email: e.email,
         role: e.roles?.join(', ') || 'Benutzer',
-        type: e.employee_type || 'Unbekannt',
+        type: e.employeeType || 'Unbekannt',
         contract: e.contractType || 'Nicht angegeben',
         trainee: e.isTrainee ? 'Ja' : 'Nein'
       })
@@ -1607,7 +1667,7 @@ export const exportShiftPlanToPDF = async (req: Request, res: Response): Promise
           if (emp.isTrainee) {
             cssClass = 'employee-trainee';
             suffix = ' (T)';
-          } else if (emp.employee_type === 'manager') {
+          } else if (emp.employeeType === 'manager') {
             cssClass = 'employee-manager';
             suffix = ' (M)';
           }
@@ -1735,10 +1795,4 @@ export const exportShiftPlanToPDF = async (req: Request, res: Response): Promise
 function getDayOfWeek(dateString: string): number {
   const date = new Date(dateString);
   return date.getDay() === 0 ? 7 : date.getDay();
-}
-
-// Helper function to get German day names
-function getGermanDayName(dayIndex: number): string {
-  const days = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
-  return days[dayIndex];
 }
