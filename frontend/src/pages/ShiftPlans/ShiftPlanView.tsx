@@ -1,5 +1,5 @@
 // frontend/src/pages/ShiftPlans/ShiftPlanView.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { shiftPlanService } from '../../services/shiftPlanService';
@@ -56,6 +56,12 @@ const ShiftPlanView: React.FC = () => {
   const [showAssignmentPreview, setShowAssignmentPreview] = useState(false);
   const [recreating, setRecreating] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
+  const [selectedExportType, setSelectedExportType] = useState('');
+  const [showExportButton, setShowExportButton] = useState(false);
+  const [dropdownWidth, setDropdownWidth] = useState(0);
+
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadShiftPlanData();
@@ -89,6 +95,13 @@ const ShiftPlanView: React.FC = () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
+
+  // Measure dropdown width when it opens
+  useEffect(() => {
+    if (exportDropdownOpen && dropdownRef.current) {
+      setDropdownWidth(dropdownRef.current.offsetWidth);
+    }
+  }, [exportDropdownOpen]);
 
   // Add this useEffect to debug state changes
   useEffect(() => {
@@ -242,64 +255,51 @@ const ShiftPlanView: React.FC = () => {
     };
   };
 
-  const handleExportExcel = async () => {
-    if (!shiftPlan) return;
+  const handleExport = async () => {
+    if (!shiftPlan || !selectedExportType) return;
 
     try {
       setExporting(true);
 
-      // Call the export service
-      const blob = await shiftPlanService.exportShiftPlanToExcel(shiftPlan.id);
+      let blob: Blob;
+      if (selectedExportType === 'PDF') {
+        // Call the PDF export service
+        blob = await shiftPlanService.exportShiftPlanToPDF(shiftPlan.id);
+      } else {
+        // Call the Excel export service
+        blob = await shiftPlanService.exportShiftPlanToExcel(shiftPlan.id);
+      }
 
       // Use file-saver to download the file
-      saveAs(blob, `Schichtplan_${shiftPlan.name}_${new Date().toISOString().split('T')[0]}.xlsx`);
+      const fileExtension = selectedExportType.toLowerCase();
+      saveAs(blob, `Schichtplan_${shiftPlan.name}_${new Date().toISOString().split('T')[0]}.${fileExtension}`);
 
       showNotification({
         type: 'success',
         title: 'Export erfolgreich',
-        message: 'Der Schichtplan wurde als Excel-Datei exportiert.'
+        message: `Der Schichtplan wurde als ${selectedExportType}-Datei exportiert.`
       });
 
+      // Reset export state
+      setSelectedExportType('');
+      setShowExportButton(false);
+
     } catch (error) {
-      console.error('Error exporting to Excel:', error);
+      console.error(`Error exporting to ${selectedExportType}:`, error);
       showNotification({
         type: 'error',
         title: 'Export fehlgeschlagen',
-        message: 'Der Excel-Export konnte nicht durchgeführt werden.'
+        message: `Der ${selectedExportType}-Export konnte nicht durchgeführt werden.`
       });
     } finally {
       setExporting(false);
     }
   };
 
-  const handleExportPDF = async () => {
-    if (!shiftPlan) return;
-
-    try {
-      setExporting(true);
-
-      // Call the PDF export service
-      const blob = await shiftPlanService.exportShiftPlanToPDF(shiftPlan.id);
-
-      // Use file-saver to download the file
-      saveAs(blob, `Schichtplan_${shiftPlan.name}_${new Date().toISOString().split('T')[0]}.pdf`);
-
-      showNotification({
-        type: 'success',
-        title: 'Export erfolgreich',
-        message: 'Der Schichtplan wurde als PDF exportiert.'
-      });
-
-    } catch (error) {
-      console.error('Error exporting to PDF:', error);
-      showNotification({
-        type: 'error',
-        title: 'Export fehlgeschlagen',
-        message: 'Der PDF-Export konnte nicht durchgeführt werden.'
-      });
-    } finally {
-      setExporting(false);
-    }
+  const handleExportTypeSelect = (type: string) => {
+    setSelectedExportType(type);
+    setExportDropdownOpen(false);
+    setShowExportButton(true);
   };
 
   const loadShiftPlanData = async () => {
@@ -459,14 +459,6 @@ const ShiftPlanView: React.FC = () => {
       console.log('- Availabilities:', refreshedAvailabilities.length);
       console.log('- Shift Patterns:', shiftPlan.shifts?.length || 0);
       console.log('- Scheduled Shifts:', scheduledShifts.length);
-
-      // DEBUG: Show shift pattern IDs
-      /*if (shiftPlan.shifts) {
-        console.log('📋 SHIFT PATTERN IDs:');
-        shiftPlan.shifts.forEach((shift, index) => {
-          console.log(`   ${index + 1}. ${shift.id} (Day ${shift.dayOfWeek}, TimeSlot ${shift.timeSlotId})`);
-        });
-      }*/
 
       const constraints = {
         enforceNoTraineeAlone: true,
@@ -1084,6 +1076,78 @@ const ShiftPlanView: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Export Dropdown - Only show when plan is published */}
+        {shiftPlan?.status === 'published' && (
+          <div style={{
+            padding: '15px 20px',
+            backgroundColor: '#f8f9fa',
+            borderTop: '1px solid #e0e0e0',
+            display: 'flex',
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            gap: '10px'
+          }}>
+            <div style={{ position: 'relative', display: 'inline-block' }}>
+              {/* Export Dropdown */}
+              <div
+                ref={dropdownRef}
+                style={{
+                  position: 'relative',
+                  transform: showExportButton ? `translateX(-${dropdownWidth}px)` : 'translateX(0)',
+                  opacity: showExportButton ? 0 : 1,
+                  transition: 'all 0.3s ease',
+                  pointerEvents: showExportButton ? 'none' : 'auto'
+                }}
+              >
+                <select
+                  value=""
+                  onChange={(e) => handleExportTypeSelect(e.target.value)}
+                  onFocus={() => setExportDropdownOpen(true)}
+                  onBlur={() => setTimeout(() => setExportDropdownOpen(false), 200)}
+                  style={{
+                    padding: '8px 16px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    backgroundColor: 'white',
+                    cursor: 'pointer',
+                    minWidth: '120px'
+                  }}
+                >
+                  <option value="">Export</option>
+                  <option value="PDF">PDF</option>
+                  <option value="Excel">Excel</option>
+                </select>
+              </div>
+
+              {/* Export Button */}
+              {showExportButton && (
+                <button
+                  onClick={handleExport}
+                  disabled={exporting}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: '#51258f',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: exporting ? 'not-allowed' : 'pointer',
+                    fontWeight: 'bold',
+                    position: 'absolute',
+                    right: 0,
+                    top: 0,
+                    opacity: showExportButton ? 1 : 0,
+                    transform: showExportButton ? 'translateX(0)' : 'translateX(20px)',
+                    transition: 'all 0.3s ease',
+                    minWidth: '120px'
+                  }}
+                >
+                  {exporting ? 'Exportiert...' : 'EXPORT'}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -1125,48 +1189,6 @@ const ShiftPlanView: React.FC = () => {
           </div>
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          {shiftPlan.status === 'published' && hasRole(['admin', 'maintenance']) && (
-            <>
-              <button
-                onClick={handleExportExcel}
-                disabled={exporting}
-                style={{
-                  padding: '10px 20px',
-                  backgroundColor: '#27ae60',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: exporting ? 'not-allowed' : 'pointer',
-                  fontWeight: 'bold',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}
-              >
-                {exporting ? '🔄' : '📊'} {exporting ? 'Exportiert...' : 'Excel Export'}
-              </button>
-
-              <button
-                onClick={handleExportPDF}
-                disabled={exporting}
-                style={{
-                  padding: '10px 20px',
-                  backgroundColor: '#e74c3c',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: exporting ? 'not-allowed' : 'pointer',
-                  fontWeight: 'bold',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}
-              >
-                {exporting ? '🔄' : '📄'} {exporting ? 'Exportiert...' : 'PDF Export'}
-              </button>
-            </>
-          )}
-
           {/* "Zuweisungen neu berechnen" button */}
           {shiftPlan.status === 'published' && hasRole(['admin', 'maintenance']) && (
             <button
