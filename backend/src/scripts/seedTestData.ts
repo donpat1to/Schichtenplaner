@@ -85,11 +85,30 @@ export async function seedTestData(): Promise<void> {
     try {
         console.log('🌱 Starting test data seeding...');
 
-        // Read test.json file
-        const testDataPath = path.resolve(__dirname, '../../test.json');
+        // Read test.json file - adjust path to be relative to project root
+        const testDataPath = path.resolve(process.cwd(), 'test.json');
+
+        console.log('🔍 Looking for test.json at:', testDataPath);
 
         if (!fs.existsSync(testDataPath)) {
             console.log('❌ test.json file not found at:', testDataPath);
+
+            // Try alternative paths
+            const alternativePaths = [
+                path.resolve(__dirname, '../../../test.json'),
+                path.resolve(process.cwd(), '../test.json'),
+                path.resolve(__dirname, '../../test.json')
+            ];
+
+            for (const altPath of alternativePaths) {
+                console.log('🔍 Trying alternative path:', altPath);
+                if (fs.existsSync(altPath)) {
+                    console.log('✅ Found test.json at:', altPath);
+                    // Continue with the found path
+                    break;
+                }
+            }
+
             return;
         }
 
@@ -314,5 +333,13 @@ export async function seedTestData(): Promise<void> {
 
 // Run if called directly
 if (import.meta.url === `file://${process.argv[1]}`) {
-    seedTestData().catch(console.error);
+    seedTestData()
+        .then(() => {
+            console.log('✅ Seed script completed');
+            process.exit(0);
+        })
+        .catch((error) => {
+            console.error('❌ Seed script failed:', error);
+            process.exit(1);
+        });
 }
