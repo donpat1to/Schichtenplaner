@@ -45,7 +45,7 @@ const ShiftPlanView: React.FC = () => {
   const navigate = useNavigate();
   const { hasRole, user } = useAuth();
   const { showNotification } = useNotification();
-  
+
   const [shiftPlan, setShiftPlan] = useState<ShiftPlan | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [availabilities, setAvailabilities] = useState<EmployeeAvailability[]>([]);
@@ -59,16 +59,16 @@ const ShiftPlanView: React.FC = () => {
 
   useEffect(() => {
     loadShiftPlanData();
-    
+
     // Event Listener für Verfügbarkeits-Änderungen
     const handleAvailabilityChange = () => {
       console.log('📢 Verfügbarkeiten wurden geändert - lade Daten neu...');
       reloadAvailabilities();
     };
-    
+
     // Globales Event für Verfügbarkeits-Änderungen
     window.addEventListener('availabilitiesChanged', handleAvailabilityChange);
-    
+
     return () => {
       window.removeEventListener('availabilitiesChanged', handleAvailabilityChange);
     };
@@ -84,7 +84,7 @@ const ShiftPlanView: React.FC = () => {
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    
+
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
@@ -99,17 +99,17 @@ const ShiftPlanView: React.FC = () => {
 
   const debugAvailabilityShiftIds = () => {
     if (!availabilities.length) return;
-    
+
     console.log('🔍 AVAILABILITY SHIFT ID ANALYSIS:');
     const uniqueShiftIds = [...new Set(availabilities.map(a => a.shiftId))];
-    
+
     console.log(`Unique shift IDs in availabilities: ${uniqueShiftIds.length}`);
     uniqueShiftIds.forEach(shiftId => {
       const count = availabilities.filter(a => a.shiftId === shiftId).length;
       const pref1 = availabilities.filter(a => a.shiftId === shiftId && a.preferenceLevel === 1).length;
       const pref2 = availabilities.filter(a => a.shiftId === shiftId && a.preferenceLevel === 2).length;
       const pref3 = availabilities.filter(a => a.shiftId === shiftId && a.preferenceLevel === 3).length;
-      
+
       console.log(`   ${shiftId}: ${count} total (✅${pref1} 🔶${pref2} ❌${pref3})`);
     });
   };
@@ -135,7 +135,7 @@ const ShiftPlanView: React.FC = () => {
       if (!acc[shift.dayOfWeek]) {
         acc[shift.dayOfWeek] = [];
       }
-      
+
       const timeSlot = timeSlotMap.get(shift.timeSlotId);
       const enhancedShift: ExtendedShift = {
         ...shift,
@@ -144,7 +144,7 @@ const ShiftPlanView: React.FC = () => {
         endTime: timeSlot?.endTime,
         displayName: timeSlot ? `${timeSlot.name} (${formatTime(timeSlot.startTime)}-${formatTime(timeSlot.endTime)})` : shift.id
       };
-      
+
       acc[shift.dayOfWeek].push(enhancedShift);
       return acc;
     }, {} as Record<number, ExtendedShift[]>);
@@ -204,11 +204,11 @@ const ShiftPlanView: React.FC = () => {
     }
 
     const validationErrors: string[] = [];
-    
+
     // Check for missing time slots - SAME VALIDATION AS AVAILABILITYMANAGER
     const usedTimeSlotIds = new Set(shiftPlan.shifts.map(s => s.timeSlotId));
     const availableTimeSlotIds = new Set(shiftPlan.timeSlots.map(ts => ts.id));
-    
+
     usedTimeSlotIds.forEach(timeSlotId => {
       if (!availableTimeSlotIds.has(timeSlotId)) {
         validationErrors.push(`Zeitslot ${timeSlotId} wird verwendet, existiert aber nicht in timeSlots`);
@@ -247,19 +247,19 @@ const ShiftPlanView: React.FC = () => {
 
     try {
       setExporting(true);
-      
+
       // Call the export service
       const blob = await shiftPlanService.exportShiftPlanToExcel(shiftPlan.id);
-      
+
       // Use file-saver to download the file
       saveAs(blob, `Schichtplan_${shiftPlan.name}_${new Date().toISOString().split('T')[0]}.xlsx`);
-      
+
       showNotification({
         type: 'success',
         title: 'Export erfolgreich',
         message: 'Der Schichtplan wurde als Excel-Datei exportiert.'
       });
-      
+
     } catch (error) {
       console.error('Error exporting to Excel:', error);
       showNotification({
@@ -277,19 +277,19 @@ const ShiftPlanView: React.FC = () => {
 
     try {
       setExporting(true);
-      
+
       // Call the PDF export service
       const blob = await shiftPlanService.exportShiftPlanToPDF(shiftPlan.id);
-      
+
       // Use file-saver to download the file
       saveAs(blob, `Schichtplan_${shiftPlan.name}_${new Date().toISOString().split('T')[0]}.pdf`);
-      
+
       showNotification({
         type: 'success',
         title: 'Export erfolgreich',
         message: 'Der Schichtplan wurde als PDF exportiert.'
       });
-      
+
     } catch (error) {
       console.error('Error exporting to PDF:', error);
       showNotification({
@@ -304,10 +304,10 @@ const ShiftPlanView: React.FC = () => {
 
   const loadShiftPlanData = async () => {
     if (!id) return;
-    
+
     try {
       setLoading(true);
-      
+
       // Load plan and employees first
       const [plan, employeesData] = await Promise.all([
         shiftPlanService.getShiftPlan(id),
@@ -320,7 +320,7 @@ const ShiftPlanView: React.FC = () => {
       // CRITICAL: Load scheduled shifts and verify they exist
       const shiftsData = await shiftAssignmentService.getScheduledShiftsForPlan(id);
       console.log('📋 Loaded scheduled shifts:', shiftsData.length);
-      
+
       if (shiftsData.length === 0) {
         console.warn('⚠️ No scheduled shifts found for plan:', id);
         showNotification({
@@ -334,21 +334,21 @@ const ShiftPlanView: React.FC = () => {
 
       // Load availabilities - USING THE SAME LOGIC AS AVAILABILITYMANAGER
       console.log('🔄 LADE VERFÜGBARKEITEN FÜR PLAN:', id);
-      
+
       const availabilityPromises = employeesData
         .filter(emp => emp.isActive)
         .map(emp => employeeService.getAvailabilities(emp.id));
-      
+
       const allAvailabilities = await Promise.all(availabilityPromises);
       const flattenedAvailabilities = allAvailabilities.flat();
-      
+
       // Filter to only include availabilities for the current plan - SAME LOGIC AS AVAILABILITYMANAGER
       const planAvailabilities = flattenedAvailabilities.filter(
         availability => availability.planId === id
       );
-      
+
       console.log('✅ VERFÜGBARKEITEN FÜR DIESEN PLAN:', planAvailabilities.length);
-      
+
       setAvailabilities(planAvailabilities);
 
       // Run validation
@@ -374,7 +374,7 @@ const ShiftPlanView: React.FC = () => {
 
     try {
       setRecreating(true);
-      
+
       if (!window.confirm('Möchten Sie die aktuellen Zuweisungen wirklich zurücksetzen? Alle vorhandenen Zuweisungen werden gelöscht.')) {
         return;
       }
@@ -405,7 +405,7 @@ const ShiftPlanView: React.FC = () => {
       // STEP 4: CRITICAL - Force reload of scheduled shifts to get EMPTY assignments
       const refreshedShifts = await shiftAssignmentService.getScheduledShiftsForPlan(shiftPlan.id);
       setScheduledShifts(refreshedShifts); // Update state with EMPTY assignments
-      
+
       // STEP 5: Clear any previous assignment results
       setAssignmentResult(null);
       setShowAssignmentPreview(false);
@@ -445,9 +445,9 @@ const ShiftPlanView: React.FC = () => {
       setPublishing(true);
       setAssignmentResult(null); // Reset previous results
       setShowAssignmentPreview(false); // Reset preview
-      
+
       console.log('🔄 STARTING ASSIGNMENT PREVIEW...');
-      
+
       // FORCE COMPLETE REFRESH - don't rely on cached state
       const [refreshedEmployees, refreshedAvailabilities] = await Promise.all([
         employeeService.getEmployees().then(emps => emps.filter(emp => emp.isActive)),
@@ -476,7 +476,7 @@ const ShiftPlanView: React.FC = () => {
       };
 
       console.log('🧠 Calling shift assignment service...');
-      
+
       // Use the freshly loaded data, not the state
       const result = await shiftAssignmentService.assignShifts(
         shiftPlan,
@@ -497,7 +497,7 @@ const ShiftPlanView: React.FC = () => {
       console.log('🔍 ASSIGNMENTS BY SHIFT PATTERN:');
       Object.entries(result.assignments).forEach(([shiftId, empIds]) => {
         const shiftPattern = shiftPlan.shifts?.find(s => s.id === shiftId);
-        
+
         if (shiftPattern) {
           console.log(`   ✅ Shift Pattern: ${shiftId}`);
           console.log(`      - Day: ${shiftPattern.dayOfWeek}, TimeSlot: ${shiftPattern.timeSlotId}`);
@@ -513,7 +513,7 @@ const ShiftPlanView: React.FC = () => {
       console.log('🔄 Setting assignment result and showing preview...');
       setAssignmentResult(result);
       setShowAssignmentPreview(true);
-      
+
       console.log('✅ Assignment preview ready, modal should be visible');
 
     } catch (error) {
@@ -527,18 +527,18 @@ const ShiftPlanView: React.FC = () => {
       setPublishing(false);
     }
   };
-  
+
   const handlePublish = async () => {
     if (!shiftPlan || !assignmentResult) return;
 
     try {
       setPublishing(true);
-      
+
       console.log('🔄 Starting to publish assignments...');
-      
+
       // Get fresh scheduled shifts
       const updatedShifts = await shiftAssignmentService.getScheduledShiftsForPlan(shiftPlan.id);
-      
+
       if (!updatedShifts || updatedShifts.length === 0) {
         throw new Error('No scheduled shifts found in the plan');
       }
@@ -548,19 +548,19 @@ const ShiftPlanView: React.FC = () => {
 
       const updatePromises = updatedShifts.map(async (scheduledShift) => {
         const dayOfWeek = getDayOfWeek(scheduledShift.date);
-        
+
         // Find the corresponding shift pattern for this day and time slot
-        const shiftPattern = shiftPlan?.shifts?.find(shift => 
-          shift.dayOfWeek === dayOfWeek && 
+        const shiftPattern = shiftPlan?.shifts?.find(shift =>
+          shift.dayOfWeek === dayOfWeek &&
           shift.timeSlotId === scheduledShift.timeSlotId
         );
-        
+
         let assignedEmployees: string[] = [];
-        
+
         if (shiftPattern) {
           assignedEmployees = assignmentResult.assignments[shiftPattern.id] || [];
           console.log(`📝 Updating scheduled shift ${scheduledShift.id} (Day ${dayOfWeek}, TimeSlot ${scheduledShift.timeSlotId}) with`, assignedEmployees, 'employees');
-          
+
           if (assignedEmployees.length === 0) {
             console.warn(`⚠️ No assignments found for shift pattern ${shiftPattern.id}`);
             console.log('🔍 Available assignment keys:', Object.keys(assignmentResult.assignments));
@@ -568,13 +568,13 @@ const ShiftPlanView: React.FC = () => {
         } else {
           console.warn(`⚠️ No shift pattern found for scheduled shift ${scheduledShift.id} (Day ${dayOfWeek}, TimeSlot ${scheduledShift.timeSlotId})`);
         }
-        
+
         try {
           // Update the scheduled shift with assigned employees
           await shiftAssignmentService.updateScheduledShift(scheduledShift.id, {
             assignedEmployees
           });
-          
+
           console.log(`✅ Successfully updated scheduled shift ${scheduledShift.id}`);
         } catch (error) {
           console.error(`❌ Failed to update shift ${scheduledShift.id}:`, error);
@@ -612,12 +612,12 @@ const ShiftPlanView: React.FC = () => {
 
     } catch (error) {
       console.error('❌ Error publishing shift plan:', error);
-      
+
       let message = 'Unbekannter Fehler';
       if (error instanceof Error) {
         message = error.message;
       }
-      
+
       showNotification({
         type: 'error',
         title: 'Fehler',
@@ -631,7 +631,7 @@ const ShiftPlanView: React.FC = () => {
   const refreshAllAvailabilities = async (): Promise<EmployeeAvailability[]> => {
     try {
       console.log('🔄 Force refreshing ALL availabilities with error handling...');
-      
+
       if (!id) {
         console.error('❌ No plan ID available');
         return [];
@@ -647,20 +647,20 @@ const ShiftPlanView: React.FC = () => {
             return []; // Return empty array instead of failing entire operation
           }
         });
-      
+
       const allAvailabilities = await Promise.all(availabilityPromises);
       const flattenedAvailabilities = allAvailabilities.flat();
-      
+
       // More robust filtering
       const planAvailabilities = flattenedAvailabilities.filter(
         availability => availability && availability.planId === id
       );
-      
+
       console.log(`✅ Successfully refreshed ${planAvailabilities.length} availabilities for plan ${id}`);
-      
+
       // IMMEDIATELY update state
       setAvailabilities(planAvailabilities);
-      
+
       return planAvailabilities;
     } catch (error) {
       console.error('❌ Critical error refreshing availabilities:', error);
@@ -671,21 +671,21 @@ const ShiftPlanView: React.FC = () => {
 
   const debugShiftMatching = () => {
     if (!shiftPlan || !scheduledShifts.length) return;
-    
+
     console.log('🔍 DEBUG: Shift Pattern to Scheduled Shift Matching');
     console.log('==================================================');
-    
+
     shiftPlan.shifts?.forEach(shiftPattern => {
       const matchingScheduledShifts = scheduledShifts.filter(scheduled => {
         const dayOfWeek = getDayOfWeek(scheduled.date);
-        return dayOfWeek === shiftPattern.dayOfWeek && 
-              scheduled.timeSlotId === shiftPattern.timeSlotId;
+        return dayOfWeek === shiftPattern.dayOfWeek &&
+          scheduled.timeSlotId === shiftPattern.timeSlotId;
       });
-      
+
       console.log(`📅 Shift Pattern: ${shiftPattern.id}`);
       console.log(`   - Day: ${shiftPattern.dayOfWeek}, TimeSlot: ${shiftPattern.timeSlotId}`);
       console.log(`   - Matching scheduled shifts: ${matchingScheduledShifts.length}`);
-      
+
       if (assignmentResult) {
         const assignments = assignmentResult.assignments[shiftPattern.id] || [];
         console.log(`   - Assignments: ${assignments.length} employees`);
@@ -702,7 +702,7 @@ const ShiftPlanView: React.FC = () => {
 
   const canPublish = () => {
     if (!shiftPlan || shiftPlan.status === 'published') return false;
-    
+
     // Check if all active employees have set their availabilities
     const employeesWithoutAvailabilities = employees.filter(emp => {
       const empAvailabilities = availabilities.filter(avail => avail.employeeId === emp.id);
@@ -714,15 +714,15 @@ const ShiftPlanView: React.FC = () => {
 
   const canPublishAssignment = (): boolean => {
     if (!assignmentResult) return false;
-    
+
     // Check if assignment was successful
     if (assignmentResult.success === false) return false;
-    
+
     // Check if there are any critical violations
-    const hasCriticalViolations = assignmentResult.violations.some(v => 
+    const hasCriticalViolations = assignmentResult.violations.some(v =>
       v.includes('ERROR:') || v.includes('KRITISCH:')
     );
-    
+
     return !hasCriticalViolations;
   };
 
@@ -742,23 +742,23 @@ const ShiftPlanView: React.FC = () => {
   const reloadAvailabilities = async () => {
     try {
       console.log('🔄 Lade Verfügbarkeiten neu...');
-      
+
       // Load availabilities for all employees
       const availabilityPromises = employees
         .filter(emp => emp.isActive)
         .map(emp => employeeService.getAvailabilities(emp.id));
-      
+
       const allAvailabilities = await Promise.all(availabilityPromises);
       const flattenedAvailabilities = allAvailabilities.flat();
-      
+
       // Filter availabilities to only include those for the current shift plan
       const planAvailabilities = flattenedAvailabilities.filter(
         availability => availability.planId === id
       );
-      
+
       setAvailabilities(planAvailabilities);
       console.log('✅ Verfügbarkeiten neu geladen:', planAvailabilities.length);
-      
+
     } catch (error) {
       console.error('❌ Fehler beim Neuladen der Verfügbarkeiten:', error);
     }
@@ -766,26 +766,26 @@ const ShiftPlanView: React.FC = () => {
 
   const getAssignmentsForScheduledShift = (scheduledShift: ScheduledShift): string[] => {
     if (!assignmentResult) return [];
-    
+
     const dayOfWeek = getDayOfWeek(scheduledShift.date);
-    
+
     // Find the corresponding shift pattern for this day and time slot
-    const shiftPattern = shiftPlan?.shifts?.find(shift => 
-      shift.dayOfWeek === dayOfWeek && 
+    const shiftPattern = shiftPlan?.shifts?.find(shift =>
+      shift.dayOfWeek === dayOfWeek &&
       shift.timeSlotId === scheduledShift.timeSlotId
     );
-    
+
     if (shiftPattern && assignmentResult.assignments[shiftPattern.id]) {
       console.log(`✅ Found assignments for shift pattern ${shiftPattern.id}:`, assignmentResult.assignments[shiftPattern.id]);
       return assignmentResult.assignments[shiftPattern.id];
     }
-    
+
     // Fallback: Check if there's a direct match with scheduled shift ID (unlikely)
     if (assignmentResult.assignments[scheduledShift.id]) {
       console.log(`⚠️ Using direct scheduled shift assignment for ${scheduledShift.id}`);
       return assignmentResult.assignments[scheduledShift.id];
     }
-    
+
     console.warn(`❌ No assignments found for scheduled shift ${scheduledShift.id} (Day ${dayOfWeek}, TimeSlot ${scheduledShift.timeSlotId})`);
     return [];
   };
@@ -899,7 +899,7 @@ const ShiftPlanView: React.FC = () => {
                   </td>
                   {days.map(weekday => {
                     const shift = timeSlot.shiftsByDay[weekday.id];
-                    
+
                     if (!shift) {
                       return (
                         <td key={weekday.id} style={{
@@ -917,7 +917,7 @@ const ShiftPlanView: React.FC = () => {
 
                     // Validation: Check if shift has correct timeSlotId and dayOfWeek - SAME AS AVAILABILITYMANAGER
                     const isValidShift = shift.timeSlotId === timeSlot.id && shift.dayOfWeek === weekday.id;
-                    
+
                     let assignedEmployees: string[] = [];
                     let displayContent: React.ReactNode = null;
 
@@ -926,16 +926,16 @@ const ShiftPlanView: React.FC = () => {
                       return employeeIds.map(empId => {
                         const employee = employees.find(emp => emp.id === empId);
                         if (!employee) return null;
-                        
+
                         // Determine background color based on employee role
                         let backgroundColor = '#642ab5'; // Default: non-trainee personnel (purple)
-                        
+
                         if (employee.isTrainee) {
                           backgroundColor = '#cda8f0'; // Trainee
-                        } else if (employee.roles?.includes('manager')) {
+                        } else if (employee.employeeType === 'manager') {
                           backgroundColor = '#CC0000'; // Manager
                         }
-                        
+
                         return (
                           <div
                             key={empId}
@@ -961,8 +961,8 @@ const ShiftPlanView: React.FC = () => {
 
                     // Helper function to get fallback content
                     const getFallbackContent = () => {
-                      const shiftsForSlot = shiftPlan?.shifts?.filter(s => 
-                        s.dayOfWeek === weekday.id && 
+                      const shiftsForSlot = shiftPlan?.shifts?.filter(s =>
+                        s.dayOfWeek === weekday.id &&
                         s.timeSlotId === timeSlot.id
                       ) || [];
                       const totalRequired = shiftsForSlot.reduce((sum, s) => sum + s.requiredEmployees, 0);
@@ -973,18 +973,18 @@ const ShiftPlanView: React.FC = () => {
                       // For published plans, use actual assignments from scheduled shifts
                       const scheduledShift = scheduledShifts.find(scheduled => {
                         const scheduledDayOfWeek = getDayOfWeek(scheduled.date);
-                        return scheduledDayOfWeek === weekday.id && 
-                              scheduled.timeSlotId === timeSlot.id;
+                        return scheduledDayOfWeek === weekday.id &&
+                          scheduled.timeSlotId === timeSlot.id;
                       });
-                      
+
                       if (scheduledShift) {
                         assignedEmployees = scheduledShift.assignedEmployees || [];
-                        
+
                         // Log if we're still seeing old data
                         if (assignedEmployees.length > 0) {
                           console.warn(`⚠️ Found non-empty assignments for ${weekday.name} ${timeSlot.name}:`, assignedEmployees);
                         }
-                        
+
                         const employeeBoxes = createEmployeeBoxes(assignedEmployees);
                         displayContent = employeeBoxes.length > 0 ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
@@ -1000,10 +1000,10 @@ const ShiftPlanView: React.FC = () => {
                       // For draft with preview, use assignment result
                       const scheduledShift = scheduledShifts.find(scheduled => {
                         const scheduledDayOfWeek = getDayOfWeek(scheduled.date);
-                        return scheduledDayOfWeek === weekday.id && 
-                              scheduled.timeSlotId === timeSlot.id;
+                        return scheduledDayOfWeek === weekday.id &&
+                          scheduled.timeSlotId === timeSlot.id;
                       });
-                      
+
                       if (scheduledShift) {
                         assignedEmployees = getAssignmentsForScheduledShift(scheduledShift);
                         const employeeBoxes = createEmployeeBoxes(assignedEmployees);
@@ -1054,7 +1054,7 @@ const ShiftPlanView: React.FC = () => {
                             alignItems: 'center',
                             justifyContent: 'center'
                           }}
-                          title={`Shift Validierung: timeSlotId=${shift.timeSlotId}, dayOfWeek=${shift.dayOfWeek}`}
+                            title={`Shift Validierung: timeSlotId=${shift.timeSlotId}, dayOfWeek=${shift.dayOfWeek}`}
                           >
                             ⚠️
                           </div>
@@ -1063,9 +1063,9 @@ const ShiftPlanView: React.FC = () => {
                         {displayContent}
 
                         {/* Shift debug info - SAME AS AVAILABILITYMANAGER */}
-                        <div style={{ 
-                          fontSize: '10px', 
-                          color: '#666', 
+                        <div style={{
+                          fontSize: '10px',
+                          color: '#666',
                           marginTop: '4px',
                           textAlign: 'left',
                           fontFamily: 'monospace'
@@ -1098,20 +1098,20 @@ const ShiftPlanView: React.FC = () => {
   return (
     <div style={{ padding: '20px' }}>
       {/* Header with Plan Information and Actions */}
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
         alignItems: 'flex-start',
         marginBottom: '20px'
       }}>
         <div>
           <h1>{shiftPlan.name}</h1>
           <p style={{ color: '#666', margin: 0 }}>
-            {shiftPlan.startDate && shiftPlan.endDate && 
+            {shiftPlan.startDate && shiftPlan.endDate &&
               `Zeitraum: ${formatDate(shiftPlan.startDate)} - ${formatDate(shiftPlan.endDate)}`
             }
           </p>
-          <div style={{ 
+          <div style={{
             display: 'inline-block',
             padding: '4px 12px',
             backgroundColor: shiftPlan.status === 'published' ? '#2ecc71' : '#f1c40f',
@@ -1124,7 +1124,7 @@ const ShiftPlanView: React.FC = () => {
             {shiftPlan.status === 'published' ? 'Veröffentlicht' : 'Entwurf'}
           </div>
         </div>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           {shiftPlan.status === 'published' && hasRole(['admin', 'maintenance']) && (
             <>
               <button
@@ -1145,7 +1145,7 @@ const ShiftPlanView: React.FC = () => {
               >
                 {exporting ? '🔄' : '📊'} {exporting ? 'Exportiert...' : 'Excel Export'}
               </button>
-              
+
               <button
                 onClick={handleExportPDF}
                 disabled={exporting}
@@ -1166,7 +1166,7 @@ const ShiftPlanView: React.FC = () => {
               </button>
             </>
           )}
-          
+
           {/* "Zuweisungen neu berechnen" button */}
           {shiftPlan.status === 'published' && hasRole(['admin', 'maintenance']) && (
             <button
@@ -1185,7 +1185,7 @@ const ShiftPlanView: React.FC = () => {
               {recreating ? 'Lösche Zuweisungen...' : 'Zuweisungen neu berechnen'}
             </button>
           )}
-          
+
           <button
             onClick={() => navigate('/shift-plans')}
             style={{
@@ -1220,15 +1220,15 @@ const ShiftPlanView: React.FC = () => {
               <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
                 {availabilityStatus.completed} / {availabilityStatus.total} Mitarbeiter
               </div>
-              <div style={{ 
-                width: '200px', 
-                height: '8px', 
-                backgroundColor: '#e0e0e0', 
+              <div style={{
+                width: '200px',
+                height: '8px',
+                backgroundColor: '#e0e0e0',
                 borderRadius: '4px',
                 marginTop: '5px',
                 overflow: 'hidden'
               }}>
-                <div 
+                <div
                   style={{
                     width: `${availabilityStatus.percentage}%`,
                     height: '100%',
@@ -1238,7 +1238,7 @@ const ShiftPlanView: React.FC = () => {
                 />
               </div>
             </div>
-            
+
             {hasRole(['admin', 'maintenance']) && (
               <div>
                 <button
@@ -1256,11 +1256,11 @@ const ShiftPlanView: React.FC = () => {
                 >
                   {publishing ? 'Berechne...' : 'Automatisch zuweisen'}
                 </button>
-                
+
                 {!canPublish() && (
                   <div style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
-                    {availabilityStatus.percentage === 100 
-                      ? 'Bereit zur Berechnung' 
+                    {availabilityStatus.percentage === 100
+                      ? 'Bereit zur Berechnung'
                       : `${availabilityStatus.total - availabilityStatus.completed} Mitarbeiter müssen noch Verfügbarkeit eintragen`}
                   </div>
                 )}
@@ -1305,7 +1305,7 @@ const ShiftPlanView: React.FC = () => {
             width: '90%'
           }}>
             <h2>Wochenmuster-Zuordnung</h2>
-            
+
             {/* Detaillierter Reparatur-Bericht anzeigen */}
             {assignmentResult?.resolutionReport && (
               <div style={{
@@ -1321,15 +1321,15 @@ const ShiftPlanView: React.FC = () => {
                 <h4 style={{ color: '#2c3e50', marginTop: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <span>📋</span> Detaillierter Reparatur-Bericht
                 </h4>
-                <div style={{ 
-                  fontFamily: 'monospace', 
+                <div style={{
+                  fontFamily: 'monospace',
                   fontSize: '12px',
                   lineHeight: '1.4'
                 }}>
                   {assignmentResult.resolutionReport.map((line, index) => {
                     let color = '#2c3e50';
                     let fontWeight = 'normal';
-                    
+
                     if (line.includes('✅') || line.includes('ALLES KRITISCHEN PROBLEME BEHOBEN')) {
                       color = '#2ecc71';
                       fontWeight = 'bold';
@@ -1344,9 +1344,9 @@ const ShiftPlanView: React.FC = () => {
                     } else if (line.startsWith('   •') || line.startsWith('   -')) {
                       color = '#7f8c8d';
                     }
-                    
+
                     return (
-                      <div key={index} style={{ 
+                      <div key={index} style={{
                         color,
                         fontWeight,
                         marginBottom: line === '' ? '5px' : '2px',
@@ -1359,12 +1359,12 @@ const ShiftPlanView: React.FC = () => {
                 </div>
               </div>
             )}
-              
+
             {/* ZUSAMMENFASSUNG */}
             {assignmentResult && (
               <div style={{ marginBottom: '20px' }}>
                 <h4>Zusammenfassung:</h4>
-                
+
                 {/* Entscheidung basierend auf tatsächlichen kritischen Problemen */}
                 {(assignmentResult.violations.length === 0) || assignmentResult.success == true ? (
                   <div style={{
@@ -1404,7 +1404,7 @@ const ShiftPlanView: React.FC = () => {
                     </ul>
                   </div>
                 )}
-                
+
                 {/* Warnungen separat anzeigen - NUR wenn welche vorhanden sind */}
                 {assignmentResult.violations.some(v => v.includes('WARNING:') || v.includes('⚠️')) && (
                   <div style={{
@@ -1448,7 +1448,7 @@ const ShiftPlanView: React.FC = () => {
               >
                 Abbrechen
               </button>
-              
+
               {/* BUTTON zum publishen */}
               <button
                 onClick={handlePublish}
@@ -1466,8 +1466,8 @@ const ShiftPlanView: React.FC = () => {
               >
                 {publishing ? 'Veröffentliche...' : (
                   assignmentResult ? (
-                    canPublishAssignment() 
-                      ? 'Schichtplan veröffentlichen' 
+                    canPublishAssignment()
+                      ? 'Schichtplan veröffentlichen'
                       : 'Kritische Probleme müssen behoben werden'
                   ) : 'Lade Zuordnungen...'
                 )}
@@ -1475,7 +1475,7 @@ const ShiftPlanView: React.FC = () => {
             </div>
           </div>
         </div>
-      )}     
+      )}
 
       {/* Timetable */}
       <div style={{
@@ -1485,11 +1485,11 @@ const ShiftPlanView: React.FC = () => {
         boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
       }}>
         <h3>
-          Schichtplan 
+          Schichtplan
           {shiftPlan.status === 'published' && ' (Aktuelle Zuweisungen)'}
           {assignmentResult && shiftPlan.status === 'draft' && ' (Exemplarische Woche)'}
         </h3>
-        
+
         {renderTimetable()}
 
         {/* Summary */}
@@ -1503,11 +1503,11 @@ const ShiftPlanView: React.FC = () => {
             fontSize: '14px'
           }}>
             <strong>Legende:</strong> {
-              shiftPlan.status === 'published' 
+              shiftPlan.status === 'published'
                 ? 'Angezeigt werden die aktuell zugewiesenen Mitarbeiter'
                 : assignmentResult
-                ? 'Angezeigt werden die vorgeschlagenen Mitarbeiter für eine exemplarische Woche'
-                : 'Angezeigt wird "zugewiesene/benötigte Mitarbeiter" pro Schicht und Wochentag'
+                  ? 'Angezeigt werden die vorgeschlagenen Mitarbeiter für eine exemplarische Woche'
+                  : 'Angezeigt wird "zugewiesene/benötigte Mitarbeiter" pro Schicht und Wochentag'
             }
           </div>
         )}
