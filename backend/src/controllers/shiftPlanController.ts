@@ -9,7 +9,7 @@ import {
 import { AuthRequest } from '../middleware/auth.js';
 import { TEMPLATE_PRESETS } from '../models/defaults/shiftPlanDefaults.js';
 import ExcelJS from 'exceljs';
-import PDFDocument from 'pdfkit';
+import { chromium } from 'playwright';
 
 async function getPlanWithDetails(planId: string) {
   const plan = await db.get<any>(`
@@ -1298,12 +1298,11 @@ export const exportShiftPlanToExcel = async (req: Request, res: Response): Promi
 };
 
 export const exportShiftPlanToPDF = async (req: Request, res: Response): Promise<void> => {
+  let browser;
   try {
     const { id } = req.params;
-
     console.log('📄 Starting PDF export for plan:', id);
 
-    // Check if plan exists
     const plan = await getShiftPlanById(id);
     if (!plan) {
       res.status(404).json({ error: 'Shift plan not found' });
@@ -1315,235 +1314,419 @@ export const exportShiftPlanToPDF = async (req: Request, res: Response): Promise
       return;
     }
 
-    // Create PDF document
-    const doc = new PDFDocument({ margin: 50 });
-
-    // Set response headers
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="Schichtplan_${plan.name}_${new Date().toISOString().split('T')[0]}.pdf"`);
-
-    // Pipe PDF to response
-    doc.pipe(res);
-
-    // Add title
-    doc.fontSize(20).font('Helvetica-Bold').text(`Schichtplan: ${plan.name}`, 50, 50);
-    doc.fontSize(12).font('Helvetica').text(`Erstellt am: ${new Date().toLocaleDateString('de-DE')}`, 50, 80);
-
-    // Plan summary
-    let yPosition = 120;
-    doc.fontSize(14).font('Helvetica-Bold').text('Plan Informationen', 50, yPosition);
-    yPosition += 30;
-
-    doc.fontSize(10).font('Helvetica');
-    doc.text(`Plan Name: ${plan.name}`, 50, yPosition);
-    yPosition += 20;
-
-    if (plan.description) {
-      doc.text(`Beschreibung: ${plan.description}`, 50, yPosition);
-      yPosition += 20;
-    }
-
-    doc.text(`Zeitraum: ${plan.startDate} bis ${plan.endDate}`, 50, yPosition);
-    yPosition += 20;
-    doc.text(`Status: ${plan.status}`, 50, yPosition);
-    yPosition += 20;
-    doc.text(`Erstellt von: ${plan.created_by_name || 'Unbekannt'}`, 50, yPosition);
-    yPosition += 20;
-    doc.text(`Erstellt am: ${plan.createdAt}`, 50, yPosition);
-    yPosition += 20;
-    doc.text(`Anzahl Schichten: ${plan.scheduledShifts?.length || 0}`, 50, yPosition);
-    yPosition += 20;
-    doc.text(`Anzahl Mitarbeiter: ${plan.employees?.length || 0}`, 50, yPosition);
-    yPosition += 40;
-
-    // Get timetable data for PDF
+    // Get timetable data (same as Excel)
     const timetableData = getTimetableDataForExport(plan);
     const { days, allTimeSlots } = timetableData;
 
-    // Add timetable section
-    doc.addPage();
-    doc.fontSize(16).font('Helvetica-Bold').text('Schichtplan Timetable', 50, 50);
-
-    let currentY = 80;
-
-    // Define column widths
-    const timeSlotColWidth = 100;
-    const dayColWidth = (500 - timeSlotColWidth) / days.length;
-
-    // Table headers
-    doc.fontSize(10).font('Helvetica-Bold');
-
-    // Time slot header
-    doc.rect(50, currentY, timeSlotColWidth, 20).fillAndStroke('#2c3e50', '#2c3e50');
-    doc.fillColor('white').text('Schicht (Zeit)', 55, currentY + 5, { width: timeSlotColWidth - 10, align: 'left' });
-
-    // Day headers
-    days.forEach((day, index) => {
-      const xPos = 50 + timeSlotColWidth + (index * dayColWidth);
-      doc.rect(xPos, currentY, dayColWidth, 20).fillAndStroke('#2c3e50', '#2c3e50');
-      doc.fillColor('white').text(day.name, xPos + 5, currentY + 5, { width: dayColWidth - 10, align: 'center' });
-    });
-
-    doc.fillColor('black');
-    currentY += 20;
-
-    // Time slot rows
-    allTimeSlots.forEach((timeSlot, rowIndex) => {
-      // Check if we need a new page
-      if (currentY > 650) {
-        doc.addPage();
-        currentY = 50;
-
-        // Redraw headers on new page
-        doc.fontSize(10).font('Helvetica-Bold');
-        doc.rect(50, currentY, timeSlotColWidth, 20).fillAndStroke('#2c3e50', '#2c3e50');
-        doc.fillColor('white').text('Schicht (Zeit)', 55, currentY + 5, { width: timeSlotColWidth - 10, align: 'left' });
-
-        days.forEach((day, index) => {
-          const xPos = 50 + timeSlotColWidth + (index * dayColWidth);
-          doc.rect(xPos, currentY, dayColWidth, 20).fillAndStroke('#2c3e50', '#2c3e50');
-          doc.fillColor('white').text(day.name, xPos + 5, currentY + 5, { width: dayColWidth - 10, align: 'center' });
-        });
-
-        doc.fillColor('black');
-        currentY += 20;
-      }
-
-      // Alternate row background
-      const rowBgColor = rowIndex % 2 === 0 ? '#f8f9fa' : 'white';
-
-      // Time slot cell
-      doc.rect(50, currentY, timeSlotColWidth, 40).fillAndStroke(rowBgColor, '#dee2e6');
-      doc.fontSize(9).font('Helvetica-Bold').text(timeSlot.name, 55, currentY + 5, { width: timeSlotColWidth - 10 });
-      doc.fontSize(8).font('Helvetica').text(`${timeSlot.startTime} - ${timeSlot.endTime}`, 55, currentY + 18, { width: timeSlotColWidth - 10 });
-
-      // Day cells
-      days.forEach((day, colIndex) => {
-        const xPos = 50 + timeSlotColWidth + (colIndex * dayColWidth);
-        const shift = timeSlot.shiftsByDay[day.id];
-
-        doc.rect(xPos, currentY, dayColWidth, 40).fillAndStroke(rowBgColor, '#dee2e6');
-
-        if (!shift) {
-          doc.fontSize(8).font('Helvetica-Oblique').fillColor('#ccc').text('Keine Schicht', xPos + 5, currentY + 15, {
-            width: dayColWidth - 10,
-            align: 'center'
-          });
-        } else {
-          // Get assignments for this time slot and day
-          const scheduledShift = plan.scheduledShifts?.find((scheduled: any) => {
-            const scheduledDayOfWeek = getDayOfWeek(scheduled.date);
-            return scheduledDayOfWeek === day.id &&
-              scheduled.timeSlotId === timeSlot.id;
-          });
-
-          doc.fillColor('black').fontSize(8).font('Helvetica');
-
-          if (scheduledShift && scheduledShift.assignedEmployees.length > 0) {
-            let textY = currentY + 5;
-            scheduledShift.assignedEmployees.forEach((empId: string, empIndex: number) => {
-              if (textY < currentY + 35) { // Don't overflow cell
-                const employee = plan.employees?.find((emp: any) => emp.id === empId);
-                if (employee) {
-                  let roleIndicator = '';
-                  if (employee.isTrainee) {
-                    roleIndicator = ' (T)';
-                    doc.fillColor('#cda8f0'); // Trainee color
-                  } else if (employee.employee_type === 'manager') {
-                    roleIndicator = ' (M)';
-                    doc.fillColor('#CC0000'); // Manager color
-                  } else {
-                    doc.fillColor('#642ab5'); // Regular personnel color
-                  }
-
-                  const name = `${employee.firstname} ${employee.lastname}${roleIndicator}`;
-                  doc.text(name, xPos + 5, textY, { width: dayColWidth - 10, align: 'left' });
-                  textY += 10;
-                }
-              }
-            });
-            doc.fillColor('black');
-          } else {
-            // Show required count like in React component
-            const shiftsForSlot = plan.shifts?.filter((s: any) =>
-              s.dayOfWeek === day.id &&
-              s.timeSlotId === timeSlot.id
-            ) || [];
-            const totalRequired = shiftsForSlot.reduce((sum: number, s: any) => sum + s.requiredEmployees, 0);
-            const displayText = totalRequired === 0 ? '-' : `0/${totalRequired}`;
-
-            doc.fillColor('#666').fontSize(9).font('Helvetica-Oblique')
-              .text(displayText, xPos + 5, currentY + 15, { width: dayColWidth - 10, align: 'center' });
-            doc.fillColor('black');
-          }
-        }
-      });
-
-      currentY += 40;
-    });
-
-    // Add employee overview page
-    doc.addPage();
-    doc.fontSize(16).font('Helvetica-Bold').text('Mitarbeiterübersicht', 50, 50);
-
-    currentY = 80;
-
-    // Table headers
-    doc.fontSize(10).font('Helvetica-Bold');
-    doc.text('Name', 50, currentY);
-    doc.text('E-Mail', 200, currentY);
-    doc.text('Rolle', 350, currentY);
-    doc.text('Typ', 450, currentY);
-    currentY += 15;
-
-    // Horizontal line
-    doc.moveTo(50, currentY).lineTo(550, currentY).stroke();
-    currentY += 10;
-
-    doc.fontSize(9).font('Helvetica');
-
-    plan.employees?.forEach((employee: any) => {
-      if (currentY > 700) {
-        doc.addPage();
-        currentY = 50;
-        // Re-add headers
-        doc.fontSize(10).font('Helvetica-Bold');
-        doc.text('Name', 50, currentY);
-        doc.text('E-Mail', 200, currentY);
-        doc.text('Rolle', 350, currentY);
-        doc.text('Typ', 450, currentY);
-        currentY += 25;
-      }
-
-      doc.text(`${employee.firstname} ${employee.lastname}`, 50, currentY);
-      doc.text(employee.email, 200, currentY, { width: 140 });
-      doc.text(employee.roles?.join(', ') || 'Benutzer', 350, currentY, { width: 90 });
-      doc.text(employee.employeeType, 450, currentY);
-
-      currentY += 20;
-    });
-
-    // Add footer to each page
-    const pages = doc.bufferedPageRange();
-    for (let i = 0; i < pages.count; i++) {
-      doc.switchToPage(i);
-
-      doc.fontSize(8).font('Helvetica');
-      doc.text(
-        `Seite ${i + 1} von ${pages.count} • Erstellt am: ${new Date().toLocaleString('de-DE')} • Schichtplaner System`,
-        50,
-        800,
-        { align: 'center', width: 500 }
-      );
+    // Generate HTML content
+    const html = `
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Schichtplan - ${plan.name}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      font-size: 10pt;
+      line-height: 1.4;
+      color: #2c3e50;
+      padding: 20px;
     }
+    .header { 
+      margin-bottom: 30px; 
+      padding-bottom: 20px;
+      border-bottom: 3px solid #2c3e50;
+    }
+    h1 { 
+      font-size: 24pt; 
+      color: #2c3e50; 
+      margin-bottom: 10px;
+    }
+    .subtitle { 
+      font-size: 11pt; 
+      color: #7f8c8d; 
+      margin-bottom: 5px;
+    }
+    .info-section {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 5px;
+      margin-bottom: 30px;
+      page-break-inside: avoid;
+    }
+    .info-section h2 {
+      font-size: 14pt;
+      margin-bottom: 12px;
+      color: #34495e;
+      border-bottom: 2px solid #34495e;
+      padding-bottom: 5px;
+    }
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .info-item {
+      display: flex;
+      gap: 8px;
+    }
+    .info-label {
+      font-weight: 600;
+      color: #34495e;
+    }
+    .info-value {
+      color: #555;
+    }
+    
+    /* Timetable styles */
+    .timetable-section {
+      margin-top: 30px;
+      page-break-before: always;
+    }
+    .timetable-section h2 {
+      font-size: 16pt;
+      margin-bottom: 15px;
+      color: #2c3e50;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+      page-break-inside: auto;
+    }
+    thead {
+      background: #2c3e50;
+      color: white;
+    }
+    thead th {
+      padding: 12px 8px;
+      text-align: center;
+      font-weight: 600;
+      border: 1px solid #2c3e50;
+      font-size: 10pt;
+    }
+    tbody tr {
+      page-break-inside: avoid;
+      page-break-after: auto;
+    }
+    tbody tr:nth-child(even) {
+      background: #f8f9fa;
+    }
+    td {
+      padding: 10px 8px;
+      border: 1px solid #dee2e6;
+      vertical-align: top;
+    }
+    .time-slot-cell {
+      font-weight: 600;
+      background: #ecf0f1;
+      white-space: nowrap;
+      min-width: 120px;
+    }
+    .time-slot-name {
+      font-size: 10pt;
+      color: #2c3e50;
+      margin-bottom: 3px;
+    }
+    .time-slot-time {
+      font-size: 9pt;
+      color: #7f8c8d;
+      font-weight: normal;
+    }
+    .employee-list {
+      list-style: none;
+      padding: 0;
+    }
+    .employee-list li {
+      margin-bottom: 4px;
+      font-size: 9pt;
+    }
+    .employee-manager { color: #CC0000; font-weight: 600; }
+    .employee-trainee { color: #CDA8F0; font-weight: 600; }
+    .employee-regular { color: #642AB5; }
+    .no-shift {
+      color: #999;
+      font-style: italic;
+      text-align: center;
+    }
+    .required-count {
+      color: #666;
+      font-style: italic;
+      text-align: center;
+    }
+    
+    /* Legend */
+    .legend {
+      margin-top: 15px;
+      padding: 10px;
+      background: #f8f9fa;
+      border-radius: 5px;
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      page-break-inside: avoid;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 9pt;
+    }
+    .legend-square {
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+    }
+    
+    /* Employee section */
+    .employee-section {
+      margin-top: 30px;
+      page-break-before: always;
+    }
+    .employee-section h2 {
+      font-size: 16pt;
+      margin-bottom: 15px;
+      color: #2c3e50;
+    }
+    .employee-table {
+      width: 100%;
+    }
+    .employee-table thead {
+      background: #34495e;
+    }
+    .employee-table td {
+      font-size: 9pt;
+    }
+    
+    /* Footer */
+    .footer {
+      position: fixed;
+      bottom: 15px;
+      left: 20px;
+      right: 20px;
+      text-align: center;
+      font-size: 8pt;
+      color: #7f8c8d;
+      border-top: 1px solid #dee2e6;
+      padding-top: 8px;
+    }
+    
+    @media print {
+      body { padding: 15px; }
+      .header { page-break-after: avoid; }
+      .info-section { page-break-after: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Schichtplan: ${plan.name}</h1>
+    <div class="subtitle">Erstellt am: ${new Date().toLocaleDateString('de-DE', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    })}</div>
+  </div>
 
-    // Finalize PDF
-    doc.end();
+  <div class="info-section">
+    <h2>Plan Informationen</h2>
+    <div class="info-grid">
+      <div class="info-item">
+        <span class="info-label">Plan Name:</span>
+        <span class="info-value">${plan.name}</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Status:</span>
+        <span class="info-value">${plan.status}</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Beschreibung:</span>
+        <span class="info-value">${plan.description || 'Keine'}</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Erstellt von:</span>
+        <span class="info-value">${plan.created_by_name || 'Unbekannt'}</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Zeitraum:</span>
+        <span class="info-value">${plan.startDate} bis ${plan.endDate}</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Erstellt am:</span>
+        <span class="info-value">${new Date(plan.createdAt).toLocaleString('de-DE')}</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Anzahl Schichten:</span>
+        <span class="info-value">${plan.scheduledShifts?.length || 0}</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Anzahl Mitarbeiter:</span>
+        <span class="info-value">${plan.employees?.length || 0}</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="timetable-section">
+    <h2>Schichtplan Timetable</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Schicht (Zeit)</th>
+          ${days.map(day => `<th>${day.name}</th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>
+        ${allTimeSlots.map(timeSlot => `
+          <tr>
+            <td class="time-slot-cell">
+              <div class="time-slot-name">${timeSlot.name}</div>
+              <div class="time-slot-time">${timeSlot.startTime} - ${timeSlot.endTime}</div>
+            </td>
+            ${days.map(day => {
+      const shift = timeSlot.shiftsByDay[day.id];
+
+      if (!shift) {
+        return '<td class="no-shift">Keine Schicht</td>';
+      }
+
+      const scheduledShift = plan.scheduledShifts?.find((s: any) =>
+        getDayOfWeek(s.date) === day.id && s.timeSlotId === timeSlot.id
+      );
+
+      if (scheduledShift && scheduledShift.assignedEmployees?.length > 0) {
+        const employeeItems = scheduledShift.assignedEmployees.map((empId: string) => {
+          const emp = plan.employees?.find((e: any) => e.id === empId);
+          if (!emp) return '<li>Unbekannt</li>';
+
+          let cssClass = 'employee-regular';
+          let suffix = '';
+
+          if (emp.isTrainee) {
+            cssClass = 'employee-trainee';
+            suffix = ' (T)';
+          } else if (emp.employee_type === 'manager') {
+            cssClass = 'employee-manager';
+            suffix = ' (M)';
+          }
+
+          return `<li class="${cssClass}">${emp.firstname} ${emp.lastname}${suffix}</li>`;
+        }).join('');
+
+        return `<td><ul class="employee-list">${employeeItems}</ul></td>`;
+      } else {
+        const shiftsForSlot = plan.shifts?.filter((s: any) =>
+          s.dayOfWeek === day.id && s.timeSlotId === timeSlot.id
+        ) || [];
+        const totalRequired = shiftsForSlot.reduce((sum: number, s: any) =>
+          sum + s.requiredEmployees, 0
+        );
+        const displayText = totalRequired === 0 ? '-' : `0/${totalRequired}`;
+        return `<td class="required-count">${displayText}</td>`;
+      }
+    }).join('')}
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+    
+    <div class="legend">
+      <div class="legend-item">
+        <div class="legend-square" style="background: #CC0000;"></div>
+        <span>Manager</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-square" style="background: #CDA8F0;"></div>
+        <span>Trainee</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-square" style="background: #642AB5;"></div>
+        <span>Mitarbeiter</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-square" style="background: #ededed;"></div>
+        <span>Keine Schicht</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="employee-section">
+    <h2>Mitarbeiterübersicht</h2>
+    <table class="employee-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>E-Mail</th>
+          <th>Rolle</th>
+          <th>Mitarbeiter Typ</th>
+          <th>Vertragstyp</th>
+          <th>Trainee</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${plan.employees?.map((emp: any) => `
+          <tr>
+            <td>${emp.firstname} ${emp.lastname}</td>
+            <td>${emp.email}</td>
+            <td>${emp.roles?.join(', ') || 'Benutzer'}</td>
+            <td>${emp.employeeType || 'Unbekannt'}</td>
+            <td>${emp.contractType || 'Nicht angegeben'}</td>
+            <td>${emp.isTrainee ? 'Ja' : 'Nein'}</td>
+          </tr>
+        `).join('') || '<tr><td colspan="6" style="text-align: center; color: #999;">Keine Mitarbeiter</td></tr>'}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    Erstellt am: ${new Date().toLocaleString('de-DE')} • Schichtplaner System
+  </div>
+</body>
+</html>
+    `;
+
+    // Launch browser and generate PDF
+    browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
+    const page = await context.newPage();
+
+    await page.setContent(html, { waitUntil: 'networkidle' });
+
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: {
+        top: '20mm',
+        right: '15mm',
+        bottom: '20mm',
+        left: '15mm'
+      },
+      displayHeaderFooter: true,
+      headerTemplate: '<div></div>',
+      footerTemplate: `
+        <div style="font-size: 8pt; text-align: center; width: 100%; color: #7f8c8d; padding-top: 5px;">
+          <span class="pageNumber"></span> / <span class="totalPages"></span>
+        </div>
+      `
+    });
+
+    await browser.close();
+
+    // Set response headers and send PDF
+    const fileName = `Schichtplan_${plan.name}_${new Date().toISOString().split('T')[0]}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(pdfBuffer);
 
     console.log('✅ PDF export completed for plan:', id);
 
   } catch (error) {
     console.error('❌ Error exporting to PDF:', error);
+    if (browser) {
+      await browser.close();
+    }
     res.status(500).json({ error: 'Internal server error during PDF export' });
   }
 };
