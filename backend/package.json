@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "npm run build && npx tsx src/server.ts",
     "dev:single": "cross-env NODE_ENV=development TRUST_PROXY_ENABLED=false npx tsx src/server.ts",
+    "seed:test-data": "node --loader ts-node/esm src/scripts/seedTestData.ts",
+    "dev:all": "concurrently \"npm run dev:single\" \"npm run seed:test-data\"",
     "build": "tsc",
     "start": "node dist/server.js",
     "prestart": "npm run build",

@@ -3,7 +3,7 @@
   "private": true,
   "workspaces": [
     "frontend",
-    "backend", 
+    "backend",
     "premium"
   ],
   "scripts": {
@@ -12,7 +12,7 @@
     "build:all": "npm run build --workspace=backend && npm run build --workspace=frontend",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:frontend": "cd frontend && npm run dev",
-    "dev:backend": "cd backend && npm run dev:single"
+    "dev:backend": "cd backend && npm run dev:all"
   },
   "devDependencies": {
     "typescript": "^5.3.3",

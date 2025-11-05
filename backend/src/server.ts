@@ -320,6 +320,16 @@ const initializeApp = async () => {
     const { applyMigration } = await import('./scripts/applyMigration.js');
     await applyMigration();
 
+    if (isDevelopment && process.env.SEED_TEST_DATA === 'true') {
+      try {
+        const { seedTestData } = await import('./scripts/seedTestData.js');
+        await seedTestData();
+        console.log('✅ Test data seeded successfully');
+      } catch (error) {
+        console.log('⚠️ Test data seeding skipped or failed:', error);
+      }
+    }
+
     app.listen(PORT, () => {
       console.log('🎉 APPLICATION STARTED SUCCESSFULLY!');
       console.log(`📍 Port: ${PORT}`);
