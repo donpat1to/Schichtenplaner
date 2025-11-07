@@ -102,8 +102,8 @@ const getRateLimitConfig = () => {
   return {
     windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes default
     max: isProduction
-      ? parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '1000')  // Stricter in production
-      : parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '5000'), // More lenient in development
+      ? parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '50')  // Stricter in production
+      : parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'), // More lenient in development
 
     // Development-specific relaxations
     skip: (req: Request) => {
@@ -142,7 +142,7 @@ export const apiLimiter = rateLimit({
 // Strict limiter for auth endpoints
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: parseInt(process.env.AUTH_RATE_LIMIT_MAX_REQUESTS || '100'),
+  max: parseInt(process.env.AUTH_RATE_LIMIT_MAX_REQUESTS || '50'),
   message: {
     error: 'Zu viele Login-Versuche, bitte versuchen Sie es später erneut'
   },
@@ -165,7 +165,7 @@ export const authLimiter = rateLimit({
 // Separate limiter for expensive endpoints
 export const expensiveEndpointLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: parseInt(process.env.EXPENSIVE_ENDPOINT_LIMIT || '100'),
+  max: parseInt(process.env.EXPENSIVE_ENDPOINT_LIMIT || '20'),
   message: {
     error: 'Zu viele Anfragen für diese Ressource'
   },
