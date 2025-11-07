@@ -68,7 +68,8 @@ const shouldSkipLimit = (req: Request): boolean => {
   const skipPaths = [
     '/api/health',
     '/api/setup/status',
-    '/api/auth/validate'
+    '/api/auth/validate',
+    '/api/auth/me',
   ];
 
   // Skip for successful GET requests (data fetching)
