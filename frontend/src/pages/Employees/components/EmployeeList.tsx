@@ -4,6 +4,7 @@ import { ROLE_CONFIG, EMPLOYEE_TYPE_CONFIG } from '../../../models/defaults/empl
 import { Employee } from '../../../models/Employee';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useNotification } from '../../../contexts/NotificationContext';
+import { ICONS, iconButtonStyle, BUTTON_COLORS } from '../../../utils/buttonStyles';
 
 interface EmployeeListProps {
   employees: Employee[];
@@ -455,40 +456,20 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
                 {/* Verfügbarkeit Button */}
                 <button
                   onClick={() => onManageAvailability(employee)}
-                  style={{
-                    padding: '6px 8px',
-                    backgroundColor: '#3498db',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '12px',
-                    minWidth: '32px',
-                    height: '32px'
-                  }}
+                  style={iconButtonStyle(BUTTON_COLORS.info, false)}
                   title="Verfügbarkeit verwalten"
                 >
-                  📅
+                  {ICONS.calendar}
                 </button>
 
                 {/* Bearbeiten Button */}
                 {canEdit && (
                   <button
                     onClick={() => onEdit(employee)}
-                    style={{
-                      padding: '6px 8px',
-                      backgroundColor: '#f39c12',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '12px',
-                      minWidth: '32px',
-                      height: '32px'
-                    }}
+                    style={iconButtonStyle(BUTTON_COLORS.edit, false)}
                     title="Mitarbeiter bearbeiten"
                   >
-                    ✏️
+                    {ICONS.edit}
                   </button>
                 )}
 
@@ -496,20 +477,10 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
                 {canDelete && (
                   <button
                     onClick={() => handleDeleteClick(employee)}
-                    style={{
-                      padding: '6px 8px',
-                      backgroundColor: '#e74c3c',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '12px',
-                      minWidth: '32px',
-                      height: '32px'
-                    }}
+                    style={iconButtonStyle(BUTTON_COLORS.delete, false)}
                     title="Mitarbeiter löschen"
                   >
-                    🗑️
+                    {ICONS.delete}
                   </button>
                 )}
 

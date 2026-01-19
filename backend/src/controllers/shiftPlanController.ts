@@ -472,8 +472,8 @@ export const updateShiftPlan = async (req: Request, res: Response): Promise<void
       // Update plan
       if (name !== undefined || description !== undefined || startDate !== undefined || endDate !== undefined || status !== undefined) {
         await db.run(
-          `UPDATE shift_plans 
-           SET name = COALESCE(?, name), 
+          `UPDATE shift_plans
+           SET name = COALESCE(?, name),
                description = COALESCE(?, description),
                start_date = COALESCE(?, start_date),
                end_date = COALESCE(?, end_date),
@@ -483,35 +483,90 @@ export const updateShiftPlan = async (req: Request, res: Response): Promise<void
         );
       }
 
-      // If updating time slots, replace all time slots
+      // If updating time slots, use ID-preserving logic
       if (timeSlots) {
-        // Delete existing time slots
-        await db.run('DELETE FROM time_slots WHERE plan_id = ?', [id]);
+        const existingSlots = await db.all<any>('SELECT id FROM time_slots WHERE plan_id = ?', [id]);
+        const existingIds = new Set(existingSlots.map(s => s.id));
+        const incomingIds = new Set(timeSlots.filter((ts: any) => ts.id).map((ts: any) => ts.id));
 
-        // Insert new time slots - always generate new IDs
         for (const timeSlot of timeSlots) {
-          const timeSlotId = uuidv4();
-          await db.run(
-            `INSERT INTO time_slots (id, plan_id, name, start_time, end_time, description) 
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [timeSlotId, id, timeSlot.name, timeSlot.startTime, timeSlot.endTime, timeSlot.description || '']
-          );
+          if ((timeSlot as any).id && existingIds.has((timeSlot as any).id)) {
+            // UPDATE existing time slot - preserve ID
+            await db.run(
+              `UPDATE time_slots SET name = ?, start_time = ?, end_time = ?, description = ? WHERE id = ?`,
+              [timeSlot.name, timeSlot.startTime, timeSlot.endTime, timeSlot.description || '', (timeSlot as any).id]
+            );
+          } else {
+            // INSERT new time slot
+            const newId = (timeSlot as any).id || uuidv4();
+            await db.run(
+              `INSERT INTO time_slots (id, plan_id, name, start_time, end_time, description)
+               VALUES (?, ?, ?, ?, ?, ?)`,
+              [newId, id, timeSlot.name, timeSlot.startTime, timeSlot.endTime, timeSlot.description || '']
+            );
+          }
+        }
+
+        // DELETE removed time slots (only if no shifts reference them)
+        for (const existingId of existingIds) {
+          if (!incomingIds.has(existingId)) {
+            const hasShifts = await db.get('SELECT 1 FROM shifts WHERE time_slot_id = ?', [existingId]);
+            if (hasShifts) {
+              await db.run('ROLLBACK');
+              res.status(400).json({
+                error: 'Cannot delete time slot',
+                message: `Time slot ${existingId} is referenced by shifts. Remove the shifts first.`
+              });
+              return;
+            }
+            await db.run('DELETE FROM time_slots WHERE id = ?', [existingId]);
+          }
         }
       }
 
-      // If updating shifts, replace all shifts
+      // If updating shifts, use ID-preserving logic
       if (shifts) {
-        // Delete existing shifts
-        await db.run('DELETE FROM shifts WHERE plan_id = ?', [id]);
+        const existingShifts = await db.all<any>('SELECT id FROM shifts WHERE plan_id = ?', [id]);
+        const existingShiftIds = new Set(existingShifts.map(s => s.id));
+        const incomingShiftIds = new Set(shifts.filter((s: any) => s.id).map((s: any) => s.id));
 
-        // Insert new shifts - use new timeSlotId (they should reference the newly created time slots)
         for (const shift of shifts) {
-          const shiftId = uuidv4();
-          await db.run(
-            `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, required_employees, color) 
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [shiftId, id, shift.dayOfWeek, shift.timeSlotId, shift.requiredEmployees, shift.color || '#3498db']
+          // Validate time_slot_id exists
+          const timeSlotExists = await db.get(
+            'SELECT id FROM time_slots WHERE id = ? AND plan_id = ?',
+            [shift.timeSlotId, id]
           );
+          if (!timeSlotExists) {
+            await db.run('ROLLBACK');
+            res.status(400).json({
+              error: 'Invalid time slot',
+              message: `Time slot ${shift.timeSlotId} not found in this plan`
+            });
+            return;
+          }
+
+          if ((shift as any).id && existingShiftIds.has((shift as any).id)) {
+            // UPDATE existing shift - preserve ID
+            await db.run(
+              `UPDATE shifts SET day_of_week = ?, time_slot_id = ?, required_employees = ?, color = ? WHERE id = ?`,
+              [shift.dayOfWeek, shift.timeSlotId, shift.requiredEmployees, shift.color || '#3498db', (shift as any).id]
+            );
+          } else {
+            // INSERT new shift
+            const newId = (shift as any).id || uuidv4();
+            await db.run(
+              `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, required_employees, color)
+               VALUES (?, ?, ?, ?, ?, ?)`,
+              [newId, id, shift.dayOfWeek, shift.timeSlotId, shift.requiredEmployees, shift.color || '#3498db']
+            );
+          }
+        }
+
+        // DELETE removed shifts
+        for (const existingShiftId of existingShiftIds) {
+          if (!incomingShiftIds.has(existingShiftId)) {
+            await db.run('DELETE FROM shifts WHERE id = ?', [existingShiftId]);
+          }
         }
       }
 
@@ -549,6 +604,247 @@ export const deleteShiftPlan = async (req: Request, res: Response): Promise<void
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting shift plan:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// ===== GRANULAR TIME SLOT ENDPOINTS =====
+
+export const addTimeSlot = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { name, startTime, endTime, description } = req.body;
+
+    // Check if plan exists
+    const existingPlan = await db.get('SELECT * FROM shift_plans WHERE id = ?', [id]);
+    if (!existingPlan) {
+      res.status(404).json({ error: 'Shift plan not found' });
+      return;
+    }
+
+    const timeSlotId = uuidv4();
+    await db.run(
+      `INSERT INTO time_slots (id, plan_id, name, start_time, end_time, description)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [timeSlotId, id, name, startTime, endTime, description || '']
+    );
+
+    res.status(201).json({
+      id: timeSlotId,
+      planId: id,
+      name,
+      startTime,
+      endTime,
+      description: description || ''
+    });
+  } catch (error) {
+    console.error('Error adding time slot:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const updateTimeSlot = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id, slotId } = req.params;
+    const { name, startTime, endTime, description } = req.body;
+
+    // Check if time slot exists and belongs to this plan
+    const existingSlot = await db.get<any>(
+      'SELECT * FROM time_slots WHERE id = ? AND plan_id = ?',
+      [slotId, id]
+    );
+    if (!existingSlot) {
+      res.status(404).json({ error: 'Time slot not found in this plan' });
+      return;
+    }
+
+    await db.run(
+      `UPDATE time_slots
+       SET name = COALESCE(?, name),
+           start_time = COALESCE(?, start_time),
+           end_time = COALESCE(?, end_time),
+           description = COALESCE(?, description)
+       WHERE id = ?`,
+      [name, startTime, endTime, description, slotId]
+    );
+
+    const updatedSlot = await db.get<any>('SELECT * FROM time_slots WHERE id = ?', [slotId]);
+    res.json({
+      id: updatedSlot.id,
+      planId: updatedSlot.plan_id,
+      name: updatedSlot.name,
+      startTime: updatedSlot.start_time,
+      endTime: updatedSlot.end_time,
+      description: updatedSlot.description
+    });
+  } catch (error) {
+    console.error('Error updating time slot:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const deleteTimeSlot = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id, slotId } = req.params;
+
+    // Check if time slot exists and belongs to this plan
+    const existingSlot = await db.get(
+      'SELECT id FROM time_slots WHERE id = ? AND plan_id = ?',
+      [slotId, id]
+    );
+    if (!existingSlot) {
+      res.status(404).json({ error: 'Time slot not found in this plan' });
+      return;
+    }
+
+    // Check if any shifts reference this time slot
+    const dependentShifts = await db.all<any>(
+      'SELECT id FROM shifts WHERE plan_id = ? AND time_slot_id = ?',
+      [id, slotId]
+    );
+
+    if (dependentShifts.length > 0) {
+      res.status(400).json({
+        error: 'Cannot delete time slot',
+        message: `${dependentShifts.length} shift(s) reference this time slot. Remove them first.`,
+        dependentShiftIds: dependentShifts.map(s => s.id)
+      });
+      return;
+    }
+
+    await db.run('DELETE FROM time_slots WHERE id = ? AND plan_id = ?', [slotId, id]);
+    res.status(204).send();
+  } catch (error) {
+    console.error('Error deleting time slot:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// ===== GRANULAR SHIFT ENDPOINTS =====
+
+export const addShift = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { timeSlotId, dayOfWeek, requiredEmployees, color } = req.body;
+
+    // Check if plan exists
+    const existingPlan = await db.get('SELECT * FROM shift_plans WHERE id = ?', [id]);
+    if (!existingPlan) {
+      res.status(404).json({ error: 'Shift plan not found' });
+      return;
+    }
+
+    // Validate time slot exists and belongs to this plan
+    const timeSlot = await db.get(
+      'SELECT id FROM time_slots WHERE id = ? AND plan_id = ?',
+      [timeSlotId, id]
+    );
+    if (!timeSlot) {
+      res.status(400).json({ error: 'Time slot not found in this plan' });
+      return;
+    }
+
+    // Check for duplicate (same plan + time slot + day)
+    const existing = await db.get(
+      'SELECT id FROM shifts WHERE plan_id = ? AND time_slot_id = ? AND day_of_week = ?',
+      [id, timeSlotId, dayOfWeek]
+    );
+    if (existing) {
+      res.status(409).json({ error: 'Shift already exists for this day and time slot' });
+      return;
+    }
+
+    const shiftId = uuidv4();
+    await db.run(
+      `INSERT INTO shifts (id, plan_id, time_slot_id, day_of_week, required_employees, color)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [shiftId, id, timeSlotId, dayOfWeek, requiredEmployees || 2, color || '#3498db']
+    );
+
+    res.status(201).json({
+      id: shiftId,
+      planId: id,
+      timeSlotId,
+      dayOfWeek,
+      requiredEmployees: requiredEmployees || 2,
+      color: color || '#3498db'
+    });
+  } catch (error) {
+    console.error('Error adding shift:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const updateShift = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id, shiftId } = req.params;
+    const { requiredEmployees, color, timeSlotId, dayOfWeek } = req.body;
+
+    // Check if shift exists and belongs to this plan
+    const existingShift = await db.get<any>(
+      'SELECT * FROM shifts WHERE id = ? AND plan_id = ?',
+      [shiftId, id]
+    );
+    if (!existingShift) {
+      res.status(404).json({ error: 'Shift not found in this plan' });
+      return;
+    }
+
+    // If changing time slot, validate it exists
+    if (timeSlotId) {
+      const timeSlot = await db.get(
+        'SELECT id FROM time_slots WHERE id = ? AND plan_id = ?',
+        [timeSlotId, id]
+      );
+      if (!timeSlot) {
+        res.status(400).json({ error: 'Time slot not found in this plan' });
+        return;
+      }
+    }
+
+    await db.run(
+      `UPDATE shifts
+       SET required_employees = COALESCE(?, required_employees),
+           color = COALESCE(?, color),
+           time_slot_id = COALESCE(?, time_slot_id),
+           day_of_week = COALESCE(?, day_of_week)
+       WHERE id = ?`,
+      [requiredEmployees, color, timeSlotId, dayOfWeek, shiftId]
+    );
+
+    const updatedShift = await db.get<any>('SELECT * FROM shifts WHERE id = ?', [shiftId]);
+    res.json({
+      id: updatedShift.id,
+      planId: updatedShift.plan_id,
+      timeSlotId: updatedShift.time_slot_id,
+      dayOfWeek: updatedShift.day_of_week,
+      requiredEmployees: updatedShift.required_employees,
+      color: updatedShift.color
+    });
+  } catch (error) {
+    console.error('Error updating shift:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const deleteShift = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id, shiftId } = req.params;
+
+    // Check if shift exists and belongs to this plan
+    const existingShift = await db.get(
+      'SELECT id FROM shifts WHERE id = ? AND plan_id = ?',
+      [shiftId, id]
+    );
+    if (!existingShift) {
+      res.status(404).json({ error: 'Shift not found in this plan' });
+      return;
+    }
+
+    await db.run('DELETE FROM shifts WHERE id = ? AND plan_id = ?', [shiftId, id]);
+    res.status(204).send();
+  } catch (error) {
+    console.error('Error deleting shift:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

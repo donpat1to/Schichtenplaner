@@ -13,7 +13,7 @@ const ShiftPlanList: React.FC = () => {
   const navigate = useNavigate();
   const { showNotification, confirmDialog } = useNotification();
   const { executeWithValidation, isSubmitting } = useBackendValidation();
-  
+
   const [shiftPlans, setShiftPlans] = useState<ShiftPlan[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -48,13 +48,13 @@ const ShiftPlanList: React.FC = () => {
 
     await executeWithValidation(async () => {
       await shiftPlanService.deleteShiftPlan(id);
-      
+
       showNotification({
         type: 'success',
         title: 'Erfolg',
         message: 'Der Schichtplan wurde erfolgreich gelöscht.'
       });
-      
+
       loadShiftPlans();
     });
   };
@@ -87,8 +87,8 @@ const ShiftPlanList: React.FC = () => {
 
   if (loading) {
     return (
-      <div style={{ 
-        textAlign: 'center', 
+      <div style={{
+        textAlign: 'center',
         padding: '40px',
         fontSize: '18px',
         color: '#666'
@@ -100,34 +100,34 @@ const ShiftPlanList: React.FC = () => {
 
   return (
     <div>
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
-        marginBottom: '30px' 
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '30px'
       }}>
         <h1>📅 Schichtpläne</h1>
         {hasRole(['admin', 'maintenance']) && (
           <Link to="/shift-plans/new">
-            <button style={{ 
-              padding: '10px 20px', 
-              backgroundColor: '#51258f', 
-              color: 'white', 
-              border: 'none', 
+            <button style={{
+              padding: '10px 20px',
+              backgroundColor: '#51258f',
+              color: 'white',
+              border: 'none',
               borderRadius: '4px',
               cursor: 'pointer'
             }}>
-              + Neuen Plan
+              + Neuer Plan
             </button>
           </Link>
         )}
       </div>
 
       {shiftPlans.length === 0 ? (
-        <div style={{ 
-          padding: '40px', 
-          textAlign: 'center', 
-          backgroundColor: '#f8f9fa', 
+        <div style={{
+          padding: '40px',
+          textAlign: 'center',
+          backgroundColor: '#f8f9fa',
           borderRadius: '8px',
           border: '2px dashed #dee2e6'
         }}>
@@ -136,12 +136,12 @@ const ShiftPlanList: React.FC = () => {
           <p>Erstellen Sie Ihren ersten Schichtplan!</p>
           {hasRole(['admin', 'maintenance']) && (
             <Link to="/shift-plans/new">
-              <button style={{ 
+              <button style={{
                 marginTop: '15px',
-                padding: '10px 20px', 
-                backgroundColor: '#51258f', 
-                color: 'white', 
-                border: 'none', 
+                padding: '10px 20px',
+                backgroundColor: '#51258f',
+                color: 'white',
+                border: 'none',
                 borderRadius: '4px',
                 cursor: 'pointer'
               }}>
@@ -153,7 +153,7 @@ const ShiftPlanList: React.FC = () => {
       ) : (
         <div style={{ display: 'grid', gap: '20px' }}>
           {shiftPlans.map(plan => (
-            <div 
+            <div
               key={plan.id}
               style={{
                 padding: '20px',
@@ -246,7 +246,7 @@ const ShiftPlanList: React.FC = () => {
           fontSize: '14px',
           color: '#2c3e50'
         }}>
-          <strong>ℹ️ Informationen:</strong> Sie können Schichtpläne nur anzeigen. 
+          <strong>ℹ️ Informationen:</strong> Sie können Schichtpläne nur anzeigen.
           Bearbeitungsrechte benötigen Admin- oder Instandhalter-Berechtigungen.
         </div>
       )}

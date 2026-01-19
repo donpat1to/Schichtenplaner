@@ -1,6 +1,33 @@
-import { ShiftPlan, CreateShiftPlanRequest } from '../models/ShiftPlan';
+import { ShiftPlan, CreateShiftPlanRequest, TimeSlot, Shift } from '../models/ShiftPlan';
 import { TEMPLATE_PRESETS } from '../models/defaults/shiftPlanDefaults';
 import { apiClient } from './apiClient';
+
+// Request types for time slot and shift operations
+export interface CreateTimeSlotRequest {
+  name: string;
+  startTime: string;
+  endTime: string;
+  description?: string;
+}
+
+export interface UpdateTimeSlotRequest {
+  name?: string;
+  startTime?: string;
+  endTime?: string;
+  description?: string;
+}
+
+export interface CreateShiftRequest {
+  timeSlotId: string;
+  dayOfWeek: number;
+  requiredEmployees: number;
+  color?: string;
+}
+
+export interface UpdateShiftRequest {
+  requiredEmployees?: number;
+  color?: string;
+}
 
 export const shiftPlanService = {
   async getShiftPlans(): Promise<ShiftPlan[]> {
@@ -158,28 +185,108 @@ export const shiftPlanService = {
   async exportShiftPlanToPDF(planId: string): Promise<Blob> {
     try {
       console.log('📄 Exporting shift plan to PDF:', planId);
-      
+
       // Use the apiClient with blob response handling
       const blob = await apiClient.request<Blob>(`/shift-plans/${planId}/export/pdf`, {
         method: 'GET',
       }, 'blob');
-      
+
       console.log('✅ PDF export successful');
       return blob;
     } catch (error: any) {
       console.error('❌ Error exporting to PDF:', error);
-      
+
       if (error.statusCode === 401) {
         localStorage.removeItem('token');
         localStorage.removeItem('employee');
         throw new Error('Nicht authorisiert - bitte erneut anmelden');
       }
-      
+
       if (error.statusCode === 404) {
         throw new Error('Schichtplan nicht gefunden');
       }
-      
+
       throw new Error('Fehler beim PDF-Export des Schichtplans');
+    }
+  },
+
+  // Time Slot operations
+  async addTimeSlot(planId: string, timeSlot: CreateTimeSlotRequest): Promise<TimeSlot> {
+    try {
+      return await apiClient.post<TimeSlot>(`/shift-plans/${planId}/time-slots`, timeSlot);
+    } catch (error: any) {
+      if (error.statusCode === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('employee');
+        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+      }
+      throw new Error('Fehler beim Hinzufügen des Zeit-Slots');
+    }
+  },
+
+  async updateTimeSlot(planId: string, slotId: string, data: UpdateTimeSlotRequest): Promise<TimeSlot> {
+    try {
+      return await apiClient.put<TimeSlot>(`/shift-plans/${planId}/time-slots/${slotId}`, data);
+    } catch (error: any) {
+      if (error.statusCode === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('employee');
+        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+      }
+      throw new Error('Fehler beim Aktualisieren des Zeit-Slots');
+    }
+  },
+
+  async deleteTimeSlot(planId: string, slotId: string): Promise<void> {
+    try {
+      await apiClient.delete(`/shift-plans/${planId}/time-slots/${slotId}`);
+    } catch (error: any) {
+      if (error.statusCode === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('employee');
+        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+      }
+      throw new Error('Fehler beim Löschen des Zeit-Slots');
+    }
+  },
+
+  // Shift operations
+  async addShift(planId: string, shift: CreateShiftRequest): Promise<Shift> {
+    try {
+      return await apiClient.post<Shift>(`/shift-plans/${planId}/shifts`, shift);
+    } catch (error: any) {
+      if (error.statusCode === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('employee');
+        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+      }
+      throw new Error('Fehler beim Hinzufügen der Schicht');
+    }
+  },
+
+  async updateShift(planId: string, shiftId: string, data: UpdateShiftRequest): Promise<Shift> {
+    try {
+      return await apiClient.patch<Shift>(`/shift-plans/${planId}/shifts/${shiftId}`, data);
+    } catch (error: any) {
+      if (error.statusCode === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('employee');
+        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+      }
+      throw new Error('Fehler beim Aktualisieren der Schicht');
+    }
+  },
+
+  async deleteShift(planId: string, shiftId: string): Promise<void> {
+    try {
+      await apiClient.delete(`/shift-plans/${planId}/shifts/${shiftId}`);
+    } catch (error: any) {
+      if (error.statusCode === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('employee');
+        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+      }
+      throw new Error('Fehler beim Löschen der Schicht');
     }
   },
 };

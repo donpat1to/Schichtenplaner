@@ -388,6 +388,111 @@ export const validateCreateFromPreset = [
     .withMessage('isTemplate must be a boolean')
 ];
 
+// ===== TIME SLOT VALIDATION =====
+export const validateTimeSlot = [
+  body('name')
+    .isLength({ min: 1, max: 100 })
+    .withMessage('Time slot name must be between 1-100 characters')
+    .trim()
+    .escape(),
+
+  body('startTime')
+    .matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
+    .withMessage('Start time must be in HH:MM format'),
+
+  body('endTime')
+    .matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
+    .withMessage('End time must be in HH:MM format'),
+
+  body('description')
+    .optional()
+    .isLength({ max: 500 })
+    .withMessage('Description cannot exceed 500 characters')
+    .trim()
+    .escape()
+];
+
+export const validateTimeSlotUpdate = [
+  body('name')
+    .optional()
+    .isLength({ min: 1, max: 100 })
+    .withMessage('Time slot name must be between 1-100 characters')
+    .trim()
+    .escape(),
+
+  body('startTime')
+    .optional()
+    .matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
+    .withMessage('Start time must be in HH:MM format'),
+
+  body('endTime')
+    .optional()
+    .matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
+    .withMessage('End time must be in HH:MM format'),
+
+  body('description')
+    .optional()
+    .isLength({ max: 500 })
+    .withMessage('Description cannot exceed 500 characters')
+    .trim()
+    .escape()
+];
+
+export const validateSlotId = [
+  param('slotId')
+    .isUUID()
+    .withMessage('Slot ID must be a valid UUID')
+];
+
+// ===== SHIFT VALIDATION =====
+export const validateShiftCreate = [
+  body('timeSlotId')
+    .isUUID()
+    .withMessage('Time slot ID must be a valid UUID'),
+
+  body('dayOfWeek')
+    .isInt({ min: 1, max: 7 })
+    .withMessage('Day of week must be between 1-7 (Monday-Sunday)'),
+
+  body('requiredEmployees')
+    .optional()
+    .isInt({ min: 1, max: 10 })
+    .withMessage('Required employees must be between 1-10'),
+
+  body('color')
+    .optional()
+    .isHexColor()
+    .withMessage('Color must be a valid hex color')
+];
+
+export const validateShiftUpdate = [
+  body('timeSlotId')
+    .optional()
+    .isUUID()
+    .withMessage('Time slot ID must be a valid UUID'),
+
+  body('dayOfWeek')
+    .optional()
+    .isInt({ min: 1, max: 7 })
+    .withMessage('Day of week must be between 1-7 (Monday-Sunday)'),
+
+  body('requiredEmployees')
+    .optional()
+    .isInt({ min: 1, max: 10 })
+    .withMessage('Required employees must be between 1-10'),
+
+  body('color')
+    .optional()
+    .isHexColor()
+    .withMessage('Color must be a valid hex color')
+];
+
+export const validateShiftId = [
+  param('shiftId')
+    .isUUID()
+    .withMessage('Shift ID must be a valid UUID')
+];
+
 // ===== SCHEDULED SHIFTS VALIDATION =====
 export const validateScheduledShiftUpdate = [
   body('assignedEmployees')
