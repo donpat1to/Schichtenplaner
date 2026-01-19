@@ -201,7 +201,7 @@ class UniversalSchedulingSolver:
             
             # Solve with callback
             callback = SimpleSolutionCallback()
-            status = self.solver.SolveWithSolutionCallback(self.model, callback)
+            status = self.solver.Solve(self.model, callback)
             
             result = self._format_solution(status, cp_vars, model_data)
             result['metadata']['constraintsAdded'] = constraints_added
