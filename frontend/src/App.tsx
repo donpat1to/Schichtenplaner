@@ -11,6 +11,10 @@ import ShiftPlanList from './pages/ShiftPlans/ShiftPlanList';
 import ShiftPlanCreate from './pages/ShiftPlans/ShiftPlanCreate';
 import ShiftPlanEdit from './pages/ShiftPlans/ShiftPlanEdit';
 import ShiftPlanView from './pages/ShiftPlans/ShiftPlanView';
+import WeeklyPlanList from './pages/WeeklyPlans/WeeklyPlanList';
+import WeeklyPlanCreate from './pages/WeeklyPlans/WeeklyPlanCreate';
+import WeeklyPlanView from './pages/WeeklyPlans/WeeklyPlanView';
+import MyAvailability from './pages/MyAvailability/MyAvailability';
 import EmployeeManagement from './pages/Employees/EmployeeManagement';
 import Settings from './pages/Settings/Settings';
 import Help from './pages/Help/Help';
@@ -43,7 +47,7 @@ if (ENABLE_PRO) {
     if (premiumModule.Privacy) PremiumPrivacy = premiumModule.Privacy;
     if (premiumModule.Imprint) PremiumImprint = premiumModule.Imprint;
     if (premiumModule.Terms) PremiumTerms = premiumModule.Terms;
-    
+
     console.log('✅ Premium components loaded successfully');
   } catch (error) {
     console.warn('⚠️ Premium components not available, using community fallbacks:', error);
@@ -51,9 +55,9 @@ if (ENABLE_PRO) {
 }
 
 // Protected Route Component
-const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[] }> = ({ 
-  children, 
-  roles = ['admin', 'maintenance', 'user'] 
+const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[] }> = ({
+  children,
+  roles = ['admin', 'maintenance', 'user']
 }) => {
   const { user, loading, hasRole } = useAuth();
 
@@ -64,7 +68,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[] }> 
       </div>
     );
   }
-  
+
   if (!user) {
     return <Login />;
   }
@@ -79,7 +83,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; roles?: string[] }> 
       </Layout>
     );
   }
-  
+
   return <Layout>{children}</Layout>;
 };
 
@@ -136,6 +140,10 @@ const AppContent: React.FC = () => {
       <Route path="/shift-plans/new" element={<ProtectedRoute roles={['admin', 'maintenance']}><ShiftPlanCreate /></ProtectedRoute>} />
       <Route path="/shift-plans/:id/edit" element={<ProtectedRoute roles={['admin', 'maintenance']}><ShiftPlanEdit /></ProtectedRoute>} />
       <Route path="/shift-plans/:id" element={<ProtectedRoute><ShiftPlanView /></ProtectedRoute>} />
+      <Route path="/weekly-plans" element={<ProtectedRoute><WeeklyPlanList /></ProtectedRoute>} />
+      <Route path="/weekly-plans/new" element={<ProtectedRoute roles={['admin', 'maintenance']}><WeeklyPlanCreate /></ProtectedRoute>} />
+      <Route path="/weekly-plans/:id" element={<ProtectedRoute><WeeklyPlanView /></ProtectedRoute>} />
+      <Route path="/my-availability" element={<ProtectedRoute><MyAvailability /></ProtectedRoute>} />
       <Route path="/employees" element={<ProtectedRoute roles={['admin', 'maintenance']}><EmployeeManagement /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
       <Route path="/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
@@ -153,7 +161,7 @@ const AppContent: React.FC = () => {
 
       {/* Auth Routes */}
       <Route path="/login" element={<Login />} />
-      
+
       {/* Catch-all Route */}
       <Route path="*" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
     </Routes>

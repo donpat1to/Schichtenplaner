@@ -136,6 +136,76 @@ CREATE TABLE IF NOT EXISTS employee_availability (
   UNIQUE(employee_id, plan_id, shift_id)
 );
 
+-- =====================================================
+-- Weekly Plans Module (parallel to shift_plans)
+-- =====================================================
+
+-- Weekly Plans (main plan table)
+CREATE TABLE IF NOT EXISTS weekly_plans (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  start_date TEXT NOT NULL,
+  end_date TEXT NOT NULL,
+  status TEXT CHECK(status IN ('draft', 'published', 'archived')) DEFAULT 'draft',
+  created_by TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (created_by) REFERENCES employees(id)
+);
+
+-- Weeks within a plan
+CREATE TABLE IF NOT EXISTS plan_weeks (
+  id TEXT PRIMARY KEY,
+  plan_id TEXT NOT NULL,
+  week_number INTEGER NOT NULL,
+  start_date TEXT NOT NULL,
+  end_date TEXT NOT NULL,
+  min_employees INTEGER DEFAULT 2,
+  max_employees INTEGER DEFAULT 3,
+  FOREIGN KEY (plan_id) REFERENCES weekly_plans(id) ON DELETE CASCADE,
+  UNIQUE(plan_id, week_number)
+);
+
+-- Employee preferences per week (3-tier: 1=Preferred, 2=Available, 3=Unavailable)
+CREATE TABLE IF NOT EXISTS weekly_preferences (
+  id TEXT PRIMARY KEY,
+  employee_id TEXT NOT NULL,
+  plan_id TEXT NOT NULL,
+  week_id TEXT NOT NULL,
+  preference_level INTEGER CHECK(preference_level IN (1, 2, 3)) NOT NULL,
+  notes TEXT,
+  FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+  FOREIGN KEY (plan_id) REFERENCES weekly_plans(id) ON DELETE CASCADE,
+  FOREIGN KEY (week_id) REFERENCES plan_weeks(id) ON DELETE CASCADE,
+  UNIQUE(employee_id, plan_id, week_id)
+);
+
+-- How many weeks each employee should work
+CREATE TABLE IF NOT EXISTS weekly_work_requirements (
+  id TEXT PRIMARY KEY,
+  employee_id TEXT NOT NULL,
+  plan_id TEXT NOT NULL,
+  required_weeks INTEGER NOT NULL CHECK(required_weeks >= 0),
+  FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+  FOREIGN KEY (plan_id) REFERENCES weekly_plans(id) ON DELETE CASCADE,
+  UNIQUE(employee_id, plan_id)
+);
+
+-- Assignment results
+CREATE TABLE IF NOT EXISTS weekly_assignments (
+  id TEXT PRIMARY KEY,
+  plan_id TEXT NOT NULL,
+  week_id TEXT NOT NULL,
+  employee_id TEXT NOT NULL,
+  assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  assigned_by TEXT NOT NULL,
+  FOREIGN KEY (plan_id) REFERENCES weekly_plans(id) ON DELETE CASCADE,
+  FOREIGN KEY (week_id) REFERENCES plan_weeks(id) ON DELETE CASCADE,
+  FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+  FOREIGN KEY (assigned_by) REFERENCES employees(id),
+  UNIQUE(plan_id, week_id, employee_id)
+);
+
 -- Performance indexes
 CREATE INDEX IF NOT EXISTS idx_employees_email_active ON employees(email, is_active);
 CREATE INDEX IF NOT EXISTS idx_employees_type_active ON employees(employee_type, is_active);
@@ -154,3 +224,17 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_shifts_required_employees ON scheduled_
 CREATE INDEX IF NOT EXISTS idx_shift_assignments_employee ON shift_assignments(employee_id);
 CREATE INDEX IF NOT EXISTS idx_shift_assignments_shift ON shift_assignments(scheduled_shift_id);
 CREATE INDEX IF NOT EXISTS idx_employee_availability_employee_plan ON employee_availability(employee_id, plan_id);
+
+-- Weekly Plans indexes
+CREATE INDEX IF NOT EXISTS idx_weekly_plans_status ON weekly_plans(status);
+CREATE INDEX IF NOT EXISTS idx_weekly_plans_created_by ON weekly_plans(created_by);
+CREATE INDEX IF NOT EXISTS idx_weekly_plans_dates ON weekly_plans(start_date, end_date);
+CREATE INDEX IF NOT EXISTS idx_plan_weeks_plan ON plan_weeks(plan_id);
+CREATE INDEX IF NOT EXISTS idx_weekly_preferences_employee ON weekly_preferences(employee_id);
+CREATE INDEX IF NOT EXISTS idx_weekly_preferences_plan ON weekly_preferences(plan_id);
+CREATE INDEX IF NOT EXISTS idx_weekly_preferences_week ON weekly_preferences(week_id);
+CREATE INDEX IF NOT EXISTS idx_weekly_work_requirements_employee ON weekly_work_requirements(employee_id);
+CREATE INDEX IF NOT EXISTS idx_weekly_work_requirements_plan ON weekly_work_requirements(plan_id);
+CREATE INDEX IF NOT EXISTS idx_weekly_assignments_plan ON weekly_assignments(plan_id);
+CREATE INDEX IF NOT EXISTS idx_weekly_assignments_week ON weekly_assignments(week_id);
+CREATE INDEX IF NOT EXISTS idx_weekly_assignments_employee ON weekly_assignments(employee_id);

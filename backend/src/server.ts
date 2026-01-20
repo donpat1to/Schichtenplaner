@@ -11,6 +11,7 @@ import type { ViteDevServer } from 'vite';
 import authRoutes from './routes/auth.js';
 import employeeRoutes from './routes/employees.js';
 import shiftPlanRoutes from './routes/shiftPlans.js';
+import weeklyPlanRoutes from './routes/weeklyPlans.js';
 import setupRoutes from './routes/setup.js';
 import scheduledShifts from './routes/scheduledShifts.js';
 import schedulingRoutes from './routes/scheduling.js';
@@ -187,6 +188,7 @@ app.use('/api/setup', setupRoutes);
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/shift-plans', shiftPlanRoutes);
+app.use('/api/weekly-plans', weeklyPlanRoutes);
 app.use('/api/scheduled-shifts', scheduledShifts);
 app.use('/api/scheduling', expensiveEndpointLimiter, schedulingRoutes);
 

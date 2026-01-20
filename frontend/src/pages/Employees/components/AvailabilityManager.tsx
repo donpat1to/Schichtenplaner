@@ -1,16 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { employeeService } from '../../../services/employeeService';
 import { shiftPlanService } from '../../../services/shiftPlanService';
+import { weeklyPlanService } from '../../../services/weeklyPlanService';
 import { Employee, EmployeeAvailability } from '../../../models/Employee';
 import { ShiftPlan, TimeSlot, Shift } from '../../../models/ShiftPlan';
+import { WeeklyPlanWithDetails, PlanWeek, formatWeekRange, getCalendarWeekNumber } from '../../../models/WeeklyPlan';
 import { useNotification } from '../../../contexts/NotificationContext';
 import { useBackendValidation } from '../../../hooks/useBackendValidation';
+import { useAuth } from '../../../contexts/AuthContext';
 
 interface AvailabilityManagerProps {
   employee: Employee;
   onSave: () => void;
   onCancel: () => void;
 }
+
+// Plan type selector
+type PlanType = 'shift' | 'weekly';
 
 // Local interface extensions
 interface ExtendedShift extends Shift {
@@ -32,10 +38,26 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
   onSave,
   onCancel
 }) => {
+  const { user, hasRole } = useAuth();
+  const isAdmin = hasRole(['admin', 'maintenance']);
+  const isOwnProfile = user?.id === employee.id;
+
+  // Plan type state
+  const [planType, setPlanType] = useState<PlanType>('shift');
+
+  // Shift plan state
   const [availabilities, setAvailabilities] = useState<Availability[]>([]);
   const [shiftPlans, setShiftPlans] = useState<ShiftPlan[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState<string>('');
   const [selectedPlan, setSelectedPlan] = useState<ShiftPlan | null>(null);
+
+  // Weekly plan state
+  const [weeklyPlans, setWeeklyPlans] = useState<WeeklyPlanWithDetails[]>([]);
+  const [selectedWeeklyPlanId, setSelectedWeeklyPlanId] = useState<string>('');
+  const [selectedWeeklyPlan, setSelectedWeeklyPlan] = useState<WeeklyPlanWithDetails | null>(null);
+  const [weeklyPreferencesMap, setWeeklyPreferencesMap] = useState<Record<string, 1 | 2 | 3>>({});
+  const [requiredWeeks, setRequiredWeeks] = useState(0);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const { showNotification } = useNotification();
@@ -57,33 +79,45 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
     { level: 3 as AvailabilityLevel, label: 'Nicht möglich', color: '#e74c3c', bgColor: '#fadbd8', description: 'Nicht verfügbar' }
   ];
 
-  // Lade initial die Schichtpläne
+  // Check permission - can edit if admin or own profile
+  const canEdit = isAdmin || isOwnProfile;
+
+  // Load initial data based on plan type
   useEffect(() => {
     const loadInitialData = async () => {
       try {
         setLoading(true);
-        console.log('🔄 LADE INITIALDATEN FÜR MITARBEITER:', employee.id);
-        
-        // 1. Lade alle Schichtpläne
-        const plans = await shiftPlanService.getShiftPlans();
-        console.log('✅ SCHICHTPLÄNE GELADEN:', plans.length);
-        setShiftPlans(plans);
 
-        // 2. Wähle ersten verfügbaren Plan aus
-        if (plans.length > 0) {
-          const planWithShifts = plans.find(plan => 
-            plan.shifts && plan.shifts.length > 0 && 
-            plan.timeSlots && plan.timeSlots.length > 0
-          ) || plans[0];
-          
-          console.log('✅ ERSTER PLAN AUSGEWÄHLT:', planWithShifts.name);
-          setSelectedPlanId(planWithShifts.id);
+        if (planType === 'shift') {
+          // Load shift plans
+          const plans = await shiftPlanService.getShiftPlans();
+          setShiftPlans(plans);
+
+          if (plans.length > 0) {
+            const planWithShifts = plans.find(plan =>
+              plan.shifts && plan.shifts.length > 0 &&
+              plan.timeSlots && plan.timeSlots.length > 0
+            ) || plans[0];
+            setSelectedPlanId(planWithShifts.id);
+          } else {
+            setLoading(false);
+          }
         } else {
-          setLoading(false);
+          // Load weekly plans
+          const plans = await weeklyPlanService.getWeeklyPlans();
+          // Filter only draft plans for preference editing
+          const draftPlans = plans.filter(p => p.status === 'draft');
+          setWeeklyPlans(draftPlans as any);
+
+          if (draftPlans.length > 0) {
+            setSelectedWeeklyPlanId(draftPlans[0].id);
+          } else {
+            setLoading(false);
+          }
         }
 
       } catch (err: any) {
-        console.error('❌ FEHLER BEIM LADEN DER INITIALDATEN:', err);
+        console.error('Error loading initial data:', err);
         showNotification({
           type: 'error',
           title: 'Fehler beim Laden',
@@ -94,78 +128,45 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
     };
 
     loadInitialData();
-  }, [employee.id]);
+  }, [employee.id, planType]);
 
-  // Lade Plan-Details und Verfügbarkeiten wenn selectedPlanId sich ändert
+  // Load shift plan details when selected
   useEffect(() => {
-    const loadPlanData = async () => {
-      if (!selectedPlanId) {
-        setLoading(false);
-        return;
-      }
+    if (planType !== 'shift' || !selectedPlanId) {
+      if (planType === 'shift') setLoading(false);
+      return;
+    }
 
+    const loadPlanData = async () => {
       try {
         setLoading(true);
-        console.log('🔄 LADE PLAN-DATEN FÜR:', selectedPlanId);
-        
-        // 1. Lade Schichtplan Details
+
         const plan = await shiftPlanService.getShiftPlan(selectedPlanId);
         setSelectedPlan(plan);
-        console.log('✅ SCHICHTPLAN DETAILS GELADEN:', {
-          name: plan.name,
-          timeSlotsCount: plan.timeSlots?.length || 0,
-          shiftsCount: plan.shifts?.length || 0,
-          usedDays: Array.from(new Set(plan.shifts?.map(s => s.dayOfWeek) || [])).sort()
-        });
-
-        // 2. Lade Verfügbarkeiten für DIESEN Mitarbeiter und DIESEN Plan
-        console.log('🔄 LADE VERFÜGBARKEITEN FÜR:', {
-          employeeId: employee.id,
-          planId: selectedPlanId
-        });
 
         try {
           const allAvailabilities = await employeeService.getAvailabilities(employee.id);
-          console.log('📋 ALLE VERFÜGBARKEITEN DES MITARBEITERS:', allAvailabilities.length);
-          
-          // Filtere nach dem aktuellen Plan UND stelle sicher, dass shiftId vorhanden ist
           const planAvailabilities = allAvailabilities.filter(
             avail => avail.planId === selectedPlanId && avail.shiftId
           );
-          
-          console.log('✅ VERFÜGBARKEITEN FÜR DIESEN PLAN (MIT SHIFT-ID):', planAvailabilities.length);
-          
-          // Debug: Zeige auch ungültige Einträge
-          const invalidAvailabilities = allAvailabilities.filter(
-            avail => avail.planId === selectedPlanId && !avail.shiftId
-          );
-          if (invalidAvailabilities.length > 0) {
-            console.warn('⚠️ UNGÜLTIGE VERFÜGBARKEITEN (OHNE SHIFT-ID):', invalidAvailabilities.length);
-          }
-          
-          // Transformiere die Daten
+
           const transformedAvailabilities: Availability[] = planAvailabilities.map(avail => ({
             ...avail,
             isAvailable: avail.preferenceLevel !== 3
           }));
-          
-          setAvailabilities(transformedAvailabilities);
 
-          // Debug: Zeige vorhandene Präferenzen
-          if (planAvailabilities.length > 0) {
-            console.log('🎯 VORHANDENE PRÄFERENZEN:', planAvailabilities.length);
-          }
+          setAvailabilities(transformedAvailabilities);
         } catch (availError) {
-          console.error('❌ FEHLER BEIM LADEN DER VERFÜGBARKEITEN:', availError);
+          console.error('Error loading availabilities:', availError);
           setAvailabilities([]);
         }
 
       } catch (err: any) {
-        console.error('❌ FEHLER BEIM LADEN DES SCHICHTPLANS:', err);
+        console.error('Error loading shift plan:', err);
         showNotification({
           type: 'error',
           title: 'Fehler beim Laden',
-          message: 'Schichtplan konnte nicht geladen werden: ' + (err.message || 'Unbekannter Fehler')
+          message: 'Schichtplan konnte nicht geladen werden'
         });
       } finally {
         setLoading(false);
@@ -173,28 +174,69 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
     };
 
     loadPlanData();
-  }, [selectedPlanId, employee.id]);
+  }, [selectedPlanId, employee.id, planType]);
+
+  // Load weekly plan details when selected
+  useEffect(() => {
+    if (planType !== 'weekly' || !selectedWeeklyPlanId) {
+      if (planType === 'weekly') setLoading(false);
+      return;
+    }
+
+    const loadWeeklyPlanData = async () => {
+      try {
+        setLoading(true);
+
+        const plan = await weeklyPlanService.getWeeklyPlan(selectedWeeklyPlanId);
+        setSelectedWeeklyPlan(plan);
+
+        // Find this employee's preferences in the plan data
+        const employeeData = plan.employees?.find(e => e.id === employee.id);
+        if (employeeData) {
+          const prefs: Record<string, 1 | 2 | 3> = {};
+          employeeData.preferences.forEach(p => {
+            prefs[p.weekId] = p.preferenceLevel;
+          });
+          setWeeklyPreferencesMap(prefs);
+          setRequiredWeeks(employeeData.requiredWeeks);
+        } else {
+          setWeeklyPreferencesMap({});
+          setRequiredWeeks(0);
+        }
+
+      } catch (err: any) {
+        console.error('Error loading weekly plan:', err);
+        showNotification({
+          type: 'error',
+          title: 'Fehler beim Laden',
+          message: 'Wochenplan konnte nicht geladen werden'
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadWeeklyPlanData();
+  }, [selectedWeeklyPlanId, employee.id, planType]);
 
   const formatTime = (time: string): string => {
     if (!time) return '--:--';
     return time.substring(0, 5);
   };
 
-  // Create a data structure that maps days to their shifts with time slot info
+  // Shift plan timetable data
   const getTimetableData = () => {
     if (!selectedPlan || !selectedPlan.shifts || !selectedPlan.timeSlots) {
       return { days: [], shiftsByDay: {} };
     }
 
-    // Create a map for quick time slot lookups
     const timeSlotMap = new Map(selectedPlan.timeSlots.map(ts => [ts.id, ts]));
 
-    // Group shifts by day and enhance with time slot info
     const shiftsByDay = selectedPlan.shifts.reduce((acc, shift) => {
       if (!acc[shift.dayOfWeek]) {
         acc[shift.dayOfWeek] = [];
       }
-      
+
       const timeSlot = timeSlotMap.get(shift.timeSlotId);
       const enhancedShift: ExtendedShift = {
         ...shift,
@@ -203,12 +245,11 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         endTime: timeSlot?.endTime,
         displayName: timeSlot ? `${timeSlot.name} (${formatTime(timeSlot.startTime)}-${formatTime(timeSlot.endTime)})` : shift.id
       };
-      
+
       acc[shift.dayOfWeek].push(enhancedShift);
       return acc;
     }, {} as Record<number, ExtendedShift[]>);
 
-    // Sort shifts within each day by start time
     Object.keys(shiftsByDay).forEach(day => {
       shiftsByDay[parseInt(day)].sort((a, b) => {
         const timeA = a.startTime || '';
@@ -217,7 +258,6 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       });
     });
 
-    // Get unique days that have shifts
     const days = Array.from(new Set(selectedPlan.shifts.map(shift => shift.dayOfWeek)))
       .sort()
       .map(dayId => {
@@ -228,18 +268,12 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
   };
 
   const handleAvailabilityLevelChange = (shiftId: string, level: AvailabilityLevel) => {
-    if (!shiftId) {
-      console.error('❌ Versuch, Verfügbarkeit ohne Shift-ID zu ändern');
-      return;
-    }
-    
-    console.log(`🔄 ÄNDERE VERFÜGBARKEIT: Shift ${shiftId}, Level ${level}`);
-    
+    if (!shiftId || !canEdit) return;
+
     setAvailabilities(prev => {
       const existingIndex = prev.findIndex(avail => avail.shiftId === shiftId);
 
       if (existingIndex >= 0) {
-        // Update existing availability
         const updated = [...prev];
         updated[existingIndex] = {
           ...updated[existingIndex],
@@ -248,7 +282,6 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         };
         return updated;
       } else {
-        // Create new availability using shiftId directly
         const newAvailability: Availability = {
           id: `temp-${shiftId}-${Date.now()}`,
           employeeId: employee.id,
@@ -262,13 +295,55 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
     });
   };
 
+  const handleWeeklyPreferenceChange = (weekId: string, level: AvailabilityLevel | 0) => {
+    if (!canEdit) return;
+
+    setWeeklyPreferencesMap(prev => {
+      if (level === 0) {
+        const { [weekId]: _, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [weekId]: level as 1 | 2 | 3 };
+    });
+  };
+
+  const toggleWeeklyPreference = (weekId: string) => {
+    if (!canEdit) return;
+
+    setWeeklyPreferencesMap(prev => {
+      const current = prev[weekId];
+      // Cycle: undefined -> 1 (preferred) -> 2 (available) -> 3 (unavailable) -> remove
+      if (current === undefined) {
+        return { ...prev, [weekId]: 1 };
+      } else if (current === 1) {
+        return { ...prev, [weekId]: 2 };
+      } else if (current === 2) {
+        return { ...prev, [weekId]: 3 };
+      } else {
+        // current === 3, remove it
+        const { [weekId]: _, ...rest } = prev;
+        return rest;
+      }
+    });
+  };
+
   const getAvailabilityForShift = (shiftId: string): AvailabilityLevel => {
     const availability = availabilities.find(avail => avail.shiftId === shiftId);
     return availability?.preferenceLevel || 3;
   };
 
-  // Update the timetable rendering to use shifts directly
-  const renderTimetable = () => {
+  const getPreferenceDisplay = (level: 1 | 2 | 3 | undefined) => {
+    if (!level) return { text: '-', color: '#e0e0e0', bg: '#f8f8f8' };
+    const displays = {
+      1: { text: 'Bevorzugt', color: '#22c55e', bg: '#dcfce7' },
+      2: { text: 'Verfügbar', color: '#eab308', bg: '#fef9c3' },
+      3: { text: 'Nicht verf.', color: '#ef4444', bg: '#fee2e2' },
+    };
+    return displays[level];
+  };
+
+  // Render shift plan timetable
+  const renderShiftTimetable = () => {
     const { days, shiftsByDay } = getTimetableData();
 
     if (days.length === 0 || Object.keys(shiftsByDay).length === 0) {
@@ -288,10 +363,8 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       );
     }
 
-    // Create a map for quick time slot lookups
     const timeSlotMap = new Map(selectedPlan?.timeSlots?.map(ts => [ts.id, ts]) || []);
 
-    // Get all unique time slots (rows) by collecting from all shifts
     const allTimeSlots = new Map();
     days.forEach(day => {
       shiftsByDay[day.id]?.forEach(shift => {
@@ -299,13 +372,12 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         if (timeSlot && !allTimeSlots.has(timeSlot.id)) {
           allTimeSlots.set(timeSlot.id, {
             ...timeSlot,
-            shiftsByDay: {} // Initialize empty object to store shifts by day
+            shiftsByDay: {}
           });
         }
       });
     });
 
-    // Populate shifts for each time slot by day
     days.forEach(day => {
       shiftsByDay[day.id]?.forEach(shift => {
         const timeSlot = allTimeSlots.get(shift.timeSlotId);
@@ -315,19 +387,13 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       });
     });
 
-    // Convert to array and sort by start time
     const sortedTimeSlots = Array.from(allTimeSlots.values()).sort((a, b) => {
-      // Convert time strings to minutes for proper numeric comparison
       const timeToMinutes = (timeStr: string) => {
         if (!timeStr) return 0;
         const [hours, minutes] = timeStr.split(':').map(Number);
         return hours * 60 + minutes;
       };
-
-      const minutesA = timeToMinutes(a.startTime);
-      const minutesB = timeToMinutes(b.startTime);
-      
-      return minutesA - minutesB; // Ascending order (earliest first)
+      return timeToMinutes(a.startTime) - timeToMinutes(b.startTime);
     });
 
     return (
@@ -343,9 +409,9 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
           padding: '15px 20px',
           fontWeight: 'bold'
         }}>
-          Verfügbarkeit definieren
+          Verfügbarkeit für Schichtplan
           <div style={{ fontSize: '14px', fontWeight: 'normal', marginTop: '5px' }}>
-            {sortedTimeSlots.length} Zeitslots • {days.length} Tage • Zeitbasierte Darstellung
+            {sortedTimeSlots.length} Zeitslots • {days.length} Tage
           </div>
         </div>
 
@@ -392,16 +458,14 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                     position: 'sticky',
                     left: 0
                   }}>
-                    <div style={{ fontWeight: 'bold' }}>
-                      {timeSlot.name}
-                    </div>
+                    <div style={{ fontWeight: 'bold' }}>{timeSlot.name}</div>
                     <div style={{ fontSize: '14px', color: '#666' }}>
                       {formatTime(timeSlot.startTime)} - {formatTime(timeSlot.endTime)}
                     </div>
                   </td>
                   {days.map(weekday => {
                     const shift = timeSlot.shiftsByDay[weekday.id];
-                    
+
                     if (!shift) {
                       return (
                         <td key={weekday.id} style={{
@@ -419,7 +483,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
 
                     const currentLevel = getAvailabilityForShift(shift.id);
                     const levelConfig = availabilityLevels.find(l => l.level === currentLevel);
-                    
+
                     return (
                       <td key={weekday.id} style={{
                         padding: '12px 16px',
@@ -433,6 +497,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                             const newLevel = parseInt(e.target.value) as AvailabilityLevel;
                             handleAvailabilityLevelChange(shift.id, newLevel);
                           }}
+                          disabled={!canEdit}
                           style={{
                             padding: '8px 12px',
                             border: `2px solid ${levelConfig?.color || '#ddd'}`,
@@ -441,13 +506,14 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                             color: levelConfig?.color || '#333',
                             fontWeight: 'bold',
                             minWidth: '140px',
-                            cursor: 'pointer',
-                            textAlign: 'center'
+                            cursor: canEdit ? 'pointer' : 'not-allowed',
+                            textAlign: 'center',
+                            opacity: canEdit ? 1 : 0.7
                           }}
                         >
                           {availabilityLevels.map(level => (
-                            <option 
-                              key={level.level} 
+                            <option
+                              key={level.level}
                               value={level.level}
                               style={{
                                 backgroundColor: level.bgColor,
@@ -467,26 +533,168 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
             </tbody>
           </table>
         </div>
+      </div>
+    );
+  };
 
-        {/* Summary Statistics */}
+  // Render weekly plan preferences
+  const renderWeeklyPreferences = () => {
+    if (!selectedWeeklyPlan || !selectedWeeklyPlan.weeks || selectedWeeklyPlan.weeks.length === 0) {
+      return (
+        <div style={{
+          padding: '40px',
+          textAlign: 'center',
+          backgroundColor: '#f8f9fa',
+          color: '#6c757d',
+          borderRadius: '8px',
+          border: '1px solid #e9ecef'
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '20px' }}>📆</div>
+          <h4>Keine Wochen im ausgewählten Plan</h4>
+          <p>Der ausgewählte Wochenplan hat keine Wochen definiert.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{
+        marginBottom: '30px',
+        border: '1px solid #e0e0e0',
+        borderRadius: '8px',
+        overflow: 'hidden'
+      }}>
+        <div style={{
+          backgroundColor: '#51258f',
+          color: 'white',
+          padding: '15px 20px',
+          fontWeight: 'bold'
+        }}>
+          Wochenpräferenzen
+          <div style={{ fontSize: '14px', fontWeight: 'normal', marginTop: '5px' }}>
+            {selectedWeeklyPlan.weeks.length} Wochen • Klicken Sie auf eine Woche um die Präferenz zu ändern
+          </div>
+        </div>
+
+        {/* Required weeks input */}
+        <div style={{
+          padding: '15px 20px',
+          backgroundColor: '#f8f9fa',
+          borderBottom: '1px solid #e0e0e0',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '15px'
+        }}>
+          <label style={{ fontWeight: 'bold', color: '#2c3e50' }}>
+            Gewünschte Anzahl Wochen:
+          </label>
+          <input
+            type="number"
+            min="0"
+            max={selectedWeeklyPlan.weeks.length}
+            value={requiredWeeks}
+            onChange={(e) => setRequiredWeeks(parseInt(e.target.value) || 0)}
+            disabled={!canEdit}
+            style={{
+              padding: '8px 12px',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              width: '80px',
+              textAlign: 'center',
+              fontSize: '16px',
+              opacity: canEdit ? 1 : 0.7
+            }}
+          />
+          <span style={{ color: '#666', fontSize: '14px' }}>
+            von {selectedWeeklyPlan.weeks.length} verfügbar
+          </span>
+        </div>
+
+        <div style={{ padding: '20px' }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+            gap: '15px'
+          }}>
+            {selectedWeeklyPlan.weeks.map(week => {
+              const pref = weeklyPreferencesMap[week.id];
+              const prefDisplay = getPreferenceDisplay(pref);
+
+              return (
+                <div
+                  key={week.id}
+                  onClick={() => canEdit && toggleWeeklyPreference(week.id)}
+                  style={{
+                    padding: '15px',
+                    borderRadius: '8px',
+                    border: `2px solid ${pref ? prefDisplay.color : '#e0e0e0'}`,
+                    backgroundColor: prefDisplay.bg,
+                    cursor: canEdit ? 'pointer' : 'default',
+                    transition: 'all 0.2s',
+                    opacity: canEdit ? 1 : 0.8
+                  }}
+                >
+                  <div style={{
+                    fontWeight: 'bold',
+                    color: '#2c3e50',
+                    marginBottom: '5px'
+                  }}>
+                    KW {getCalendarWeekNumber(new Date(week.startDate))}
+                  </div>
+                  <div style={{
+                    fontSize: '13px',
+                    color: '#666',
+                    marginBottom: '10px'
+                  }}>
+                    {formatWeekRange(week.startDate, week.endDate)}
+                  </div>
+                  <div style={{
+                    fontSize: '14px',
+                    fontWeight: 'bold',
+                    color: pref ? prefDisplay.color : '#999'
+                  }}>
+                    {pref ? `${pref}: ${prefDisplay.text}` : 'Keine Angabe'}
+                  </div>
+                  {canEdit && (
+                    <div style={{
+                      fontSize: '11px',
+                      color: '#999',
+                      marginTop: '5px'
+                    }}>
+                      Klicken zum Ändern
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Summary */}
         <div style={{
           backgroundColor: '#f8f9fa',
-          padding: '15px',
+          padding: '15px 20px',
           borderTop: '1px solid #dee2e6',
-          fontSize: '12px',
+          fontSize: '13px',
           color: '#666'
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <strong>Aktive Verfügbarkeiten:</strong> {availabilities.filter(a => a.preferenceLevel !== 3).length}
-            </div>
-          </div>
+          <strong>Zusammenfassung:</strong>{' '}
+          {Object.values(weeklyPreferencesMap).filter(v => v === 1).length} bevorzugt,{' '}
+          {Object.values(weeklyPreferencesMap).filter(v => v === 2).length} verfügbar,{' '}
+          {Object.values(weeklyPreferencesMap).filter(v => v === 3).length} nicht verfügbar
         </div>
       </div>
     );
   };
 
   const handleSave = async () => {
+    if (planType === 'shift') {
+      await handleSaveShiftAvailabilities();
+    } else {
+      await handleSaveWeeklyPreferences();
+    }
+  };
+
+  const handleSaveShiftAvailabilities = async () => {
     if (!selectedPlanId) {
       showNotification({
         type: 'error',
@@ -496,7 +704,6 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       return;
     }
 
-    // Basic frontend validation: Check if we have any availabilities to save
     const validAvailabilities = availabilities.filter(avail => {
       return avail.shiftId && selectedPlan?.shifts?.some(shift => shift.id === avail.shiftId);
     });
@@ -510,13 +717,9 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       return;
     }
 
-    // Complex validation (contract type rules) is now handled by backend
-    // We only do basic required field validation in frontend
-
     await executeWithValidation(async () => {
       setSaving(true);
-      
-      // Convert to the format expected by the API - using shiftId directly
+
       const requestData = {
         planId: selectedPlanId,
         availabilities: validAvailabilities.map(avail => ({
@@ -526,9 +729,8 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
           notes: avail.notes
         }))
       };
-      
+
       await employeeService.updateAvailabilities(employee.id, requestData);
-      console.log('✅ VERFÜGBARKEITEN ERFOLGREICH GESPEICHERT');
 
       showNotification({
         type: 'success',
@@ -537,7 +739,49 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       });
 
       window.dispatchEvent(new CustomEvent('availabilitiesChanged'));
-      
+      onSave();
+    });
+  };
+
+  const handleSaveWeeklyPreferences = async () => {
+    if (!selectedWeeklyPlanId) {
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: 'Bitte wählen Sie einen Wochenplan aus'
+      });
+      return;
+    }
+
+    const preferences = Object.entries(weeklyPreferencesMap).map(([weekId, level]) => ({
+      weekId,
+      preferenceLevel: level,
+    }));
+
+    await executeWithValidation(async () => {
+      setSaving(true);
+
+      if (isOwnProfile) {
+        // Save own preferences
+        await weeklyPlanService.saveMyPreferences(selectedWeeklyPlanId, {
+          preferences,
+          requiredWeeks,
+        });
+      } else if (isAdmin) {
+        // Admin saving for another employee
+        await weeklyPlanService.saveEmployeePreferences(selectedWeeklyPlanId, employee.id, {
+          preferences,
+          requiredWeeks,
+        });
+      }
+
+      showNotification({
+        type: 'success',
+        title: 'Erfolg',
+        message: 'Wochenpräferenzen wurden erfolgreich gespeichert'
+      });
+
+      window.dispatchEvent(new CustomEvent('weeklyPreferencesChanged'));
       onSave();
     });
   };
@@ -559,11 +803,9 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
   });
   const shiftsCount = allShiftIds.size;
 
-  // Get full name for display
   const employeeFullName = `${employee.firstname} ${employee.lastname}`;
 
-  // Available shifts count for display only (not for validation)
-  const availableShiftsCount = availabilities.filter(avail => 
+  const availableShiftsCount = availabilities.filter(avail =>
     avail.preferenceLevel === 1 || avail.preferenceLevel === 2
   ).length;
 
@@ -577,8 +819,8 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       border: '1px solid #e0e0e0',
       boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
     }}>
-      <h2 style={{ 
-        margin: '0 0 25px 0', 
+      <h2 style={{
+        margin: '0 0 25px 0',
         color: '#2c3e50',
         borderBottom: '2px solid #f0f0f0',
         paddingBottom: '15px'
@@ -586,23 +828,83 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         📅 Verfügbarkeit verwalten
       </h2>
 
+      {/* Permission notice */}
+      {!canEdit && (
+        <div style={{
+          marginBottom: '20px',
+          padding: '15px',
+          backgroundColor: '#fff3cd',
+          border: '1px solid #ffeaa7',
+          borderRadius: '6px',
+          color: '#856404'
+        }}>
+          <strong>Hinweis:</strong> Sie können die Verfügbarkeiten dieses Mitarbeiters nur anzeigen, aber nicht bearbeiten.
+        </div>
+      )}
+
       {/* Employee Info */}
       <div style={{ marginBottom: '20px' }}>
         <h3 style={{ margin: '0 0 10px 0', color: '#34495e' }}>
           {employeeFullName}
+          {isOwnProfile && <span style={{ fontSize: '14px', color: '#27ae60', marginLeft: '10px' }}>(Eigenes Profil)</span>}
         </h3>
         <p style={{ margin: 0, color: '#7f8c8d' }}>
           <strong>Email:</strong> {employee.email}
         </p>
         {employee.contractType && (
           <p style={{ margin: '5px 0 0 0', color: employee.contractType === 'small' ? '#f39c12' : '#27ae60' }}>
-            <strong>Vertrag:</strong> 
-            {employee.contractType === 'small' ? ' Kleiner Vertrag' : 
-            employee.contractType === 'large' ? ' Großer Vertrag' : 
-            ' Flexibler Vertrag'}
-            {/* Note: Contract validation is now handled by backend */}
+            <strong>Vertrag:</strong>
+            {employee.contractType === 'small' ? ' Kleiner Vertrag' :
+              employee.contractType === 'large' ? ' Großer Vertrag' :
+                ' Flexibler Vertrag'}
           </p>
         )}
+      </div>
+
+      {/* Plan Type Selector */}
+      <div style={{
+        marginBottom: '30px',
+        padding: '20px',
+        backgroundColor: '#f8f9fa',
+        borderRadius: '8px',
+        border: '1px solid #e9ecef'
+      }}>
+        <h4 style={{ margin: '0 0 15px 0', color: '#495057' }}>
+          Plantyp auswählen
+        </h4>
+
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            onClick={() => setPlanType('shift')}
+            style={{
+              padding: '12px 24px',
+              border: planType === 'shift' ? '2px solid #3498db' : '2px solid #ddd',
+              borderRadius: '8px',
+              backgroundColor: planType === 'shift' ? '#e8f4fd' : 'white',
+              color: planType === 'shift' ? '#3498db' : '#666',
+              fontWeight: planType === 'shift' ? 'bold' : 'normal',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+          >
+            📋 Schichtpläne
+          </button>
+          <button
+            onClick={() => setPlanType('weekly')}
+            style={{
+              padding: '12px 24px',
+              border: planType === 'weekly' ? '2px solid #51258f' : '2px solid #ddd',
+              borderRadius: '8px',
+              backgroundColor: planType === 'weekly' ? '#f5f0ff' : 'white',
+              color: planType === 'weekly' ? '#51258f' : '#666',
+              fontWeight: planType === 'weekly' ? 'bold' : 'normal',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+          >
+            📆 Wochenpläne
+          </button>
+        </div>
       </div>
 
       {/* Availability Legend */}
@@ -616,7 +918,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         <h4 style={{ margin: '0 0 15px 0', color: '#495057' }}>
           Verfügbarkeits-Level
         </h4>
-        
+
         <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
           {availabilityLevels.map(level => (
             <div key={level.level} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -642,30 +944,23 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         </div>
       </div>
 
-      {/* Shift Plan Selection */}
-      <div style={{
-        marginBottom: '30px',
-        padding: '20px',
-        backgroundColor: '#f8f9fa',
-        borderRadius: '8px',
-        border: '1px solid #e9ecef'
-      }}>
-        <h4 style={{ margin: '0 0 15px 0', color: '#495057' }}>
-          Verfügbarkeit für Schichtplan
-        </h4>
-        
-        <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#2c3e50' }}>
-              Schichtplan auswählen:
-            </label>
+      {/* Plan Selection */}
+      {planType === 'shift' ? (
+        <div style={{
+          marginBottom: '30px',
+          padding: '20px',
+          backgroundColor: '#f8f9fa',
+          borderRadius: '8px',
+          border: '1px solid #e9ecef'
+        }}>
+          <h4 style={{ margin: '0 0 15px 0', color: '#495057' }}>
+            Schichtplan auswählen
+          </h4>
+
+          <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
             <select
               value={selectedPlanId}
-              onChange={(e) => {
-                const newPlanId = e.target.value;
-                console.log('🔄 PLAN WECHSELN ZU:', newPlanId);
-                setSelectedPlanId(newPlanId);
-              }}
+              onChange={(e) => setSelectedPlanId(e.target.value)}
               style={{
                 padding: '8px 12px',
                 border: '1px solid #ddd',
@@ -680,40 +975,74 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                 </option>
               ))}
             </select>
+
+            {selectedPlan && (
+              <div style={{ fontSize: '14px', color: '#666' }}>
+                <strong>Status:</strong> {selectedPlan.status}
+              </div>
+            )}
           </div>
-          
-          {selectedPlan && (
-            <div style={{ fontSize: '14px', color: '#666' }}>
-              <div><strong>Plan:</strong> {selectedPlan.name}</div>
-              <div><strong>Shifts:</strong> {selectedPlan.shifts?.length || 0}</div>
-              <div><strong>Zeitslots:</strong> {selectedPlan.timeSlots?.length || 0}</div>
-              <div><strong>Status:</strong> {selectedPlan.status}</div>
+        </div>
+      ) : (
+        <div style={{
+          marginBottom: '30px',
+          padding: '20px',
+          backgroundColor: '#f8f9fa',
+          borderRadius: '8px',
+          border: '1px solid #e9ecef'
+        }}>
+          <h4 style={{ margin: '0 0 15px 0', color: '#495057' }}>
+            Wochenplan auswählen
+          </h4>
+
+          <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <select
+              value={selectedWeeklyPlanId}
+              onChange={(e) => setSelectedWeeklyPlanId(e.target.value)}
+              style={{
+                padding: '8px 12px',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                minWidth: '250px'
+              }}
+            >
+              <option value="">Bitte auswählen...</option>
+              {weeklyPlans.map(plan => (
+                <option key={plan.id} value={plan.id}>
+                  {plan.name} ({plan.weeks?.length || 0} Wochen)
+                </option>
+              ))}
+            </select>
+
+            {selectedWeeklyPlan && (
+              <div style={{ fontSize: '14px', color: '#666' }}>
+                <strong>Status:</strong> {selectedWeeklyPlan.status}
+              </div>
+            )}
+          </div>
+
+          {weeklyPlans.length === 0 && (
+            <div style={{
+              marginTop: '10px',
+              padding: '10px',
+              backgroundColor: '#e8f4fd',
+              border: '1px solid #b6d7e8',
+              borderRadius: '4px',
+              fontSize: '12px'
+            }}>
+              ℹ️ Nur Wochenpläne im Entwurfsstatus können bearbeitet werden.
             </div>
           )}
         </div>
+      )}
 
-        {/* Debug Info für Plan Loading */}
-        {!selectedPlanId && shiftPlans.length > 0 && (
-          <div style={{
-            marginTop: '10px',
-            padding: '10px',
-            backgroundColor: '#fff3cd',
-            border: '1px solid #ffeaa7',
-            borderRadius: '4px',
-            fontSize: '12px'
-          }}>
-            ⚠️ Bitte wählen Sie einen Schichtplan aus
-          </div>
-        )}
-      </div>
-
-      {/* Availability Timetable */}
-      {renderTimetable()}
+      {/* Render appropriate timetable/preferences */}
+      {planType === 'shift' ? renderShiftTimetable() : renderWeeklyPreferences()}
 
       {/* Buttons */}
-      <div style={{ 
-        display: 'flex', 
-        gap: '15px', 
+      <div style={{
+        display: 'flex',
+        gap: '15px',
         justifyContent: 'flex-end'
       }}>
         <button
@@ -731,22 +1060,34 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         >
           Abbrechen
         </button>
-        
-        <button
-          onClick={handleSave}
-          disabled={isSubmitting || shiftsCount === 0 || !selectedPlanId}
-          style={{
-            padding: '12px 24px',
-            backgroundColor: isSubmitting ? '#bdc3c7' : (shiftsCount === 0 || !selectedPlanId ? '#95a5a6' : '#3498db'),
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: (isSubmitting || shiftsCount === 0 || !selectedPlanId) ? 'not-allowed' : 'pointer',
-            fontWeight: 'bold'
-          }}
-        >
-          {isSubmitting ? '⏳ Wird gespeichert...' : `Verfügbarkeiten speichern (${availableShiftsCount})`}
-        </button>
+
+        {canEdit && (
+          <button
+            onClick={handleSave}
+            disabled={
+              isSubmitting ||
+              (planType === 'shift' ? (shiftsCount === 0 || !selectedPlanId) : !selectedWeeklyPlanId)
+            }
+            style={{
+              padding: '12px 24px',
+              backgroundColor: isSubmitting ? '#bdc3c7' :
+                (planType === 'shift'
+                  ? (shiftsCount === 0 || !selectedPlanId ? '#95a5a6' : '#3498db')
+                  : (!selectedWeeklyPlanId ? '#95a5a6' : '#51258f')),
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: (isSubmitting || (planType === 'shift' ? (shiftsCount === 0 || !selectedPlanId) : !selectedWeeklyPlanId)) ? 'not-allowed' : 'pointer',
+              fontWeight: 'bold'
+            }}
+          >
+            {isSubmitting ? '⏳ Wird gespeichert...' :
+              planType === 'shift'
+                ? `Verfügbarkeiten speichern (${availableShiftsCount})`
+                : `Präferenzen speichern`
+            }
+          </button>
+        )}
       </div>
     </div>
   );

@@ -32,6 +32,7 @@ const Navigation: React.FC = () => {
   const navigationItems = [
     { path: '/', label: 'Dashboard', roles: ['admin', 'maintenance', 'user'] },
     { path: '/shift-plans', label: 'Schichtpläne', roles: ['admin', 'maintenance', 'user'] },
+    { path: '/weekly-plans', label: 'Wochenpläne', roles: ['admin', 'maintenance', 'user'] },
     { path: '/employees', label: 'Mitarbeiter', roles: ['admin', 'maintenance'] },
     { path: '/help', label: 'Hilfe', roles: ['admin', 'maintenance', 'user'] },
     { path: '/settings', label: 'Einstellungen', roles: ['admin', 'maintenance', 'user'] },

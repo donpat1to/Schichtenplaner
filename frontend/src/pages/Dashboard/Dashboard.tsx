@@ -759,7 +759,7 @@ const Dashboard: React.FC = () => {
               </div>
             </Link>
 
-            {hasRole(['user']) && (
+            <Link to="/my-availability" style={{ textDecoration: 'none' }}>
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -776,7 +776,7 @@ const Dashboard: React.FC = () => {
                 <span style={{ marginRight: '10px', fontSize: '18px' }}>📝</span>
                 <span>Meine Verfügbarkeit bearbeiten</span>
               </div>
-            )}
+            </Link>
           </div>
         </div>
       </div>
