@@ -33,6 +33,31 @@ interface TestData {
     availability_scale: {
         [key: string]: string;
     };
+    weekly_plan?: {
+        plan_name: string;
+        description: string;
+        period: string;
+        status: string;
+        created_by: string;
+        weeks: {
+            week_number: number;
+            start_date: string;
+            end_date: string;
+            min_employees: number;
+            max_employees: number;
+        }[];
+        employee_preferences: {
+            [employeeName: string]: {
+                required_weeks: number;
+                assignment_style: 'block' | 'scatter';
+                assignment_block_size: number;
+                preferences: { [weekNumber: string]: number };
+            };
+        };
+        assignments?: {
+            [weekNumber: string]: string[];
+        };
+    };
 }
 
 function generateEmail(firstname: string, lastname: string): string {
@@ -85,20 +110,13 @@ export async function seedTestData(): Promise<void> {
     try {
         console.log('🌱 Starting test data seeding...');
 
-        // Read test.json file - adjust path to be relative to project root
-        //const testDataPath = path.resolve(process.cwd(), './test.json');
+        // Read test.json file
         const testDataPath = path.resolve(__dirname, './test.json');
-
         console.log('🔍 Looking for test.json at:', testDataPath);
 
         if (!fs.existsSync(testDataPath)) {
             console.log('❌ test.json file not found at:', testDataPath);
-
-            // Try alternative paths
             const alternativePaths = [
-                //path.resolve(__dirname, '../../../test.json'),
-                //path.resolve(process.cwd(), '../test.json'),
-                //path.resolve(__dirname, '../../test.json'),
                 path.resolve(__dirname, './test.json')
             ];
 
@@ -106,7 +124,6 @@ export async function seedTestData(): Promise<void> {
                 console.log('🔍 Trying alternative path:', altPath);
                 if (fs.existsSync(altPath)) {
                     console.log('✅ Found test.json at:', altPath);
-                    // Continue with the found path
                     break;
                 }
             }
@@ -120,7 +137,8 @@ export async function seedTestData(): Promise<void> {
         console.log('📊 Loaded test data:', {
             planName: testData.plan_name,
             employeeCount: Object.keys(testData.employee_info.contract_sizes).length,
-            days: Object.keys(testData.shifts).length
+            days: Object.keys(testData.shifts).length,
+            hasWeeklyPlan: !!testData.weekly_plan
         });
 
         // Start transaction
@@ -311,6 +329,12 @@ export async function seedTestData(): Promise<void> {
                 }
             }
 
+            // 7. Create weekly plan if data exists
+            if (testData.weekly_plan) {
+                console.log('📊 Creating weekly plan...');
+                await seedWeeklyPlanData(testData.weekly_plan, employeeMap);
+            }
+
             await db.run('COMMIT');
 
             console.log('🎉 Test data seeded successfully!');
@@ -320,6 +344,18 @@ export async function seedTestData(): Promise<void> {
             console.log(`   - Time Slots: ${Object.keys(timeSlotMap).length}`);
             console.log(`   - Shifts: ${Object.keys(shiftMap).length}`);
             console.log(`   - Period: ${testData.period}`);
+
+            if (testData.weekly_plan) {
+                console.log(`   - Weekly Plan: ${testData.weekly_plan.plan_name}`);
+                console.log(`   - Weeks: ${testData.weekly_plan.weeks.length}`);
+
+                // Count assignment styles
+                const styles = { block: 0, scatter: 0 };
+                Object.values(testData.weekly_plan.employee_preferences).forEach(emp => {
+                    styles[emp.assignment_style]++;
+                });
+                console.log(`   - Assignment Styles: ${styles.block} block, ${styles.scatter} scatter`);
+            }
 
         } catch (error) {
             await db.run('ROLLBACK');
@@ -331,6 +367,159 @@ export async function seedTestData(): Promise<void> {
         console.error('❌ Failed to seed test data:', error);
         throw error;
     }
+}
+
+async function seedWeeklyPlanData(
+    weeklyPlanData: TestData['weekly_plan'],
+    employeeMap: { [name: string]: string }
+): Promise<void> {
+    if (!weeklyPlanData) return;
+
+    const weeklyPlanId = uuidv4();
+    const [startDate, endDate] = weeklyPlanData.period.split(' bis ');
+
+    // Find creator employee ID
+    const creatorName = weeklyPlanData.created_by;
+    const creatorId = employeeMap[creatorName] || employeeMap[Object.keys(employeeMap)[0]];
+
+    console.log(`📅 Creating weekly plan: ${weeklyPlanData.plan_name}`);
+
+    // 1. Insert weekly plan
+    await db.run(
+        `INSERT INTO weekly_plans (
+            id, name, description, start_date, end_date, 
+            status, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+            weeklyPlanId,
+            weeklyPlanData.plan_name,
+            weeklyPlanData.description,
+            startDate.trim(),
+            endDate.trim(),
+            weeklyPlanData.status,
+            creatorId
+        ]
+    );
+
+    // 2. Create weeks
+    const weekMap: { [weekNumber: string]: string } = {};
+    console.log(`📆 Creating ${weeklyPlanData.weeks.length} weeks...`);
+
+    for (const week of weeklyPlanData.weeks) {
+        const weekId = uuidv4();
+        weekMap[week.week_number.toString()] = weekId;
+
+        await db.run(
+            `INSERT INTO plan_weeks (
+                id, plan_id, week_number, start_date, end_date,
+                min_employees, max_employees
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [
+                weekId,
+                weeklyPlanId,
+                week.week_number,
+                week.start_date,
+                week.end_date,
+                week.min_employees,
+                week.max_employees
+            ]
+        );
+
+        console.log(`   Week ${week.week_number}: ${week.start_date} - ${week.end_date}`);
+    }
+
+    // 3. Create employee work requirements and preferences
+    console.log('👥 Setting employee requirements and preferences...');
+
+    for (const [employeeName, data] of Object.entries(weeklyPlanData.employee_preferences)) {
+        const employeeId = employeeMap[employeeName];
+
+        if (!employeeId) {
+            console.warn(`⚠️  Employee not found: ${employeeName}`);
+            continue;
+        }
+
+        // Insert work requirement with new fields
+        await db.run(
+            `INSERT INTO weekly_work_requirements (
+                id, employee_id, plan_id, required_weeks,
+                assignment_style, assignment_block_size
+            ) VALUES (?, ?, ?, ?, ?, ?)`,
+            [
+                uuidv4(),
+                employeeId,
+                weeklyPlanId,
+                data.required_weeks,
+                data.assignment_style,
+                data.assignment_block_size
+            ]
+        );
+
+        // Insert preferences for each week
+        for (const [weekNumberStr, preferenceLevel] of Object.entries(data.preferences)) {
+            const weekId = weekMap[weekNumberStr];
+
+            if (!weekId) {
+                console.warn(`⚠️  Week ${weekNumberStr} not found for ${employeeName}`);
+                continue;
+            }
+
+            await db.run(
+                `INSERT INTO weekly_preferences (
+                    id, employee_id, plan_id, week_id, preference_level
+                ) VALUES (?, ?, ?, ?, ?)`,
+                [
+                    uuidv4(),
+                    employeeId,
+                    weeklyPlanId,
+                    weekId,
+                    preferenceLevel
+                ]
+            );
+        }
+
+        console.log(`   ${employeeName}: ${data.required_weeks} weeks, ${data.assignment_style} style (block size: ${data.assignment_block_size})`);
+    }
+
+    // 4. Create assignments if they exist
+    if (weeklyPlanData.assignments) {
+        console.log('🏷️  Creating weekly assignments...');
+
+        for (const [weekNumberStr, employeeNames] of Object.entries(weeklyPlanData.assignments)) {
+            const weekId = weekMap[weekNumberStr];
+
+            if (!weekId) {
+                console.warn(`⚠️  Week ${weekNumberStr} not found for assignments`);
+                continue;
+            }
+
+            for (const employeeName of employeeNames) {
+                const employeeId = employeeMap[employeeName];
+
+                if (!employeeId) {
+                    console.warn(`⚠️  Employee ${employeeName} not found for assignment`);
+                    continue;
+                }
+
+                await db.run(
+                    `INSERT INTO weekly_assignments (
+                        id, plan_id, week_id, employee_id, assigned_by
+                    ) VALUES (?, ?, ?, ?, ?)`,
+                    [
+                        uuidv4(),
+                        weeklyPlanId,
+                        weekId,
+                        employeeId,
+                        creatorId
+                    ]
+                );
+            }
+
+            console.log(`   Week ${weekNumberStr}: ${employeeNames.join(', ')}`);
+        }
+    }
+
+    console.log(`✅ Weekly plan created with ID: ${weeklyPlanId}`);
 }
 
 // Run if called directly

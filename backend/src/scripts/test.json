@@ -231,5 +231,201 @@
     "1": "available",
     "2": "limited",
     "3": "unavailable"
+  },
+  "weekly_plan": {
+    "plan_name": "Test Wochenplan Q4 2025",
+    "description": "Wochenplan für das vierte Quartal 2025",
+    "period": "2025-10-01 bis 2025-12-31",
+    "status": "draft",
+    "created_by": "Basti",
+    "weeks": [
+      {
+        "week_number": 40,
+        "start_date": "2025-10-01",
+        "end_date": "2025-10-07",
+        "min_employees": 2,
+        "max_employees": 3
+      },
+      {
+        "week_number": 41,
+        "start_date": "2025-10-08",
+        "end_date": "2025-10-14",
+        "min_employees": 2,
+        "max_employees": 3
+      },
+      {
+        "week_number": 42,
+        "start_date": "2025-10-15",
+        "end_date": "2025-10-21",
+        "min_employees": 2,
+        "max_employees": 4
+      },
+      {
+        "week_number": 43,
+        "start_date": "2025-10-22",
+        "end_date": "2025-10-28",
+        "min_employees": 2,
+        "max_employees": 3
+      },
+      {
+        "week_number": 44,
+        "start_date": "2025-10-29",
+        "end_date": "2025-11-04",
+        "min_employees": 3,
+        "max_employees": 4
+      },
+      {
+        "week_number": 45,
+        "start_date": "2025-11-05",
+        "end_date": "2025-11-11",
+        "min_employees": 2,
+        "max_employees": 3
+      }
+    ],
+    "employee_preferences": {
+      "Jerome": {
+        "required_weeks": 4,
+        "assignment_style": "block",
+        "assignment_block_size": 2,
+        "preferences": {
+          "40": 1,
+          "41": 2,
+          "42": 1,
+          "43": 3,
+          "44": 2,
+          "45": 1
+        }
+      },
+      "Patrick": {
+        "required_weeks": 3,
+        "assignment_style": "scatter",
+        "assignment_block_size": 1,
+        "preferences": {
+          "40": 2,
+          "41": 1,
+          "42": 3,
+          "43": 2,
+          "44": 1,
+          "45": 3
+        }
+      },
+      "Andrey": {
+        "required_weeks": 2,
+        "assignment_style": "block",
+        "assignment_block_size": 2,
+        "preferences": {
+          "40": 1,
+          "41": 1,
+          "42": 2,
+          "43": 2,
+          "44": 3,
+          "45": 3
+        }
+      },
+      "Fabian": {
+        "required_weeks": 3,
+        "assignment_style": "scatter",
+        "assignment_block_size": 1,
+        "preferences": {
+          "40": 3,
+          "41": 2,
+          "42": 1,
+          "43": 1,
+          "44": 2,
+          "45": 3
+        }
+      },
+      "Lu": {
+        "required_weeks": 2,
+        "assignment_style": "block",
+        "assignment_block_size": 1,
+        "preferences": {
+          "40": 2,
+          "41": 3,
+          "42": 1,
+          "43": 2,
+          "44": 1,
+          "45": 3
+        }
+      },
+      "Basti": {
+        "required_weeks": 5,
+        "assignment_style": "block",
+        "assignment_block_size": 3,
+        "preferences": {
+          "40": 1,
+          "41": 1,
+          "42": 1,
+          "43": 1,
+          "44": 1,
+          "45": 1
+        }
+      },
+      "Kilian": {
+        "required_weeks": 3,
+        "assignment_style": "scatter",
+        "assignment_block_size": 1,
+        "preferences": {
+          "40": 2,
+          "41": 2,
+          "42": 1,
+          "43": 3,
+          "44": 2,
+          "45": 1
+        }
+      },
+      "Gerald": {
+        "required_weeks": 2,
+        "assignment_style": "block",
+        "assignment_block_size": 2,
+        "preferences": {
+          "40": 1,
+          "41": 3,
+          "42": 2,
+          "43": 1,
+          "44": 3,
+          "45": 2
+        }
+      },
+      "Uliana": {
+        "required_weeks": 3,
+        "assignment_style": "scatter",
+        "assignment_block_size": 1,
+        "preferences": {
+          "40": 3,
+          "41": 1,
+          "42": 2,
+          "43": 1,
+          "44": 2,
+          "45": 1
+        }
+      },
+      "Nico": {
+        "required_weeks": 2,
+        "assignment_style": "block",
+        "assignment_block_size": 1,
+        "preferences": {
+          "40": 2,
+          "41": 2,
+          "42": 3,
+          "43": 1,
+          "44": 1,
+          "45": 3
+        }
+      },
+      "Linuuuus": {
+        "required_weeks": 3,
+        "assignment_style": "block",
+        "assignment_block_size": 2,
+        "preferences": {
+          "40": 1,
+          "41": 2,
+          "42": 1,
+          "43": 3,
+          "44": 2,
+          "45": 1
+        }
+      }
+    }
   }
 }

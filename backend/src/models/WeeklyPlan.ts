@@ -39,6 +39,8 @@ export interface WeeklyWorkRequirement {
   employeeId: string;
   planId: string;
   requiredWeeks: number;
+  assignmentStyle: 'consecutive' | 'scattered';
+  assignmentStyleConsecutive: number;
 }
 
 export interface WeeklyAssignment {
@@ -73,6 +75,8 @@ export interface SavePreferencesRequest {
     notes?: string;
   }[];
   requiredWeeks: number;
+  assignmentStyle?: 'consecutive' | 'scattered';
+  assignmentStyleConsecutive?: number;
 }
 
 export interface AdminSavePreferencesRequest {
@@ -83,11 +87,19 @@ export interface AdminSavePreferencesRequest {
     notes?: string;
   }[];
   requiredWeeks: number;
+  assignmentStyle?: 'consecutive' | 'scattered';
+  assignmentStyleConsecutive?: number;
 }
 
 export interface UpdateWeekRequest {
   minEmployees?: number;
   maxEmployees?: number;
+}
+
+export interface UpdateWorkRequirementRequest {
+  requiredWeeks?: number;
+  assignmentStyle?: 'consecutive' | 'scattered';
+  assignmentStyleConsecutive?: number;
 }
 
 // Response DTOs with additional data
@@ -110,7 +122,16 @@ export interface EmployeeWithPreferences {
     notes?: string;
   }[];
   requiredWeeks: number;
+  assignmentStyle: 'consecutive' | 'scattered';
+  assignmentStyleConsecutive: number;
   assignedWeeks: string[]; // Array of weekIds
+}
+
+export interface EmployeeWorkRequirement {
+  employeeId: string;
+  requiredWeeks: number;
+  assignmentStyle: 'consecutive' | 'scattered';
+  assignmentStyleConsecutive: number;
 }
 
 export interface MyPreferencesResponse {
@@ -122,6 +143,8 @@ export interface MyPreferencesResponse {
     notes?: string;
   }[];
   requiredWeeks: number;
+  assignmentStyle: 'consecutive' | 'scattered';
+  assignmentStyleConsecutive: number;
 }
 
 // Solver input/output types
@@ -149,3 +172,47 @@ export interface WeeklyScheduleResult {
   resolutionReport: string[];
   processingTime: number;
 }
+
+// Additional types for the enhanced weekly planning
+export interface WeeklyAssignmentWithDetails extends WeeklyAssignment {
+  employee?: {
+    id: string;
+    firstname: string;
+    lastname: string;
+    employeeType: string;
+    isTrainee: boolean;
+  };
+  week?: {
+    weekNumber: number;
+    startDate: string;
+    endDate: string;
+    minEmployees: number;
+    maxEmployees: number;
+  };
+}
+
+export interface WeeklyPlanStatistics {
+  totalWeeks: number;
+  totalAssignedWeeks: number;
+  totalRequiredWeeks: number;
+  coverageRate: number;
+  employeesCount: number;
+  employeesWithPreferences: number;
+  averageRequiredWeeks: number;
+  consecutiveStyleAssignments: number;
+  scatteredStyleAssignments: number;
+}
+
+// Types for consecutive assignment constraints
+export interface ConsecutiveAssignmentConstraint {
+  type: 'consecutive';
+  employeeId: string;
+  consecutiveSize: number;
+}
+
+export interface ScatterAssignmentConstraint {
+  type: 'scattered';
+  employeeId: string;
+}
+
+export type AssignmentConstraint = ConsecutiveAssignmentConstraint | ScatterAssignmentConstraint;
