@@ -49,7 +49,7 @@ interface TestData {
         employee_preferences: {
             [employeeName: string]: {
                 required_weeks: number;
-                assignment_style: 'consecutive' | 'scattered';
+                assignment_style: 'consecutive' | 'scattered' | 'flexible';
                 assignment_style_consecutive: number;
                 preferences: { [weekNumber: string]: number };
             };
@@ -350,11 +350,11 @@ export async function seedTestData(): Promise<void> {
                 console.log(`   - Weeks: ${testData.weekly_plan.weeks.length}`);
 
                 // Count assignment styles
-                const styles = { consecutive: 0, scattered: 0 };
+                const styles = { consecutive: 0, scattered: 0, flexible: 0 };
                 Object.values(testData.weekly_plan.employee_preferences).forEach(emp => {
                     styles[emp.assignment_style]++;
                 });
-                console.log(`   - Assignment Styles: ${styles.consecutive} consecutive, ${styles.scattered} scattered`);
+                console.log(`   - Assignment Styles: ${styles.consecutive} consecutive, ${styles.scattered} scattered, ${styles.flexible} flexible`);
             }
 
         } catch (error) {

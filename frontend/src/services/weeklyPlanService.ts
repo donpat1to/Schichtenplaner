@@ -335,7 +335,7 @@ export const weeklyPlanService = {
     employeeId: string,
     data: {
       requiredWeeks?: number;
-      assignmentStyle?: 'consecutive' | 'scattered';
+      assignmentStyle?: 'consecutive' | 'scattered' | 'flexible';
       assignmentStyleConsecutive?: number;
     }
   ): Promise<any> {

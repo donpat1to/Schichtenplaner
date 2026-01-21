@@ -54,7 +54,7 @@ const validatePreferences = [
   body('preferences.*.weekId').isUUID().withMessage('Invalid week ID in preferences'),
   body('preferences.*.preferenceLevel').isIn([1, 2, 3]).withMessage('Preference level must be 1, 2, or 3'),
   body('requiredWeeks').isInt({ min: 0 }).withMessage('Required weeks must be a non-negative integer'),
-  body('assignmentStyle').optional().isIn(['consecutive', 'scattered']).withMessage('Assignment style must be "consecutive" or "scattered"'),
+  body('assignmentStyle').optional().isIn(['consecutive', 'scattered', 'flexible']).withMessage('Assignment style must be "consecutive", "scattered", or "flexible"'),
   body('assignmentStyleConsecutive').optional().isInt({ min: 1, max: 10 }).withMessage('Assignment block size must be between 1 and 10'),
 ];
 

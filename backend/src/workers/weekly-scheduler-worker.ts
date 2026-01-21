@@ -1,6 +1,12 @@
 // backend/src/workers/weekly-scheduler-worker.ts
 import { parentPort, workerData } from 'worker_threads';
-import { CPModel, CPSolver } from './cp-sat-wrapper.js';
+import { spawn } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 interface WorkerData {
   plan: {
@@ -33,265 +39,152 @@ interface WorkerData {
   requirements: {
     employeeId: string;
     requiredWeeks: number;
+    assignmentStyle?: 'consecutive' | 'scattered' | 'flexible';
+    assignmentStyleConsecutive?: number;
   }[];
 }
 
-function buildWeeklySchedulingModel(model: CPModel, data: WorkerData): void {
-  const { employees, weeks, preferences, requirements } = data;
+interface PythonSolverResult {
+  success: boolean;
+  assignments: { weekId: string; employeeId: string }[];
+  violations: string[];
+  progress: any[];
+  metadata: {
+    solveTime: number;
+    variablesCreated: number;
+    constraintsAdded: number;
+    optimal: boolean;
+    status: string;
+    solutionsFound?: number;
+    objectiveValue?: number;
+  };
+}
 
-  // Filter schedulable employees (personell type only, managers handled separately)
-  const schedulableEmployees = employees.filter(emp => emp.employeeType === 'personell');
-  const managers = employees.filter(emp => emp.employeeType === 'manager');
+function findPythonScript(): string | null {
+  const possiblePaths = [
+    path.resolve(process.cwd(), 'python-scripts/weekly_scheduling_solver.py'),
+    path.resolve(process.cwd(), 'backend/python-scripts/weekly_scheduling_solver.py'),
+    path.resolve(process.cwd(), 'src/python-scripts/weekly_scheduling_solver.py'),
+    path.resolve(__dirname, '../../../python-scripts/weekly_scheduling_solver.py'),
+    path.resolve(__dirname, '../../src/python-scripts/weekly_scheduling_solver.py'),
+    path.resolve(__dirname, '../python-scripts/weekly_scheduling_solver.py'),
+  ];
 
-  const trainees = schedulableEmployees.filter(emp => emp.isTrainee);
-  const experienced = schedulableEmployees.filter(emp => !emp.isTrainee);
-
-  console.log('\n🔧 WEEKLY CONSTRAINT ANALYSIS:');
-  console.log(`Building model with ${schedulableEmployees.length} schedulable employees, ${weeks.length} weeks`);
-  console.log(`- Trainees: ${trainees.length}`);
-  console.log(`- Experienced: ${experienced.length}`);
-  console.log(`- Managers (auto-assign): ${managers.length}`);
-
-  // 1. Create assignment variables for all possible assignments
-  schedulableEmployees.forEach((employee) => {
-    weeks.forEach((week) => {
-      const varName = `assign_${employee.id}_${week.id}`;
-      model.addVariable(varName, 'bool');
-    });
-  });
-
-  // 2. Unavailability constraints (preference level 3)
-  schedulableEmployees.forEach((employee) => {
-    weeks.forEach((week) => {
-      const preference = preferences.find(
-        p => p.employeeId === employee.id && p.weekId === week.id
-      );
-
-      const varName = `assign_${employee.id}_${week.id}`;
-
-      // If no preference or preference level 3 (unavailable), cannot assign
-      if (!preference || preference.preferenceLevel === 3) {
-        model.addConstraint(
-          `${varName} == 0`,
-          `Employee ${employee.firstname} ${employee.lastname} is unavailable for week ${week.weekNumber}`
-        );
-      }
-    });
-  });
-
-  // 3. Exact week count per employee constraint
-  schedulableEmployees.forEach((employee) => {
-    const requirement = requirements.find(r => r.employeeId === employee.id);
-    const requiredWeeks = requirement?.requiredWeeks || 0;
-
-    if (requiredWeeks > 0) {
-      const weekVars = weeks.map(week => `assign_${employee.id}_${week.id}`);
-
-      if (weekVars.length > 0) {
-        model.addConstraint(
-          `${weekVars.join(' + ')} == ${requiredWeeks}`,
-          `Employee ${employee.firstname} ${employee.lastname} must work exactly ${requiredWeeks} weeks`
-        );
-        console.log(`Employee ${employee.firstname}: ${requiredWeeks} weeks required`);
-      }
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      return p;
     }
-  });
+  }
 
-  // 4. Min/Max employees per week constraints
-  weeks.forEach((week) => {
-    const assignmentVars = schedulableEmployees.map(
-      emp => `assign_${emp.id}_${week.id}`
-    );
+  return null;
+}
 
-    if (assignmentVars.length > 0) {
-      // Minimum employees per week
-      model.addConstraint(
-        `${assignmentVars.join(' + ')} >= ${week.minEmployees}`,
-        `Min ${week.minEmployees} employees for week ${week.weekNumber}`
-      );
+function findPythonCommand(): Promise<string> {
+  return new Promise((resolve) => {
+    const commands = ['python', 'python3', 'py'];
+    let currentIndex = 0;
 
-      // Maximum employees per week
-      model.addConstraint(
-        `${assignmentVars.join(' + ')} <= ${week.maxEmployees}`,
-        `Max ${week.maxEmployees} employees for week ${week.weekNumber}`
-      );
-    }
-  });
-
-  // 5. Trainee supervision constraints
-  trainees.forEach((trainee) => {
-    weeks.forEach((week) => {
-      const traineeVar = `assign_${trainee.id}_${week.id}`;
-      const experiencedVars = experienced.map(exp =>
-        `assign_${exp.id}_${week.id}`
-      );
-
-      if (experiencedVars.length > 0) {
-        // If trainee is assigned, at least one experienced must be assigned
-        model.addConstraint(
-          `${traineeVar} <= ${experiencedVars.join(' + ')}`,
-          `Trainee ${trainee.firstname} ${trainee.lastname} requires supervision in week ${week.weekNumber}`
-        );
-      } else {
-        // If no experienced available, trainee cannot be assigned
-        model.addConstraint(
-          `${traineeVar} == 0`,
-          `No experienced staff available for trainee ${trainee.firstname} ${trainee.lastname} in week ${week.weekNumber}`
-        );
-      }
-    });
-  });
-
-  // 6. Objective function: Maximize preference satisfaction
-  let objectiveExpression = '';
-
-  schedulableEmployees.forEach((employee) => {
-    weeks.forEach((week) => {
-      const varName = `assign_${employee.id}_${week.id}`;
-      const preference = preferences.find(
-        p => p.employeeId === employee.id && p.weekId === week.id
-      );
-
-      let score = 0;
-      if (preference) {
-        if (preference.preferenceLevel === 1) {
-          score = 100; // High reward for preferred weeks
-        } else if (preference.preferenceLevel === 2) {
-          score = 50;  // Medium reward for available weeks
-        }
-        // Level 3 already excluded by constraints
+    const tryNext = () => {
+      if (currentIndex >= commands.length) {
+        resolve('python'); // Default fallback
+        return;
       }
 
-      if (score > 0) {
-        if (objectiveExpression) {
-          objectiveExpression += ` + ${score} * ${varName}`;
+      const cmd = commands[currentIndex];
+      const proc = spawn(cmd, ['--version']);
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve(cmd);
         } else {
-          objectiveExpression = `${score} * ${varName}`;
+          currentIndex++;
+          tryNext();
         }
-      }
-    });
-  });
+      });
 
-  if (objectiveExpression) {
-    model.maximize(objectiveExpression);
-    console.log('Objective function set to maximize preference satisfaction');
-  } else {
-    console.warn('No valid objective expression could be created');
-  }
+      proc.on('error', () => {
+        currentIndex++;
+        tryNext();
+      });
+    };
+
+    tryNext();
+  });
 }
 
-function extractAssignmentsFromSolution(solution: any, employees: any[], weeks: any[]): { weekId: string; employeeId: string }[] {
-  const assignments: { weekId: string; employeeId: string }[] = [];
+async function runPythonSolver(data: WorkerData): Promise<PythonSolverResult> {
+  const scriptPath = findPythonScript();
 
-  console.log('🔍 Extracting assignments from solution...');
-
-  if (solution.assignments && solution.assignments.length > 0) {
-    console.log('Using Python-parsed assignments');
-
-    solution.assignments.forEach((assignment: any) => {
-      // The assignment has shiftId which is actually weekId in our context
-      const weekId = assignment.shiftId;
-      const employeeId = assignment.employeeId;
-
-      if (weekId && employeeId) {
-        // Verify this is a valid week
-        const week = weeks.find(w => w.id === weekId);
-        if (week) {
-          assignments.push({ weekId, employeeId });
-        }
-      }
-    });
+  if (!scriptPath) {
+    throw new Error('Weekly scheduling Python solver not found');
   }
 
-  console.log(`🎯 Extracted ${assignments.length} assignments`);
-  return assignments;
-}
+  const pythonCmd = await findPythonCommand();
+  console.log(`Using Python command: ${pythonCmd}`);
+  console.log(`Using script: ${scriptPath}`);
 
-function assignManagersToWeeks(
-  assignments: { weekId: string; employeeId: string }[],
-  managers: any[],
-  weeks: any[],
-  preferences: any[]
-): { weekId: string; employeeId: string }[] {
-  console.log(`Assigning ${managers.length} managers to weeks based on preference=1`);
+  return new Promise((resolve, reject) => {
+    const proc = spawn(pythonCmd, [scriptPath], {
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
 
-  managers.forEach((manager) => {
-    weeks.forEach((week) => {
-      const preference = preferences.find(
-        p => p.employeeId === manager.id && p.weekId === week.id
-      );
+    let stdout = '';
+    let stderr = '';
 
-      // Assign manager if they have preference=1 (preferred)
-      if (preference?.preferenceLevel === 1) {
-        // Check if manager is already assigned (avoid duplicates)
-        const alreadyAssigned = assignments.some(
-          a => a.weekId === week.id && a.employeeId === manager.id
-        );
+    proc.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
 
-        if (!alreadyAssigned) {
-          assignments.push({ weekId: week.id, employeeId: manager.id });
-          console.log(`✅ Assigned manager ${manager.firstname} ${manager.lastname} to week ${week.weekNumber} (preference=1)`);
-        }
+    proc.stderr.on('data', (chunk) => {
+      const text = chunk.toString();
+      stderr += text;
+      // Log all Python output for debugging
+      console.log('[Python]', text.trim());
+    });
+
+    proc.on('close', (code) => {
+      if (code !== 0) {
+        console.error(`Python solver exited with code ${code}`);
+        console.error('stderr:', stderr);
+        reject(new Error(`Python solver failed with code ${code}: ${stderr}`));
+        return;
+      }
+
+      try {
+        const result = JSON.parse(stdout);
+        resolve(result);
+      } catch (parseError) {
+        console.error('Failed to parse Python output:', stdout.substring(0, 500));
+        reject(new Error(`Invalid JSON from Python solver: ${parseError}`));
       }
     });
-  });
 
-  return assignments;
-}
-
-function detectViolations(
-  assignments: { weekId: string; employeeId: string }[],
-  employees: any[],
-  weeks: any[],
-  requirements: any[]
-): string[] {
-  const violations: string[] = [];
-  const employeeMap = new Map(employees.map(emp => [emp.id, emp]));
-
-  // Check for understaffed weeks
-  weeks.forEach((week) => {
-    const assignedCount = assignments.filter(a => a.weekId === week.id).length;
-
-    if (assignedCount < week.minEmployees) {
-      violations.push(`UNDERSTAFFED: Week ${week.weekNumber} has ${assignedCount} employees but requires minimum ${week.minEmployees}`);
-    }
-
-    if (assignedCount > week.maxEmployees) {
-      violations.push(`OVERSTAFFED: Week ${week.weekNumber} has ${assignedCount} employees but maximum is ${week.maxEmployees}`);
-    }
-  });
-
-  // Check for trainee supervision
-  weeks.forEach((week) => {
-    const weekAssignments = assignments.filter(a => a.weekId === week.id);
-    const hasTrainee = weekAssignments.some(a => {
-      const emp = employeeMap.get(a.employeeId);
-      return emp?.isTrainee;
+    proc.on('error', (error) => {
+      console.error('Failed to start Python process:', error);
+      reject(error);
     });
 
-    const hasExperienced = weekAssignments.some(a => {
-      const emp = employeeMap.get(a.employeeId);
-      return emp && !emp.isTrainee && emp.employeeType === 'personell';
-    });
-
-    if (hasTrainee && !hasExperienced) {
-      violations.push(`TRAINEE_UNSUPERVISED: Week ${week.weekNumber} has trainee but no experienced employee`);
-    }
-  });
-
-  // Check employee week count requirements
-  employees.forEach((employee) => {
-    const requirement = requirements.find(r => r.employeeId === employee.id);
-    if (requirement && requirement.requiredWeeks > 0) {
-      const assignedCount = assignments.filter(a => a.employeeId === employee.id).length;
-
-      if (assignedCount !== requirement.requiredWeeks) {
-        violations.push(`WEEK_COUNT_MISMATCH: ${employee.firstname} ${employee.lastname} assigned ${assignedCount} weeks but requires ${requirement.requiredWeeks}`);
+    // Send data to Python solver
+    const inputData = {
+      plan: data.plan,
+      weeks: data.weeks,
+      employees: data.employees,
+      preferences: data.preferences,
+      requirements: data.requirements.map(r => ({
+        employeeId: r.employeeId,
+        requiredWeeks: r.requiredWeeks,
+        assignmentStyle: r.assignmentStyle || 'flexible',
+        assignmentStyleConsecutive: r.assignmentStyleConsecutive || 1
+      })),
+      solverOptions: {
+        maxTimeInSeconds: 100,
+        numSearchWorkers: 8
       }
-    }
-  });
+    };
 
-  return violations;
+    proc.stdin.write(JSON.stringify(inputData));
+    proc.stdin.end();
+  });
 }
 
 async function runWeeklyScheduling() {
@@ -299,7 +192,9 @@ async function runWeeklyScheduling() {
   const startTime = Date.now();
 
   try {
+    console.log('\n========================================');
     console.log('Starting weekly scheduling optimization...');
+    console.log('========================================');
 
     // Validate input data
     if (!data.weeks || data.weeks.length === 0) {
@@ -310,9 +205,29 @@ async function runWeeklyScheduling() {
       throw new Error('No employees provided for scheduling');
     }
 
-    console.log(`Optimizing ${data.weeks.length} weeks for ${data.employees.length} employees`);
+    console.log(`Plan: ${data.plan.name}`);
+    console.log(`Weeks: ${data.weeks.length}`);
+    console.log(`Employees: ${data.employees.length}`);
+    console.log(`Preferences: ${data.preferences.length}`);
+    console.log(`Requirements: ${data.requirements.length}`);
 
-    // Check if we have any employees who signed up
+    // Log employee details
+    console.log('\nEmployee Summary:');
+    data.employees.forEach(emp => {
+      const empPrefs = data.preferences.filter(p => p.employeeId === emp.id);
+      const empReq = data.requirements.find(r => r.employeeId === emp.id);
+      const pref1 = empPrefs.filter(p => p.preferenceLevel === 1).length;
+      const pref2 = empPrefs.filter(p => p.preferenceLevel === 2).length;
+      const pref3 = empPrefs.filter(p => p.preferenceLevel === 3).length;
+
+      console.log(`  ${emp.firstname} ${emp.lastname}${emp.isTrainee ? ' (Trainee)' : ''} [${emp.employeeType}]:`
+        + ` Wants ${empReq?.requiredWeeks || 0} weeks,`
+        + ` Style: ${empReq?.assignmentStyle || 'flexible'},`
+        + ` Block: ${empReq?.assignmentStyleConsecutive || 1},`
+        + ` Prefs: ${pref1} preferred, ${pref2} available, ${pref3} unavailable`);
+    });
+
+    // Check if any employees have set availability
     const employeesWithPrefs = new Set(
       data.preferences
         .filter(p => p.preferenceLevel === 1 || p.preferenceLevel === 2)
@@ -320,83 +235,62 @@ async function runWeeklyScheduling() {
     );
 
     if (employeesWithPrefs.size === 0) {
-      console.log('❌ CRITICAL: No employees have set availability!');
+      console.log('\nNo employees have set their availability!');
       parentPort?.postMessage({
         assignments: [],
         violations: ['NO_PREFERENCES: No employees have set their availability'],
         success: false,
-        resolutionReport: ['❌ Scheduling failed: No employees have set their availability'],
+        resolutionReport: ['Scheduling failed: No employees have set their availability'],
         processingTime: Date.now() - startTime
       });
       return;
     }
 
-    const model = new CPModel();
-    buildWeeklySchedulingModel(model, data);
-
-    const solver = new CPSolver({
-      maxTimeInSeconds: 105,
-      numSearchWorkers: 8,
-      logSearchProgress: true
-    });
-
-    const solution = await solver.solve(model);
+    // Run Python solver
+    console.log('\nCalling Python CP-SAT solver...');
+    const solution = await runPythonSolver(data);
     const processingTime = Date.now() - startTime;
 
-    console.log(`Weekly scheduling completed in ${processingTime}ms`);
-    console.log(`Solution success: ${solution.success}`);
+    console.log(`\nSolver completed in ${processingTime}ms`);
+    console.log(`Success: ${solution.success}`);
+    console.log(`Assignments: ${solution.assignments.length}`);
+    console.log(`Violations: ${solution.violations.length}`);
 
-    let assignments: { weekId: string; employeeId: string }[] = [];
-    let violations: string[] = [];
-    let resolutionReport: string[] = [
+    // Build resolution report
+    const resolutionReport: string[] = [
       `Solved in ${processingTime}ms`,
-      `Variables: ${solution.metadata?.variablesCreated || 'unknown'}`,
-      `Constraints: ${solution.metadata?.constraintsAdded || 'unknown'}`,
-      `Optimal: ${solution.metadata?.optimal || false}`,
-      `Status: ${solution.success ? 'SUCCESS' : 'FAILED'}`
+      `Variables: ${solution.metadata.variablesCreated}`,
+      `Constraints: ${solution.metadata.constraintsAdded}`,
+      `Status: ${solution.metadata.status}`,
+      `Optimal: ${solution.metadata.optimal}`,
+      `Solutions found: ${solution.metadata.solutionsFound || 'N/A'}`,
+      `Objective value: ${solution.metadata.objectiveValue || 'N/A'}`
     ];
 
-    if (solution.success) {
-      // Extract assignments for non-managers
-      const nonManagers = data.employees.filter(emp => emp.employeeType === 'personell');
-      assignments = extractAssignmentsFromSolution(solution, nonManagers, data.weeks);
-
-      // Add managers based on their preferences
-      const managers = data.employees.filter(emp => emp.employeeType === 'manager');
-      assignments = assignManagersToWeeks(assignments, managers, data.weeks, data.preferences);
-
-      // Detect violations
-      violations = detectViolations(assignments, data.employees, data.weeks, data.requirements);
-
-      if (violations.length === 0) {
-        resolutionReport.push('✅ No constraint violations detected');
-      } else {
-        resolutionReport.push(`⚠️ Found ${violations.length} violations:`);
-        violations.forEach(v => resolutionReport.push(`   - ${v}`));
-      }
-
-      resolutionReport.push(`📊 Total assignments: ${assignments.length}`);
-
-      // Log assignments summary
-      console.log('\n📋 ASSIGNMENT SUMMARY:');
-      data.weeks.forEach(week => {
-        const weekAssignments = assignments.filter(a => a.weekId === week.id);
-        const names = weekAssignments.map(a => {
-          const emp = data.employees.find(e => e.id === a.employeeId);
-          return emp ? `${emp.firstname} ${emp.lastname}` : 'Unknown';
-        });
-        console.log(`   Week ${week.weekNumber}: ${names.join(', ') || 'None'}`);
-      });
-
+    if (solution.violations.length === 0) {
+      resolutionReport.push('No constraint violations detected');
     } else {
-      violations.push('SCHEDULING_FAILED: No feasible solution found');
-      resolutionReport.push('❌ No feasible solution could be found');
+      resolutionReport.push(`Found ${solution.violations.length} violations:`);
+      solution.violations.forEach(v => resolutionReport.push(`   - ${v}`));
     }
 
+    resolutionReport.push(`Total assignments: ${solution.assignments.length}`);
+
+    // Log assignment summary
+    console.log('\nAssignment Summary:');
+    data.weeks.forEach(week => {
+      const weekAssignments = solution.assignments.filter(a => a.weekId === week.id);
+      const names = weekAssignments.map(a => {
+        const emp = data.employees.find(e => e.id === a.employeeId);
+        return emp ? `${emp.firstname} ${emp.lastname}` : 'Unknown';
+      });
+      console.log(`   Week ${week.weekNumber}: ${names.join(', ') || 'None'}`);
+    });
+
     parentPort?.postMessage({
-      assignments,
-      violations,
-      success: solution.success && violations.length === 0,
+      assignments: solution.assignments,
+      violations: solution.violations,
+      success: solution.success,
       resolutionReport,
       processingTime
     });

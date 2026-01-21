@@ -3,27 +3,18 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { weeklyPlanService } from '../../services/weeklyPlanService';
 import {
-    WeeklyPlan,
     PlanWeek,
     UpdateWeeklyPlanRequest,
     UpdateWeekRequest,
     WeeklyPlanWithDetails,
-    getWeekDateRange,
     formatWeekRange,
-    PreferenceLevelLabels,
-    PreferenceLevelColors
 } from '../../models/WeeklyPlan';
 import { useNotification } from '../../contexts/NotificationContext';
 import { useBackendValidation } from '../../hooks/useBackendValidation';
 import Calendar from '../../components/Calendar/Calendar';
 import {
     ICONS,
-    smallDeleteButton,
     addTextButton,
-    cancelTextButton,
-    addOutlineButton,
-    BUTTON_COLORS,
-    saveTextButton,
 } from '../../utils/buttonStyles';
 
 interface WeekFormData {
@@ -166,51 +157,6 @@ const WeeklyPlanEdit: React.FC = () => {
         setShowWeekForm(true);
     };
 
-    // Save week (create or update)
-    const handleSaveWeek = async () => {
-        if (!id || !weekFormData) return;
-
-        if (!weekFormData.startDate || !weekFormData.endDate) {
-            showNotification({
-                type: 'error',
-                title: 'Fehlende Angaben',
-                message: 'Bitte geben Sie Start- und Enddatum ein.'
-            });
-            return;
-        }
-
-        if (weekFormData.minEmployees < 0 || weekFormData.maxEmployees < weekFormData.minEmployees) {
-            showNotification({
-                type: 'error',
-                title: 'Ungültige Angaben',
-                message: 'Mindestanzahl muss größer oder gleich 0 sein und Höchstanzahl muss größer oder gleich Mindestanzahl sein.'
-            });
-            return;
-        }
-
-        await executeWithValidation(async () => {
-            const weekData: UpdateWeekRequest = {
-                minEmployees: weekFormData.minEmployees,
-                maxEmployees: weekFormData.maxEmployees,
-            };
-
-            if (selectedWeek) {
-                // Update existing week
-                await weeklyPlanService.updateWeek(id, weekFormData.id, weekData);
-                showNotification({
-                    type: 'success',
-                    title: 'Erfolg',
-                    message: 'Woche wurde aktualisiert.'
-                });
-            }
-
-            setShowWeekForm(false);
-            setSelectedWeek(null);
-            setWeekFormData(null);
-            await loadWeeklyPlan();
-        });
-    };
-
     // Calendar day info handler
     const getCalendarDayInfo = (date: Date) => {
         if (!weeklyPlan?.weeks) return { isInPlan: false };
@@ -333,51 +279,6 @@ const WeeklyPlanEdit: React.FC = () => {
                     </button>
                 </div>
             </div>
-
-            {/* Statistics Bar */}
-            {planStatistics && (
-                <div style={{
-                    display: 'flex',
-                    gap: '20px',
-                    marginBottom: '20px',
-                    padding: '16px',
-                    backgroundColor: 'white',
-                    borderRadius: '8px',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                    flexWrap: 'wrap'
-                }}>
-                    <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#3498db' }}>
-                            {planStatistics.totalWeeks}
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#666' }}>Wochen</div>
-                    </div>
-                    <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#2ecc71' }}>
-                            {planStatistics.totalAssigned}
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#666' }}>Zuweisungen</div>
-                    </div>
-                    <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#e74c3c' }}>
-                            {planStatistics.totalRequired}
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#666' }}>Benötigte Wochen</div>
-                    </div>
-                    <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#9b59b6' }}>
-                            {planStatistics.employeesCount}
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#666' }}>Mitarbeiter</div>
-                    </div>
-                    <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: planStatistics.coverageRate > 80 ? '#2ecc71' : planStatistics.coverageRate > 50 ? '#f39c12' : '#e74c3c' }}>
-                            {planStatistics.coverageRate.toFixed(1)}%
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#666' }}>Abdeckung</div>
-                    </div>
-                </div>
-            )}
 
             {/* Basic Information Form */}
             <div style={{
@@ -592,7 +493,8 @@ const WeeklyPlanEdit: React.FC = () => {
                         <table style={{
                             width: '100%',
                             borderCollapse: 'collapse',
-                            backgroundColor: 'white'
+                            backgroundColor: 'white',
+                            border: '1px solid #dee2e6'
                         }}>
                             <thead>
                                 <tr style={{ backgroundColor: '#f8f9fa' }}>
@@ -668,7 +570,8 @@ const WeeklyPlanEdit: React.FC = () => {
                                             <td style={{
                                                 padding: '12px 16px',
                                                 border: '1px solid #dee2e6',
-                                                textAlign: 'center'
+                                                textAlign: 'center',
+
                                             }}>
                                                 {week.maxEmployees}
                                             </td>
@@ -789,7 +692,7 @@ const WeeklyPlanEdit: React.FC = () => {
                             </div>
 
                             <div>
-                                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                                <label style={{ display: 'flex', marginBottom: '8px', fontWeight: '500', justifyContent: 'flex-end' }}>
                                     Höchstanzahl
                                 </label>
                                 <input
@@ -807,33 +710,6 @@ const WeeklyPlanEdit: React.FC = () => {
                                     disabled={isSubmitting}
                                 />
                             </div>
-                        </div>
-
-                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                            <button
-                                onClick={handleSaveWeek}
-                                disabled={isSubmitting}
-                                style={{
-                                    ...saveTextButton(isSubmitting),
-                                    padding: '10px 20px',
-                                }}
-                            >
-                                {isSubmitting ? 'Speichern...' : selectedWeek ? 'Aktualisieren' : 'Hinzufügen'}
-                            </button>
-                            <button
-                                onClick={() => {
-                                    setShowWeekForm(false);
-                                    setSelectedWeek(null);
-                                    setWeekFormData(null);
-                                }}
-                                disabled={isSubmitting}
-                                style={{
-                                    ...cancelTextButton(isSubmitting),
-                                    padding: '10px 20px',
-                                }}
-                            >
-                                Abbrechen
-                            </button>
                         </div>
                     </div>
                 </div>

@@ -186,7 +186,7 @@ CREATE TABLE IF NOT EXISTS weekly_work_requirements (
   employee_id TEXT NOT NULL,
   plan_id TEXT NOT NULL,
   required_weeks INTEGER NOT NULL CHECK(required_weeks >= 0),
-  assignment_style TEXT CHECK(assignment_style IN ('consecutive', 'scattered')) DEFAULT 'scattered',
+  assignment_style TEXT CHECK(assignment_style IN ('consecutive', 'scattered', 'flexible')) DEFAULT 'flexible',
   assignment_style_consecutive INTEGER DEFAULT 1,
   FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
   FOREIGN KEY (plan_id) REFERENCES weekly_plans(id) ON DELETE CASCADE,

@@ -40,7 +40,7 @@ function generateWeeksFromDateRange(startDate: string, endDate: string): Omit<Pl
       startDate: currentWeekStart.toISOString().split('T')[0],
       endDate: weekEnd.toISOString().split('T')[0],
       minEmployees: 2,
-      maxEmployees: 3,
+      maxEmployees: 4,
     });
 
     weekNumber++;
@@ -125,7 +125,7 @@ async function getWeeklyPlanById(planId: string): Promise<WeeklyPlanWithDetails 
       isTrainee: emp.is_trainee === 1,
       preferences: empPreferences,
       requiredWeeks: requirement?.required_weeks || 0,
-      assignmentStyle: requirement?.assignment_style || 'scattered',
+      assignmentStyle: requirement?.assignment_style || 'flexible',
       assignmentStyleConsecutive: requirement?.assignment_style_consecutive || 1,
       assignedWeeks,
     };
@@ -401,7 +401,7 @@ export const updateWorkRequirement = async (req: Request, res: Response): Promis
         employeeId,
         id,
         requiredWeeks || 0,
-        assignmentStyle || 'scattered',
+        assignmentStyle || 'flexible',
         assignmentStyleConsecutive || 1,
         requiredWeeks,
         assignmentStyle,
@@ -466,7 +466,7 @@ export const getMyPreferences = async (req: Request, res: Response): Promise<voi
         notes: p.notes,
       })),
       requiredWeeks: requirement?.required_weeks || 0,
-      assignmentStyle: requirement?.assignment_style || 'scattered',
+      assignmentStyle: requirement?.assignment_style || 'flexible',
       assignmentStyleConsecutive: requirement?.assignment_style_consecutive || 1,
     });
   } catch (error) {
@@ -481,7 +481,7 @@ export const saveMyPreferences = async (req: Request, res: Response): Promise<vo
     const {
       preferences,
       requiredWeeks,
-      assignmentStyle = 'scattered',
+      assignmentStyle = 'flexible',
       assignmentStyleConsecutive = 1
     }: SavePreferencesRequest = req.body;
 
@@ -564,7 +564,7 @@ export const saveEmployeePreferences = async (req: Request, res: Response): Prom
       employeeId,
       preferences,
       requiredWeeks,
-      assignmentStyle = 'scattered',
+      assignmentStyle = 'flexible',
       assignmentStyleConsecutive = 1
     }: AdminSavePreferencesRequest = req.body;
 
@@ -792,6 +792,7 @@ export const getPlanStatistics = async (req: Request, res: Response): Promise<vo
     const assignmentStyles = {
       consecutive: employees.filter(emp => emp.assignmentStyle === 'consecutive').length,
       scattered: employees.filter(emp => emp.assignmentStyle === 'scattered').length,
+      flexible: employees.filter(emp => emp.assignmentStyle === 'flexible').length,
     };
 
     const averageRequiredWeeks = employees.length > 0 ? totalRequiredWeeks / employees.length : 0;
@@ -807,6 +808,7 @@ export const getPlanStatistics = async (req: Request, res: Response): Promise<vo
       averageRequiredWeeks: Math.round(averageRequiredWeeks * 10) / 10,
       consecutiveStyleAssignments: assignmentStyles.consecutive,
       scatteredStyleAssignments: assignmentStyles.scattered,
+      flexibleStyleAssignments: assignmentStyles.flexible,
       preferencesDistribution: {
         preferred: employees.reduce((sum, emp) => sum + emp.preferences.filter(p => p.preferenceLevel === 1).length, 0),
         available: employees.reduce((sum, emp) => sum + emp.preferences.filter(p => p.preferenceLevel === 2).length, 0),

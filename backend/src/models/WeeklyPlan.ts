@@ -39,7 +39,7 @@ export interface WeeklyWorkRequirement {
   employeeId: string;
   planId: string;
   requiredWeeks: number;
-  assignmentStyle: 'consecutive' | 'scattered';
+  assignmentStyle: 'consecutive' | 'scattered' | 'flexible';
   assignmentStyleConsecutive: number;
 }
 
@@ -75,7 +75,7 @@ export interface SavePreferencesRequest {
     notes?: string;
   }[];
   requiredWeeks: number;
-  assignmentStyle?: 'consecutive' | 'scattered';
+  assignmentStyle?: 'consecutive' | 'scattered' | 'flexible';
   assignmentStyleConsecutive?: number;
 }
 
@@ -87,7 +87,7 @@ export interface AdminSavePreferencesRequest {
     notes?: string;
   }[];
   requiredWeeks: number;
-  assignmentStyle?: 'consecutive' | 'scattered';
+  assignmentStyle?: 'consecutive' | 'scattered' | 'flexible';
   assignmentStyleConsecutive?: number;
 }
 
@@ -98,7 +98,7 @@ export interface UpdateWeekRequest {
 
 export interface UpdateWorkRequirementRequest {
   requiredWeeks?: number;
-  assignmentStyle?: 'consecutive' | 'scattered';
+  assignmentStyle?: 'consecutive' | 'scattered' | 'flexible';
   assignmentStyleConsecutive?: number;
 }
 
@@ -122,7 +122,7 @@ export interface EmployeeWithPreferences {
     notes?: string;
   }[];
   requiredWeeks: number;
-  assignmentStyle: 'consecutive' | 'scattered';
+  assignmentStyle: 'consecutive' | 'scattered' | 'flexible';
   assignmentStyleConsecutive: number;
   assignedWeeks: string[]; // Array of weekIds
 }
@@ -130,7 +130,7 @@ export interface EmployeeWithPreferences {
 export interface EmployeeWorkRequirement {
   employeeId: string;
   requiredWeeks: number;
-  assignmentStyle: 'consecutive' | 'scattered';
+  assignmentStyle: 'consecutive' | 'scattered' | 'flexible';
   assignmentStyleConsecutive: number;
 }
 
@@ -143,7 +143,7 @@ export interface MyPreferencesResponse {
     notes?: string;
   }[];
   requiredWeeks: number;
-  assignmentStyle: 'consecutive' | 'scattered';
+  assignmentStyle: 'consecutive' | 'scattered' | 'flexible';
   assignmentStyleConsecutive: number;
 }
 

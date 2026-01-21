@@ -453,14 +453,6 @@ const ShiftPlanView: React.FC = () => {
       console.log('- Shift Patterns:', shiftPlan.shifts?.length || 0);
       console.log('- Scheduled Shifts:', scheduledShifts.length);
 
-      // DEBUG: Show shift pattern IDs
-      /*if (shiftPlan.shifts) {
-        console.log('📋 SHIFT PATTERN IDs:');
-        shiftPlan.shifts.forEach((shift, index) => {
-          console.log(`   ${index + 1}. ${shift.id} (Day ${shift.dayOfWeek}, TimeSlot ${shift.timeSlotId})`);
-        });
-      }*/
-
       const constraints = {
         enforceNoTraineeAlone: true,
         enforceExperiencedWithChef: true,

@@ -298,7 +298,7 @@
       },
       "Patrick": {
         "required_weeks": 3,
-        "assignment_style": "scattered",
+        "assignment_style": "flexible",
         "assignment_style_consecutive": 1,
         "preferences": {
           "40": 2,
@@ -324,7 +324,7 @@
       },
       "Fabian": {
         "required_weeks": 3,
-        "assignment_style": "scattered",
+        "assignment_style": "flexible",
         "assignment_style_consecutive": 1,
         "preferences": {
           "40": 3,
@@ -337,7 +337,7 @@
       },
       "Lu": {
         "required_weeks": 2,
-        "assignment_style": "consecutive",
+        "assignment_style": "flexible",
         "assignment_style_consecutive": 1,
         "preferences": {
           "40": 2,
@@ -402,7 +402,7 @@
       },
       "Nico": {
         "required_weeks": 2,
-        "assignment_style": "consecutive",
+        "assignment_style": "flexible",
         "assignment_style_consecutive": 1,
         "preferences": {
           "40": 2,

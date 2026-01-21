@@ -84,7 +84,7 @@ export class WeeklySchedulingService {
 
       console.log(`  ${emp.firstname} ${emp.lastname}${emp.isTrainee ? ' (T)' : ''}: `
         + `Wants ${empReq?.requiredWeeks || 0} weeks, `
-        + `Style: ${empReq?.assignmentStyle || 'scattered'}, `
+        + `Style: ${empReq?.assignmentStyle || 'flexible'}, `
         + `Block: ${empReq?.assignmentStyleConsecutive || 1}, `
         + `Prefs: ${pref1} preferred, ${pref2} available, ${pref3} unavailable`);
     });
@@ -132,7 +132,7 @@ export class WeeklySchedulingService {
       requirements: requirements.map(req => ({
         employeeId: req.employeeId,
         requiredWeeks: req.requiredWeeks,
-        assignmentStyle: req.assignmentStyle || 'scattered',
+        assignmentStyle: req.assignmentStyle || 'flexible',
         assignmentStyleConsecutive: req.assignmentStyleConsecutive || 1,
       })),
       constraints: {
