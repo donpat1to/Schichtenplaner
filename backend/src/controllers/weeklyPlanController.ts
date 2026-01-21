@@ -8,8 +8,10 @@ import {
   SavePreferencesRequest,
   AdminSavePreferencesRequest,
   UpdateWeekRequest,
+  UpdateWorkRequirementRequest,
   WeeklyPlanWithDetails,
   PlanWeek,
+  EmployeeWithPreferences,
 } from '../models/WeeklyPlan.js';
 import { AuthRequest } from '../middleware/auth.js';
 import ExcelJS from 'exceljs';
@@ -85,9 +87,9 @@ async function getWeeklyPlanById(planId: string): Promise<WeeklyPlanWithDetails 
     WHERE plan_id = ?
   `, [planId]);
 
-  // Get requirements for all employees
+  // Get requirements for all employees (with new fields)
   const allRequirements = await db.all<any>(`
-    SELECT employee_id, required_weeks
+    SELECT employee_id, required_weeks, assignment_style, assignment_block_size
     FROM weekly_work_requirements
     WHERE plan_id = ?
   `, [planId]);
@@ -100,12 +102,12 @@ async function getWeeklyPlanById(planId: string): Promise<WeeklyPlanWithDetails 
   `, [planId]);
 
   // Map employees with their preferences, requirements and assignments
-  const employeesWithPreferences = employees.map((emp: any) => {
+  const employeesWithPreferences: EmployeeWithPreferences[] = employees.map((emp: any) => {
     const empPreferences = allPreferences
       .filter((p: any) => p.employee_id === emp.id)
       .map((p: any) => ({
         weekId: p.week_id,
-        preferenceLevel: p.preference_level,
+        preferenceLevel: p.preference_level as 1 | 2 | 3,
         notes: p.notes,
       }));
 
@@ -123,6 +125,8 @@ async function getWeeklyPlanById(planId: string): Promise<WeeklyPlanWithDetails 
       isTrainee: emp.is_trainee === 1,
       preferences: empPreferences,
       requiredWeeks: requirement?.required_weeks || 0,
+      assignmentStyle: requirement?.assignment_style || 'scattered',
+      assignmentStyleConsecutive: requirement?.assignment_style_consecutive || 1,
       assignedWeeks,
     };
   });
@@ -133,7 +137,7 @@ async function getWeeklyPlanById(planId: string): Promise<WeeklyPlanWithDetails 
     description: plan.description,
     startDate: plan.start_date,
     endDate: plan.end_date,
-    status: plan.status,
+    status: plan.status as 'draft' | 'published' | 'archived',
     createdBy: plan.created_by,
     createdAt: plan.created_at,
     createdByName: plan.created_by_name,
@@ -161,13 +165,25 @@ export const getWeeklyPlans = async (req: Request, res: Response): Promise<void>
       ORDER BY wp.created_at DESC
     `);
 
-    // Get week counts for each plan
+    // Get week counts and assignment statistics for each plan
     const plansWithCounts = await Promise.all(
       plans.map(async (plan: any) => {
         const weekCount = await db.get<any>(
           'SELECT COUNT(*) as count FROM plan_weeks WHERE plan_id = ?',
           [plan.id]
         );
+
+        const assignmentCount = await db.get<any>(
+          'SELECT COUNT(*) as count FROM weekly_assignments WHERE plan_id = ?',
+          [plan.id]
+        );
+
+        const employeeCount = await db.get<any>(`
+          SELECT COUNT(DISTINCT employee_id) as count 
+          FROM weekly_work_requirements 
+          WHERE plan_id = ?
+        `, [plan.id]);
+
         return {
           id: plan.id,
           name: plan.name,
@@ -179,6 +195,8 @@ export const getWeeklyPlans = async (req: Request, res: Response): Promise<void>
           createdAt: plan.created_at,
           createdByName: plan.created_by_name,
           weekCount: weekCount?.count || 0,
+          assignmentCount: assignmentCount?.count || 0,
+          employeeCount: employeeCount?.count || 0,
         };
       })
     );
@@ -346,6 +364,69 @@ export const updateWeek = async (req: Request, res: Response): Promise<void> => 
   }
 };
 
+// ===== Work Requirements Management =====
+
+export const updateWorkRequirement = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id, employeeId } = req.params;
+    const { requiredWeeks, assignmentStyle, assignmentStyleConsecutive }: UpdateWorkRequirementRequest = req.body;
+
+    const plan = await db.get('SELECT * FROM weekly_plans WHERE id = ?', [id]);
+    if (!plan) {
+      res.status(404).json({ error: 'Weekly plan not found' });
+      return;
+    }
+
+    const employee = await db.get('SELECT * FROM employees WHERE id = ?', [employeeId]);
+    if (!employee) {
+      res.status(404).json({ error: 'Employee not found' });
+      return;
+    }
+
+    // Validate assignment block size
+    if (assignmentStyleConsecutive !== undefined && (assignmentStyleConsecutive < 1 || assignmentStyleConsecutive > 10)) {
+      res.status(400).json({ error: 'Assignment block size must be between 1 and 10' });
+      return;
+    }
+
+    await db.run(
+      `INSERT INTO weekly_work_requirements (id, employee_id, plan_id, required_weeks, assignment_style, assignment_block_size)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(employee_id, plan_id) DO UPDATE SET
+         required_weeks = COALESCE(?, required_weeks),
+         assignment_style = COALESCE(?, assignment_style),
+         assignment_block_size = COALESCE(?, assignment_block_size)`,
+      [
+        uuidv4(),
+        employeeId,
+        id,
+        requiredWeeks || 0,
+        assignmentStyle || 'scattered',
+        assignmentStyleConsecutive || 1,
+        requiredWeeks,
+        assignmentStyle,
+        assignmentStyleConsecutive
+      ]
+    );
+
+    const updatedRequirement = await db.get<any>(`
+      SELECT * FROM weekly_work_requirements 
+      WHERE plan_id = ? AND employee_id = ?
+    `, [id, employeeId]);
+
+    res.json({
+      employeeId: employeeId,
+      planId: id,
+      requiredWeeks: updatedRequirement.required_weeks,
+      assignmentStyle: updatedRequirement.assignment_style,
+      assignmentBlockSize: updatedRequirement.assignment_block_size,
+    });
+  } catch (error) {
+    console.error('Error updating work requirement:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 // ===== Preferences Management =====
 
 export const getMyPreferences = async (req: Request, res: Response): Promise<void> => {
@@ -371,7 +452,7 @@ export const getMyPreferences = async (req: Request, res: Response): Promise<voi
     `, [id, userId]);
 
     const requirement = await db.get<any>(`
-      SELECT required_weeks
+      SELECT required_weeks, assignment_style, assignment_block_size
       FROM weekly_work_requirements
       WHERE plan_id = ? AND employee_id = ?
     `, [id, userId]);
@@ -385,6 +466,8 @@ export const getMyPreferences = async (req: Request, res: Response): Promise<voi
         notes: p.notes,
       })),
       requiredWeeks: requirement?.required_weeks || 0,
+      assignmentStyle: requirement?.assignment_style || 'scatter',
+      assignmentBlockSize: requirement?.assignment_block_size || 1,
     });
   } catch (error) {
     console.error('Error fetching my preferences:', error);
@@ -395,7 +478,13 @@ export const getMyPreferences = async (req: Request, res: Response): Promise<voi
 export const saveMyPreferences = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { preferences, requiredWeeks }: SavePreferencesRequest = req.body;
+    const {
+      preferences,
+      requiredWeeks,
+      assignmentStyle = 'scattered',
+      assignmentStyleConsecutive = 1
+    }: SavePreferencesRequest = req.body;
+
     const userId = (req as AuthRequest).user?.userId;
 
     if (!userId) {
@@ -406,6 +495,12 @@ export const saveMyPreferences = async (req: Request, res: Response): Promise<vo
     const plan = await db.get('SELECT * FROM weekly_plans WHERE id = ?', [id]);
     if (!plan) {
       res.status(404).json({ error: 'Weekly plan not found' });
+      return;
+    }
+
+    // Validate assignment block size
+    if (assignmentStyleConsecutive < 1 || assignmentStyleConsecutive > 10) {
+      res.status(400).json({ error: 'Assignment block size must be between 1 and 10' });
       return;
     }
 
@@ -428,12 +523,25 @@ export const saveMyPreferences = async (req: Request, res: Response): Promise<vo
         );
       }
 
-      // Upsert work requirement
+      // Upsert work requirement with new fields
       await db.run(
-        `INSERT INTO weekly_work_requirements (id, employee_id, plan_id, required_weeks)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(employee_id, plan_id) DO UPDATE SET required_weeks = ?`,
-        [uuidv4(), userId, id, requiredWeeks, requiredWeeks]
+        `INSERT INTO weekly_work_requirements (id, employee_id, plan_id, required_weeks, assignment_style, assignment_block_size)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(employee_id, plan_id) DO UPDATE SET 
+           required_weeks = ?,
+           assignment_style = ?,
+           assignment_block_size = ?`,
+        [
+          uuidv4(),
+          userId,
+          id,
+          requiredWeeks,
+          assignmentStyle,
+          assignmentStyleConsecutive,
+          requiredWeeks,
+          assignmentStyle,
+          assignmentStyleConsecutive
+        ]
       );
 
       await db.run('COMMIT');
@@ -452,11 +560,23 @@ export const saveMyPreferences = async (req: Request, res: Response): Promise<vo
 export const saveEmployeePreferences = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { employeeId, preferences, requiredWeeks }: AdminSavePreferencesRequest = req.body;
+    const {
+      employeeId,
+      preferences,
+      requiredWeeks,
+      assignmentStyle = 'scattered',
+      assignmentStyleConsecutive = 1
+    }: AdminSavePreferencesRequest = req.body;
 
     const plan = await db.get('SELECT * FROM weekly_plans WHERE id = ?', [id]);
     if (!plan) {
       res.status(404).json({ error: 'Weekly plan not found' });
+      return;
+    }
+
+    // Validate assignment block size
+    if (assignmentStyleConsecutive < 1 || assignmentStyleConsecutive > 10) {
+      res.status(400).json({ error: 'Assignment block size must be between 1 and 10' });
       return;
     }
 
@@ -479,12 +599,25 @@ export const saveEmployeePreferences = async (req: Request, res: Response): Prom
         );
       }
 
-      // Upsert work requirement
+      // Upsert work requirement with new fields
       await db.run(
-        `INSERT INTO weekly_work_requirements (id, employee_id, plan_id, required_weeks)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(employee_id, plan_id) DO UPDATE SET required_weeks = ?`,
-        [uuidv4(), employeeId, id, requiredWeeks, requiredWeeks]
+        `INSERT INTO weekly_work_requirements (id, employee_id, plan_id, required_weeks, assignment_style, assignment_block_size)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(employee_id, plan_id) DO UPDATE SET 
+           required_weeks = ?,
+           assignment_style = ?,
+           assignment_block_size = ?`,
+        [
+          uuidv4(),
+          employeeId,
+          id,
+          requiredWeeks,
+          assignmentStyle,
+          assignmentStyleConsecutive,
+          requiredWeeks,
+          assignmentStyle,
+          assignmentStyleConsecutive
+        ]
       );
 
       await db.run('COMMIT');
@@ -547,6 +680,8 @@ export const generateAssignments = async (req: Request, res: Response): Promise<
         employeeId: emp.id,
         planId: id,
         requiredWeeks: emp.requiredWeeks,
+        assignmentStyle: emp.assignmentStyle,
+        assignmentStyleConsecutive: emp.assignmentStyleConsecutive,
       })) || [],
     });
 
@@ -638,6 +773,54 @@ export const publishPlan = async (req: Request, res: Response): Promise<void> =>
   }
 };
 
+// ===== Statistics =====
+
+export const getPlanStatistics = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const plan = await getWeeklyPlanById(id);
+
+    if (!plan) {
+      res.status(404).json({ error: 'Weekly plan not found' });
+      return;
+    }
+
+    const employees = plan.employees || [];
+    const assignmentsCount = employees.reduce((sum, emp) => sum + emp.assignedWeeks.length, 0);
+    const totalRequiredWeeks = employees.reduce((sum, emp) => sum + emp.requiredWeeks, 0);
+
+    const assignmentStyles = {
+      consecutive: employees.filter(emp => emp.assignmentStyle === 'consecutive').length,
+      scatter: employees.filter(emp => emp.assignmentStyle === 'scattered').length,
+    };
+
+    const averageRequiredWeeks = employees.length > 0 ? totalRequiredWeeks / employees.length : 0;
+    const coverageRate = plan.weeks.length > 0 ? assignmentsCount / (plan.weeks.length * 2) : 0; // Assuming 2 employees per week as target
+
+    const statistics = {
+      totalWeeks: plan.weeks.length,
+      totalAssignedWeeks: assignmentsCount,
+      totalRequiredWeeks,
+      coverageRate: Math.round(coverageRate * 100),
+      employeesCount: employees.length,
+      employeesWithPreferences: employees.filter(emp => emp.preferences.length > 0).length,
+      averageRequiredWeeks: Math.round(averageRequiredWeeks * 10) / 10,
+      consecutiveStyleAssignments: assignmentStyles.consecutive,
+      scatterStyleAssignments: assignmentStyles.scatter,
+      preferencesDistribution: {
+        preferred: employees.reduce((sum, emp) => sum + emp.preferences.filter(p => p.preferenceLevel === 1).length, 0),
+        available: employees.reduce((sum, emp) => sum + emp.preferences.filter(p => p.preferenceLevel === 2).length, 0),
+        unavailable: employees.reduce((sum, emp) => sum + emp.preferences.filter(p => p.preferenceLevel === 3).length, 0),
+      },
+    };
+
+    res.json(statistics);
+  } catch (error) {
+    console.error('Error fetching plan statistics:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 // ===== Export Functions =====
 
 export const exportWeeklyPlanToExcel = async (req: Request, res: Response): Promise<void> => {
@@ -673,6 +856,7 @@ export const exportWeeklyPlanToExcel = async (req: Request, res: Response): Prom
       { property: 'Status', value: plan.status },
       { property: 'Erstellt von', value: plan.createdByName || 'Unbekannt' },
       { property: 'Anzahl Wochen', value: plan.weeks.length },
+      { property: 'Anzahl Mitarbeiter', value: plan.employees?.length || 0 },
     ]);
 
     const header = summarySheet.getRow(1);
@@ -683,7 +867,7 @@ export const exportWeeklyPlanToExcel = async (req: Request, res: Response): Prom
     const assignmentsSheet = workbook.addWorksheet('Wochenzuweisungen');
 
     // Header row: Week columns
-    const headerRow = ['Mitarbeiter', 'Gewünschte Wochen', ...plan.weeks.map(w => `KW ${w.weekNumber}`)];
+    const headerRow = ['Mitarbeiter', 'Gewünschte Wochen', 'Zuteilungsstil', 'Blockgröße', ...plan.weeks.map(w => `KW ${w.weekNumber}`)];
     const assignmentHeader = assignmentsSheet.addRow(headerRow);
     assignmentHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
     assignmentHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2C3E50' } };
@@ -693,6 +877,8 @@ export const exportWeeklyPlanToExcel = async (req: Request, res: Response): Prom
       const rowData: any[] = [
         `${emp.firstname} ${emp.lastname}${emp.isTrainee ? ' (T)' : ''}`,
         emp.requiredWeeks,
+        emp.assignmentStyle === 'consecutive' ? 'Konsekutiv' : 'Verteilt',
+        emp.assignmentStyleConsecutive,
       ];
 
       plan.weeks.forEach(week => {
@@ -704,19 +890,69 @@ export const exportWeeklyPlanToExcel = async (req: Request, res: Response): Prom
 
       // Color assigned cells
       plan.weeks.forEach((week, idx) => {
-        const cell = row.getCell(idx + 3);
+        const cell = row.getCell(idx + 5); // +5 because we have 4 columns before weeks
         if (emp.assignedWeeks.includes(week.id)) {
           cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF90EE90' } };
           cell.alignment = { horizontal: 'center' };
         }
       });
+
+      // Color consecutive style employees differently
+      const styleCell = row.getCell(3);
+      if (emp.assignmentStyle === 'consecutive') {
+        styleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0E68C' } };
+        styleCell.alignment = { horizontal: 'center' };
+      }
     });
 
     // Adjust column widths
     assignmentsSheet.getColumn(1).width = 25;
     assignmentsSheet.getColumn(2).width = 18;
-    for (let i = 3; i <= plan.weeks.length + 2; i++) {
+    assignmentsSheet.getColumn(3).width = 15;
+    assignmentsSheet.getColumn(4).width = 12;
+    for (let i = 5; i <= plan.weeks.length + 4; i++) {
       assignmentsSheet.getColumn(i).width = 12;
+    }
+
+    // Preferences sheet
+    const preferencesSheet = workbook.addWorksheet('Präferenzen');
+    const prefHeaderRow = ['Mitarbeiter', ...plan.weeks.map(w => `KW ${w.weekNumber}`)];
+    const prefHeader = preferencesSheet.addRow(prefHeaderRow);
+    prefHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    prefHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2C3E50' } };
+
+    plan.employees?.forEach(emp => {
+      const rowData: any[] = [`${emp.firstname} ${emp.lastname}`];
+
+      plan.weeks.forEach(week => {
+        const preference = emp.preferences.find(p => p.weekId === week.id);
+        let value = '';
+        let color = '';
+
+        if (preference) {
+          switch (preference.preferenceLevel) {
+            case 1: value = '✓'; color = 'FF90EE90'; break; // Green for preferred
+            case 2: value = '○'; color = 'FFFFFF99'; break; // Yellow for available
+            case 3: value = '✗'; color = 'FFFF9999'; break; // Red for unavailable
+          }
+        }
+        rowData.push(value);
+
+        const row = preferencesSheet.getRow(preferencesSheet.rowCount);
+        const cell = row.getCell(rowData.length);
+        if (color) {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: color } };
+        }
+        cell.alignment = { horizontal: 'center' };
+      });
+
+      preferencesSheet.addRow(rowData);
+    });
+
+    // Adjust column widths for preferences sheet
+    preferencesSheet.getColumn(1).width = 25;
+    for (let i = 2; i <= plan.weeks.length + 1; i++) {
+      preferencesSheet.getColumn(i).width = 12;
     }
 
     // Send file
@@ -772,16 +1008,35 @@ export const exportWeeklyPlanToPDF = async (req: Request, res: Response): Promis
       padding: 15px;
       border-radius: 5px;
       margin-bottom: 30px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 15px;
+    }
+    .info-item {
+      padding: 10px;
+      background: white;
+      border-radius: 3px;
+      border-left: 4px solid #3498db;
+    }
+    .info-item strong {
+      display: block;
+      margin-bottom: 5px;
+      color: #2c3e50;
+    }
+    .info-item span {
+      color: #34495e;
     }
     .info-section h2 {
       font-size: 14pt;
       margin-bottom: 12px;
       color: #34495e;
+      grid-column: 1 / -1;
     }
     table {
       width: 100%;
       border-collapse: collapse;
       margin-bottom: 20px;
+      page-break-inside: avoid;
     }
     thead { background: #2c3e50; color: white; }
     thead th {
@@ -795,13 +1050,89 @@ export const exportWeeklyPlanToPDF = async (req: Request, res: Response): Promis
       border: 1px solid #dee2e6;
       text-align: center;
     }
-    .assigned { background: #90EE90; }
+    .assigned { background: #90EE90 !important; }
+    .block-style { background: #F0E68C !important; }
     .trainee { color: #CDA8F0; font-weight: bold; }
     .legend {
       margin-top: 15px;
       padding: 10px;
       background: #f8f9fa;
       border-radius: 5px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .legend-color {
+      width: 20px;
+      height: 20px;
+      border-radius: 3px;
+    }
+    .green { background: #90EE90; }
+    .yellow { background: #F0E68C; }
+    .red { background: #FF9999; }
+    .pref-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 20px;
+      margin-top: 20px;
+    }
+    .employee-card {
+      border: 1px solid #dee2e6;
+      border-radius: 5px;
+      padding: 15px;
+      background: #f8f9fa;
+    }
+    .employee-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #dee2e6;
+    }
+    .employee-name {
+      font-weight: bold;
+      font-size: 11pt;
+    }
+    .employee-details {
+      display: flex;
+      gap: 15px;
+      font-size: 9pt;
+      color: #7f8c8d;
+    }
+    .preferences-list {
+      list-style: none;
+    }
+    .preference-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 5px 0;
+      border-bottom: 1px dotted #dee2e6;
+    }
+    .preference-week {
+      font-weight: 500;
+    }
+    .preference-level-1 { color: #27ae60; }
+    .preference-level-2 { color: #f39c12; }
+    .preference-level-3 { color: #e74c3c; }
+    .footer {
+      margin-top: 30px;
+      text-align: center;
+      font-size: 9pt;
+      color: #95a5a6;
+      border-top: 1px solid #ecf0f1;
+      padding-top: 10px;
+    }
+    @media print {
+      body { padding: 10px; }
+      .legend { break-inside: avoid; }
+      table { break-inside: avoid; }
+      .pref-grid { break-inside: avoid; }
     }
   </style>
 </head>
@@ -813,10 +1144,30 @@ export const exportWeeklyPlanToPDF = async (req: Request, res: Response): Promis
 
   <div class="info-section">
     <h2>Plan Informationen</h2>
-    <p><strong>Beschreibung:</strong> ${plan.description || 'Keine'}</p>
-    <p><strong>Status:</strong> ${plan.status}</p>
-    <p><strong>Erstellt von:</strong> ${plan.createdByName || 'Unbekannt'}</p>
-    <p><strong>Anzahl Wochen:</strong> ${plan.weeks.length}</p>
+    <div class="info-item">
+      <strong>Beschreibung:</strong>
+      <span>${plan.description || 'Keine'}</span>
+    </div>
+    <div class="info-item">
+      <strong>Status:</strong>
+      <span>${plan.status}</span>
+    </div>
+    <div class="info-item">
+      <strong>Erstellt von:</strong>
+      <span>${plan.createdByName || 'Unbekannt'}</span>
+    </div>
+    <div class="info-item">
+      <strong>Anzahl Wochen:</strong>
+      <span>${plan.weeks.length}</span>
+    </div>
+    <div class="info-item">
+      <strong>Anzahl Mitarbeiter:</strong>
+      <span>${plan.employees?.length || 0}</span>
+    </div>
+    <div class="info-item">
+      <strong>Gesamte Zuweisungen:</strong>
+      <span>${plan.employees?.reduce((sum, emp) => sum + emp.assignedWeeks.length, 0) || 0}</span>
+    </div>
   </div>
 
   <h2>Wochenzuweisungen</h2>
@@ -825,16 +1176,26 @@ export const exportWeeklyPlanToPDF = async (req: Request, res: Response): Promis
       <tr>
         <th>Mitarbeiter</th>
         <th>Wochen</th>
+        <th>Stil</th>
+        <th>Block</th>
         ${plan.weeks.map(w => `<th>KW ${w.weekNumber}<br/>${formatDate(w.startDate)}</th>`).join('')}
       </tr>
     </thead>
     <tbody>
       ${plan.employees?.map(emp => `
         <tr>
-          <td style="text-align: left;" class="${emp.isTrainee ? 'trainee' : ''}">${emp.firstname} ${emp.lastname}${emp.isTrainee ? ' (T)' : ''}</td>
+          <td style="text-align: left;" class="${emp.isTrainee ? 'trainee' : ''}">
+            ${emp.firstname} ${emp.lastname}${emp.isTrainee ? ' (T)' : ''}
+          </td>
           <td>${emp.requiredWeeks}</td>
+          <td class="${emp.assignmentStyle === 'consecutive' ? 'block-style' : ''}">
+            ${emp.assignmentStyle === 'consecutive' ? 'Block' : 'Verteilt'}
+          </td>
+          <td>${emp.assignmentStyleConsecutive}</td>
           ${plan.weeks.map(week => `
-            <td class="${emp.assignedWeeks.includes(week.id) ? 'assigned' : ''}">${emp.assignedWeeks.includes(week.id) ? '✓' : ''}</td>
+            <td class="${emp.assignedWeeks.includes(week.id) ? 'assigned' : ''}">
+              ${emp.assignedWeeks.includes(week.id) ? '✓' : ''}
+            </td>
           `).join('')}
         </tr>
       `).join('') || '<tr><td colspan="100%">Keine Mitarbeiter</td></tr>'}
@@ -842,7 +1203,68 @@ export const exportWeeklyPlanToPDF = async (req: Request, res: Response): Promis
   </table>
 
   <div class="legend">
-    <strong>Legende:</strong> ✓ = Zugewiesen, (T) = Trainee
+    <div class="legend-item">
+      <div class="legend-color green"></div>
+      <span>Zugewiesene Wochen</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color yellow"></div>
+      <span>Block-Zuteilung</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color"></div>
+      <span>(T) = Trainee</span>
+    </div>
+  </div>
+
+  <h2>Präferenzen der Mitarbeiter</h2>
+  <div class="pref-grid">
+    ${plan.employees?.map(emp => `
+      <div class="employee-card">
+        <div class="employee-header">
+          <div class="employee-name">
+            ${emp.firstname} ${emp.lastname}${emp.isTrainee ? ' (T)' : ''}
+          </div>
+          <div class="employee-details">
+            <span>${emp.requiredWeeks} Wochen</span>
+            <span>${emp.assignmentStyle === 'consecutive' ? 'Block' : 'Verteilt'}</span>
+            <span>${emp.assignedWeeks.length} zugewiesen</span>
+          </div>
+        </div>
+        <ul class="preferences-list">
+          ${emp.preferences.map(pref => {
+      const week = plan.weeks.find(w => w.id === pref.weekId);
+      return `
+            <li class="preference-item">
+              <span class="preference-week">KW ${week?.weekNumber || '?'}: ${week?.startDate || ''}</span>
+              <span class="preference-level-${pref.preferenceLevel}">
+                ${getPreferenceLabel(pref.preferenceLevel)}
+              </span>
+            </li>
+          `}).join('')}
+          ${emp.preferences.length === 0 ? '<li>Keine Präferenzen eingetragen</li>' : ''}
+        </ul>
+      </div>
+    `).join('') || '<p>Keine Mitarbeiter</p>'}
+  </div>
+
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-color green"></div>
+      <span>Bevorzugt (✓)</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color yellow"></div>
+      <span>Verfügbar (○)</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color red"></div>
+      <span>Nicht verfügbar (✗)</span>
+    </div>
+  </div>
+
+  <div class="footer">
+    Erstellt am ${new Date().toLocaleDateString('de-DE')} mit Schichtplaner System
   </div>
 </body>
 </html>
@@ -853,6 +1275,15 @@ export const exportWeeklyPlanToPDF = async (req: Request, res: Response): Promis
       return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
     }
 
+    function getPreferenceLabel(level: number): string {
+      switch (level) {
+        case 1: return '✓ Bevorzugt';
+        case 2: return '○ Verfügbar';
+        case 3: return '✗ Nicht verfügbar';
+        default: return '';
+      }
+    }
+
     browser = await chromium.launch({ headless: true });
     const context = await browser.newContext();
     const page = await context.newPage();
@@ -861,9 +1292,9 @@ export const exportWeeklyPlanToPDF = async (req: Request, res: Response): Promis
 
     const pdfBuffer = await page.pdf({
       format: 'A4',
-      landscape: plan.weeks.length > 6,
+      landscape: plan.weeks.length > 4,
       printBackground: true,
-      margin: { top: '20mm', right: '15mm', bottom: '20mm', left: '15mm' },
+      margin: { top: '15mm', right: '10mm', bottom: '15mm', left: '10mm' },
     });
 
     await browser.close();
