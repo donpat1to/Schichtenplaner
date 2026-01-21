@@ -1,0 +1,76 @@
+/* frontend/src/pages/ShiftPlans/ShiftPlanView.module.css */
+
+.container {
+    padding: 20px;
+    max-width: 100%;
+}
+
+/* Header styles (same as WeeklyPlanView) */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 20px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid #e0e0e0;
+}
+
+.headerLeft h1 {
+    margin: 0 0 10px 0;
+    font-size: 28px;
+    color: #2c3e50;
+}
+
+.headerMeta {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 8px;
+}
+
+.metaText {
+    color: #7f8c8d;
+    font-size: 14px;
+}
+
+.description {
+    color: #666;
+    font-size: 14px;
+    margin: 10px 0 0 0;
+    max-width: 600px;
+}
+
+.headerActions {
+    display: flex;
+    gap: 10px;
+}
+
+.backButton {
+    padding: 8px 16px;
+    background-color: #f1f1f1;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    color: #333;
+    font-size: 14px;
+}
+
+.backButton:hover {
+    background-color: #e4e4e4;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .header {
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .headerActions {
+        width: 100%;
+    }
+
+    .headerActions .backButton {
+        width: 100%;
+    }
+}

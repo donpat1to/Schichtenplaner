@@ -7,11 +7,16 @@ import {
   SavePreferencesRequest,
   MyPreferencesResponse,
   PlanWeek,
+  WeeklyPlanStatistics,
+  AdminSavePreferencesRequest,
 } from '../models/WeeklyPlan';
 import { apiClient } from './apiClient';
 
 export interface WeeklyPlanListItem extends WeeklyPlan {
   weekCount: number;
+  assignmentCount: number;
+  employeeCount: number;
+  createdByName?: string;
 }
 
 export interface GenerateResult {
@@ -20,6 +25,10 @@ export interface GenerateResult {
   violations: string[];
   resolutionReport: string[];
   processingTime: number;
+}
+
+export interface ExportOptions {
+  format: 'excel' | 'pdf';
 }
 
 export const weeklyPlanService = {
@@ -31,7 +40,7 @@ export const weeklyPlanService = {
       if (error.statusCode === 401) {
         localStorage.removeItem('token');
         localStorage.removeItem('employee');
-        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+        throw new Error('Nicht autorisiert - bitte erneut anmelden');
       }
       throw new Error('Fehler beim Laden der Wochenpläne');
     }
@@ -44,7 +53,7 @@ export const weeklyPlanService = {
       if (error.statusCode === 401) {
         localStorage.removeItem('token');
         localStorage.removeItem('employee');
-        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+        throw new Error('Nicht autorisiert - bitte erneut anmelden');
       }
       throw new Error('Wochenplan nicht gefunden');
     }
@@ -57,7 +66,10 @@ export const weeklyPlanService = {
       if (error.statusCode === 401) {
         localStorage.removeItem('token');
         localStorage.removeItem('employee');
-        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+        throw new Error('Nicht autorisiert - bitte erneut anmelden');
+      }
+      if (error.statusCode === 400) {
+        throw new Error('Name, Startdatum und Enddatum sind erforderlich');
       }
       throw new Error('Fehler beim Erstellen des Wochenplans');
     }
@@ -70,7 +82,10 @@ export const weeklyPlanService = {
       if (error.statusCode === 401) {
         localStorage.removeItem('token');
         localStorage.removeItem('employee');
-        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+        throw new Error('Nicht autorisiert - bitte erneut anmelden');
+      }
+      if (error.statusCode === 404) {
+        throw new Error('Wochenplan nicht gefunden');
       }
       throw new Error('Fehler beim Aktualisieren des Wochenplans');
     }
@@ -83,7 +98,10 @@ export const weeklyPlanService = {
       if (error.statusCode === 401) {
         localStorage.removeItem('token');
         localStorage.removeItem('employee');
-        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+        throw new Error('Nicht autorisiert - bitte erneut anmelden');
+      }
+      if (error.statusCode === 404) {
+        throw new Error('Wochenplan nicht gefunden');
       }
       throw new Error('Fehler beim Löschen des Wochenplans');
     }
@@ -97,7 +115,10 @@ export const weeklyPlanService = {
       if (error.statusCode === 401) {
         localStorage.removeItem('token');
         localStorage.removeItem('employee');
-        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+        throw new Error('Nicht autorisiert - bitte erneut anmelden');
+      }
+      if (error.statusCode === 404) {
+        throw new Error('Woche nicht gefunden');
       }
       throw new Error('Fehler beim Aktualisieren der Woche');
     }
@@ -111,7 +132,10 @@ export const weeklyPlanService = {
       if (error.statusCode === 401) {
         localStorage.removeItem('token');
         localStorage.removeItem('employee');
-        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+        throw new Error('Nicht autorisiert - bitte erneut anmelden');
+      }
+      if (error.statusCode === 404) {
+        throw new Error('Wochenplan nicht gefunden');
       }
       throw new Error('Fehler beim Laden der Präferenzen');
     }
@@ -124,7 +148,13 @@ export const weeklyPlanService = {
       if (error.statusCode === 401) {
         localStorage.removeItem('token');
         localStorage.removeItem('employee');
-        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+        throw new Error('Nicht autorisiert - bitte erneut anmelden');
+      }
+      if (error.statusCode === 400) {
+        if (error.message?.includes('Assignment block size')) {
+          throw new Error('Blockgröße muss zwischen 1 und 10 liegen');
+        }
+        throw new Error('Ungültige Präferenzdaten');
       }
       throw new Error('Fehler beim Speichern der Präferenzen');
     }
@@ -133,7 +163,7 @@ export const weeklyPlanService = {
   async saveEmployeePreferences(
     planId: string,
     employeeId: string,
-    data: SavePreferencesRequest
+    data: Omit<AdminSavePreferencesRequest, 'employeeId'>
   ): Promise<void> {
     try {
       await apiClient.post(`/weekly-plans/${planId}/admin-preferences`, {
@@ -144,7 +174,13 @@ export const weeklyPlanService = {
       if (error.statusCode === 401) {
         localStorage.removeItem('token');
         localStorage.removeItem('employee');
-        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+        throw new Error('Nicht autorisiert - bitte erneut anmelden');
+      }
+      if (error.statusCode === 400) {
+        if (error.message?.includes('Assignment block size')) {
+          throw new Error('Blockgröße muss zwischen 1 und 10 liegen');
+        }
+        throw new Error('Ungültige Präferenzdaten');
       }
       throw new Error('Fehler beim Speichern der Mitarbeiterpräferenzen');
     }
@@ -158,7 +194,13 @@ export const weeklyPlanService = {
       if (error.statusCode === 401) {
         localStorage.removeItem('token');
         localStorage.removeItem('employee');
-        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+        throw new Error('Nicht autorisiert - bitte erneut anmelden');
+      }
+      if (error.statusCode === 404) {
+        throw new Error('Wochenplan nicht gefunden');
+      }
+      if (error.statusCode === 500) {
+        throw new Error('Fehler beim Generieren der Zuweisungen. Bitte überprüfen Sie die Präferenzen.');
       }
       throw new Error('Fehler bei der Generierung der Zuweisungen');
     }
@@ -171,7 +213,10 @@ export const weeklyPlanService = {
       if (error.statusCode === 401) {
         localStorage.removeItem('token');
         localStorage.removeItem('employee');
-        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+        throw new Error('Nicht autorisiert - bitte erneut anmelden');
+      }
+      if (error.statusCode === 404) {
+        throw new Error('Wochenplan nicht gefunden');
       }
       throw new Error('Fehler beim Löschen der Zuweisungen');
     }
@@ -184,12 +229,32 @@ export const weeklyPlanService = {
       if (error.statusCode === 401) {
         localStorage.removeItem('token');
         localStorage.removeItem('employee');
-        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+        throw new Error('Nicht autorisiert - bitte erneut anmelden');
       }
       if (error.statusCode === 400) {
         throw new Error('Plan kann ohne Zuweisungen nicht veröffentlicht werden');
       }
+      if (error.statusCode === 404) {
+        throw new Error('Wochenplan nicht gefunden');
+      }
       throw new Error('Fehler beim Veröffentlichen des Plans');
+    }
+  },
+
+  // Statistics - NEW METHOD
+  async getPlanStatistics(planId: string): Promise<WeeklyPlanStatistics> {
+    try {
+      return await apiClient.get<WeeklyPlanStatistics>(`/weekly-plans/${planId}/statistics`);
+    } catch (error: any) {
+      if (error.statusCode === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('employee');
+        throw new Error('Nicht autorisiert - bitte erneut anmelden');
+      }
+      if (error.statusCode === 404) {
+        throw new Error('Wochenplan nicht gefunden');
+      }
+      throw new Error('Fehler beim Laden der Statistiken');
     }
   },
 
@@ -203,10 +268,13 @@ export const weeklyPlanService = {
       if (error.statusCode === 401) {
         localStorage.removeItem('token');
         localStorage.removeItem('employee');
-        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+        throw new Error('Nicht autorisiert - bitte erneut anmelden');
       }
       if (error.statusCode === 400) {
         throw new Error('Nur veröffentlichte Pläne können exportiert werden');
+      }
+      if (error.statusCode === 404) {
+        throw new Error('Wochenplan nicht gefunden');
       }
       throw new Error('Fehler beim Excel-Export');
     }
@@ -221,12 +289,74 @@ export const weeklyPlanService = {
       if (error.statusCode === 401) {
         localStorage.removeItem('token');
         localStorage.removeItem('employee');
-        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+        throw new Error('Nicht autorisiert - bitte erneut anmelden');
       }
       if (error.statusCode === 400) {
         throw new Error('Nur veröffentlichte Pläne können exportiert werden');
       }
+      if (error.statusCode === 404) {
+        throw new Error('Wochenplan nicht gefunden');
+      }
       throw new Error('Fehler beim PDF-Export');
+    }
+  },
+
+  // Helper method to download exported file
+  async downloadExportedFile(planId: string, format: 'excel' | 'pdf'): Promise<void> {
+    try {
+      let blob: Blob;
+      let filename: string;
+
+      if (format === 'excel') {
+        blob = await this.exportToExcel(planId);
+        filename = `Wochenplan_Export.xlsx`;
+      } else {
+        blob = await this.exportToPDF(planId);
+        filename = `Wochenplan_Export.pdf`;
+      }
+
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error: any) {
+      throw error;
+    }
+  },
+
+  // Method to get work requirements for an employee (for admin usage)
+  async updateWorkRequirement(
+    planId: string,
+    employeeId: string,
+    data: {
+      requiredWeeks?: number;
+      assignmentStyle?: 'consecutive' | 'scattered';
+      assignmentStyleConsecutive?: number;
+    }
+  ): Promise<any> {
+    try {
+      return await apiClient.put(`/weekly-plans/${planId}/work-requirements/${employeeId}`, data);
+    } catch (error: any) {
+      if (error.statusCode === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('employee');
+        throw new Error('Nicht autorisiert - bitte erneut anmelden');
+      }
+      if (error.statusCode === 400) {
+        if (error.message?.includes('Assignment block size')) {
+          throw new Error('Blockgröße muss zwischen 1 und 10 liegen');
+        }
+        throw new Error('Ungültige Daten');
+      }
+      if (error.statusCode === 404) {
+        throw new Error('Wochenplan oder Mitarbeiter nicht gefunden');
+      }
+      throw new Error('Fehler beim Aktualisieren der Arbeitsanforderungen');
     }
   },
 };

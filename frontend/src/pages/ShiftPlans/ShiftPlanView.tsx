@@ -11,6 +11,7 @@ import { Employee, EmployeeAvailability } from '../../models/Employee';
 import { useNotification } from '../../contexts/NotificationContext';
 import { formatDate, formatTime } from '../../utils/foramatters';
 import { saveAs } from 'file-saver';
+import styles from './ShiftPlanView.module.css';
 
 // Local interface extensions (same as AvailabilityManager)
 interface ExtendedTimeSlot extends TimeSlot {
@@ -209,7 +210,7 @@ const ShiftPlanView: React.FC = () => {
 
       const minutesA = timeToMinutes(a.startTime);
       const minutesB = timeToMinutes(b.startTime);
-      
+
       return minutesA - minutesB; // Ascending order (earliest first)
     });
 
@@ -1089,68 +1090,65 @@ const ShiftPlanView: React.FC = () => {
 
   return (
     <div style={{ padding: '20px' }}>
-      {/* Header with Plan Information and Actions */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: '20px'
-      }}>
-        <div>
+      {/* Header */}
+      <div className={styles.header}>
+        <div className={styles.headerLeft}>
           <h1>{shiftPlan.name}</h1>
-          <p style={{ color: '#666', margin: 0 }}>
-            {shiftPlan.startDate && shiftPlan.endDate &&
-              `Zeitraum: ${formatDate(shiftPlan.startDate)} - ${formatDate(shiftPlan.endDate)}`
-            }
-          </p>
-          <div style={{
-            display: 'inline-block',
-            padding: '4px 12px',
-            backgroundColor: shiftPlan.status === 'published' ? '#2ecc71' : '#f1c40f',
-            color: 'white',
-            borderRadius: '20px',
-            fontSize: '14px',
-            fontWeight: 'bold',
-            marginTop: '5px'
-          }}>
-            {shiftPlan.status === 'published' ? 'Veröffentlicht' : 'Entwurf'}
+          <div className={styles.headerMeta}>
+            <div style={{
+              backgroundColor: shiftPlan.status === 'published' ? '#d5f4e6' :
+                shiftPlan.status === 'archived' ? '#f8f9fa' : '#fef5e7',
+              color: shiftPlan.status === 'published' ? '#27ae60' :
+                shiftPlan.status === 'archived' ? '#95a5a6' : '#f39c12',
+              padding: '4px 12px',
+              borderRadius: '12px',
+              fontSize: '13px',
+              fontWeight: 'bold',
+            }}>
+              {shiftPlan.status === 'published' ? 'Veröffentlicht' :
+                shiftPlan.status === 'archived' ? 'Archiviert' : 'Entwurf'}
+            </div>
+            <span className={styles.metaText}>
+              {shiftPlan.startDate && shiftPlan.endDate &&
+                `Zeitraum: ${formatDate(shiftPlan.startDate)} - ${formatDate(shiftPlan.endDate)}`
+              }
+              {shiftPlan.shifts && shiftPlan.timeSlots &&
+                ` | ${shiftPlan.shifts.length} Schichten | ${shiftPlan.timeSlots.length} Zeitslots`
+              }
+            </span>
           </div>
-        </div>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          {/* "Zuweisungen neu berechnen" button */}
-          {shiftPlan.status === 'published' && hasRole(['admin', 'maintenance']) && (
-            <button
-              onClick={handleRecreateAssignments}
-              disabled={recreating}
-              style={{
-                padding: '10px 20px',
-                backgroundColor: '#e74c3c',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: recreating ? 'not-allowed' : 'pointer',
-                fontWeight: 'bold'
-              }}
-            >
-              {recreating ? 'Lösche Zuweisungen...' : 'Zuweisungen neu berechnen'}
-            </button>
+          {shiftPlan.description && (
+            <p className={styles.description}>{shiftPlan.description}</p>
           )}
-
+        </div>
+        <div className={styles.headerActions}>
           <button
             onClick={() => navigate('/shift-plans')}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: '#95a5a6',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}
+            className={styles.backButton}
           >
-            Zurück zur Übersicht
+            Zurück
           </button>
         </div>
       </div>
+
+      {/* "Zuweisungen neu berechnen" button */}
+      {shiftPlan.status === 'published' && hasRole(['admin', 'maintenance']) && (
+        <button
+          onClick={handleRecreateAssignments}
+          disabled={recreating}
+          style={{
+            padding: '10px 20px',
+            backgroundColor: '#e74c3c',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: recreating ? 'not-allowed' : 'pointer',
+            fontWeight: 'bold'
+          }}
+        >
+          {recreating ? 'Lösche Zuweisungen...' : 'Zuweisungen neu berechnen'}
+        </button>
+      )}
 
       {/* Availability Status - only show for drafts */}
       {shiftPlan.status === 'draft' && (
@@ -1456,7 +1454,7 @@ const ShiftPlanView: React.FC = () => {
               style={{
                 transform: exportType ? `translateX(-${dropdownWidth}px)` : 'translateX(0)',
                 transition: 'transform 0.3s ease-in-out',
-                position: 'relative' 
+                position: 'relative'
               }}
             >
               <select

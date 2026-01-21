@@ -49,8 +49,8 @@ interface TestData {
         employee_preferences: {
             [employeeName: string]: {
                 required_weeks: number;
-                assignment_style: 'block' | 'scatter';
-                assignment_block_size: number;
+                assignment_style: 'consecutive' | 'scattered';
+                assignment_style_consecutive: number;
                 preferences: { [weekNumber: string]: number };
             };
         };
@@ -350,11 +350,11 @@ export async function seedTestData(): Promise<void> {
                 console.log(`   - Weeks: ${testData.weekly_plan.weeks.length}`);
 
                 // Count assignment styles
-                const styles = { block: 0, scatter: 0 };
+                const styles = { consecutive: 0, scattered: 0 };
                 Object.values(testData.weekly_plan.employee_preferences).forEach(emp => {
                     styles[emp.assignment_style]++;
                 });
-                console.log(`   - Assignment Styles: ${styles.block} block, ${styles.scatter} scatter`);
+                console.log(`   - Assignment Styles: ${styles.consecutive} consecutive, ${styles.scattered} scattered`);
             }
 
         } catch (error) {
@@ -443,7 +443,7 @@ async function seedWeeklyPlanData(
         await db.run(
             `INSERT INTO weekly_work_requirements (
                 id, employee_id, plan_id, required_weeks,
-                assignment_style, assignment_block_size
+                assignment_style, assignment_style_consecutive
             ) VALUES (?, ?, ?, ?, ?, ?)`,
             [
                 uuidv4(),
@@ -451,7 +451,7 @@ async function seedWeeklyPlanData(
                 weeklyPlanId,
                 data.required_weeks,
                 data.assignment_style,
-                data.assignment_block_size
+                data.assignment_style_consecutive
             ]
         );
 
@@ -478,7 +478,7 @@ async function seedWeeklyPlanData(
             );
         }
 
-        console.log(`   ${employeeName}: ${data.required_weeks} weeks, ${data.assignment_style} style (block size: ${data.assignment_block_size})`);
+        console.log(`   ${employeeName}: ${data.required_weeks} weeks, ${data.assignment_style} style (consecutive size: ${data.assignment_style_consecutive})`);
     }
 
     // 4. Create assignments if they exist

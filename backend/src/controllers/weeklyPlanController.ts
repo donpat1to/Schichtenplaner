@@ -89,7 +89,7 @@ async function getWeeklyPlanById(planId: string): Promise<WeeklyPlanWithDetails 
 
   // Get requirements for all employees (with new fields)
   const allRequirements = await db.all<any>(`
-    SELECT employee_id, required_weeks, assignment_style, assignment_block_size
+    SELECT employee_id, required_weeks, assignment_style, assignment_style_consecutive
     FROM weekly_work_requirements
     WHERE plan_id = ?
   `, [planId]);
@@ -383,19 +383,19 @@ export const updateWorkRequirement = async (req: Request, res: Response): Promis
       return;
     }
 
-    // Validate assignment block size
+    // Validate assignment style consecutive size
     if (assignmentStyleConsecutive !== undefined && (assignmentStyleConsecutive < 1 || assignmentStyleConsecutive > 10)) {
-      res.status(400).json({ error: 'Assignment block size must be between 1 and 10' });
+      res.status(400).json({ error: 'Assignment style consecutive size must be between 1 and 10' });
       return;
     }
 
     await db.run(
-      `INSERT INTO weekly_work_requirements (id, employee_id, plan_id, required_weeks, assignment_style, assignment_block_size)
+      `INSERT INTO weekly_work_requirements (id, employee_id, plan_id, required_weeks, assignment_style, assignment_style_consecutive)
        VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(employee_id, plan_id) DO UPDATE SET
          required_weeks = COALESCE(?, required_weeks),
          assignment_style = COALESCE(?, assignment_style),
-         assignment_block_size = COALESCE(?, assignment_block_size)`,
+         assignment_style_consecutive = COALESCE(?, assignment_style_consecutive)`,
       [
         uuidv4(),
         employeeId,
@@ -419,7 +419,7 @@ export const updateWorkRequirement = async (req: Request, res: Response): Promis
       planId: id,
       requiredWeeks: updatedRequirement.required_weeks,
       assignmentStyle: updatedRequirement.assignment_style,
-      assignmentBlockSize: updatedRequirement.assignment_block_size,
+      assignmentStyleConsecutive: updatedRequirement.assignment_style_consecutive,
     });
   } catch (error) {
     console.error('Error updating work requirement:', error);
@@ -452,7 +452,7 @@ export const getMyPreferences = async (req: Request, res: Response): Promise<voi
     `, [id, userId]);
 
     const requirement = await db.get<any>(`
-      SELECT required_weeks, assignment_style, assignment_block_size
+      SELECT required_weeks, assignment_style, assignment_style_consecutive
       FROM weekly_work_requirements
       WHERE plan_id = ? AND employee_id = ?
     `, [id, userId]);
@@ -466,8 +466,8 @@ export const getMyPreferences = async (req: Request, res: Response): Promise<voi
         notes: p.notes,
       })),
       requiredWeeks: requirement?.required_weeks || 0,
-      assignmentStyle: requirement?.assignment_style || 'scatter',
-      assignmentBlockSize: requirement?.assignment_block_size || 1,
+      assignmentStyle: requirement?.assignment_style || 'scattered',
+      assignmentStyleConsecutive: requirement?.assignment_style_consecutive || 1,
     });
   } catch (error) {
     console.error('Error fetching my preferences:', error);
@@ -498,9 +498,9 @@ export const saveMyPreferences = async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    // Validate assignment block size
+    // Validate assignment style consecutive size
     if (assignmentStyleConsecutive < 1 || assignmentStyleConsecutive > 10) {
-      res.status(400).json({ error: 'Assignment block size must be between 1 and 10' });
+      res.status(400).json({ error: 'Assignment style consecutive size must be between 1 and 10' });
       return;
     }
 
@@ -525,12 +525,12 @@ export const saveMyPreferences = async (req: Request, res: Response): Promise<vo
 
       // Upsert work requirement with new fields
       await db.run(
-        `INSERT INTO weekly_work_requirements (id, employee_id, plan_id, required_weeks, assignment_style, assignment_block_size)
+        `INSERT INTO weekly_work_requirements (id, employee_id, plan_id, required_weeks, assignment_style, assignment_style_consecutive)
          VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT(employee_id, plan_id) DO UPDATE SET 
            required_weeks = ?,
            assignment_style = ?,
-           assignment_block_size = ?`,
+           assignment_style_consecutive = ?`,
         [
           uuidv4(),
           userId,
@@ -574,9 +574,9 @@ export const saveEmployeePreferences = async (req: Request, res: Response): Prom
       return;
     }
 
-    // Validate assignment block size
+    // Validate assignment style consecutive size
     if (assignmentStyleConsecutive < 1 || assignmentStyleConsecutive > 10) {
-      res.status(400).json({ error: 'Assignment block size must be between 1 and 10' });
+      res.status(400).json({ error: 'Assignment style consecutive size must be between 1 and 10' });
       return;
     }
 
@@ -601,12 +601,12 @@ export const saveEmployeePreferences = async (req: Request, res: Response): Prom
 
       // Upsert work requirement with new fields
       await db.run(
-        `INSERT INTO weekly_work_requirements (id, employee_id, plan_id, required_weeks, assignment_style, assignment_block_size)
+        `INSERT INTO weekly_work_requirements (id, employee_id, plan_id, required_weeks, assignment_style, assignment_style_consecutive)
          VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT(employee_id, plan_id) DO UPDATE SET 
            required_weeks = ?,
            assignment_style = ?,
-           assignment_block_size = ?`,
+           assignment_style_consecutive = ?`,
         [
           uuidv4(),
           employeeId,
@@ -791,7 +791,7 @@ export const getPlanStatistics = async (req: Request, res: Response): Promise<vo
 
     const assignmentStyles = {
       consecutive: employees.filter(emp => emp.assignmentStyle === 'consecutive').length,
-      scatter: employees.filter(emp => emp.assignmentStyle === 'scattered').length,
+      scattered: employees.filter(emp => emp.assignmentStyle === 'scattered').length,
     };
 
     const averageRequiredWeeks = employees.length > 0 ? totalRequiredWeeks / employees.length : 0;
@@ -806,7 +806,7 @@ export const getPlanStatistics = async (req: Request, res: Response): Promise<vo
       employeesWithPreferences: employees.filter(emp => emp.preferences.length > 0).length,
       averageRequiredWeeks: Math.round(averageRequiredWeeks * 10) / 10,
       consecutiveStyleAssignments: assignmentStyles.consecutive,
-      scatterStyleAssignments: assignmentStyles.scatter,
+      scatteredStyleAssignments: assignmentStyles.scattered,
       preferencesDistribution: {
         preferred: employees.reduce((sum, emp) => sum + emp.preferences.filter(p => p.preferenceLevel === 1).length, 0),
         available: employees.reduce((sum, emp) => sum + emp.preferences.filter(p => p.preferenceLevel === 2).length, 0),
@@ -1188,8 +1188,8 @@ export const exportWeeklyPlanToPDF = async (req: Request, res: Response): Promis
             ${emp.firstname} ${emp.lastname}${emp.isTrainee ? ' (T)' : ''}
           </td>
           <td>${emp.requiredWeeks}</td>
-          <td class="${emp.assignmentStyle === 'consecutive' ? 'block-style' : ''}">
-            ${emp.assignmentStyle === 'consecutive' ? 'Block' : 'Verteilt'}
+          <td class="${emp.assignmentStyle === 'consecutive' ? 'consecutive-style' : ''}">
+            ${emp.assignmentStyle === 'consecutive' ? 'Konsekutiv' : 'Verteilt'}
           </td>
           <td>${emp.assignmentStyleConsecutive}</td>
           ${plan.weeks.map(week => `
@@ -1227,7 +1227,7 @@ export const exportWeeklyPlanToPDF = async (req: Request, res: Response): Promis
           </div>
           <div class="employee-details">
             <span>${emp.requiredWeeks} Wochen</span>
-            <span>${emp.assignmentStyle === 'consecutive' ? 'Block' : 'Verteilt'}</span>
+            <span>${emp.assignmentStyle === 'consecutive' ? 'Konsekutiv' : 'Verteilt'}</span>
             <span>${emp.assignedWeeks.length} zugewiesen</span>
           </div>
         </div>

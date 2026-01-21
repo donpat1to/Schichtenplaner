@@ -14,6 +14,7 @@ import {
   generateAssignments,
   clearAssignments,
   publishPlan,
+  getPlanStatistics,
   exportWeeklyPlanToExcel,
   exportWeeklyPlanToPDF,
 } from '../controllers/weeklyPlanController.js';
@@ -53,6 +54,8 @@ const validatePreferences = [
   body('preferences.*.weekId').isUUID().withMessage('Invalid week ID in preferences'),
   body('preferences.*.preferenceLevel').isIn([1, 2, 3]).withMessage('Preference level must be 1, 2, or 3'),
   body('requiredWeeks').isInt({ min: 0 }).withMessage('Required weeks must be a non-negative integer'),
+  body('assignmentStyle').optional().isIn(['consecutive', 'scattered']).withMessage('Assignment style must be "consecutive" or "scattered"'),
+  body('assignmentStyleConsecutive').optional().isInt({ min: 1, max: 10 }).withMessage('Assignment block size must be between 1 and 10'),
 ];
 
 const validateAdminPreferences = [
@@ -79,6 +82,9 @@ router.post('/:id/admin-preferences', validateId, validateAdminPreferences, hand
 router.post('/:id/generate', validateId, handleValidationErrors, requireRole(['admin', 'maintenance']), generateAssignments);
 router.post('/:id/clear-assignments', validateId, handleValidationErrors, requireRole(['admin', 'maintenance']), clearAssignments);
 router.post('/:id/publish', validateId, handleValidationErrors, requireRole(['admin', 'maintenance']), publishPlan);
+
+// Statistics route - ADD THIS
+router.get('/:id/statistics', validateId, handleValidationErrors, getPlanStatistics);
 
 // Export routes
 router.get('/:id/export/excel', validateId, handleValidationErrors, requireRole(['admin', 'maintenance']), exportWeeklyPlanToExcel);

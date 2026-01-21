@@ -195,22 +195,38 @@ const WeeklyPlanList: React.FC = () => {
                   Anzeigen
                 </button>
                 {hasRole(['admin', 'maintenance']) && (
-                  <button
-                    onClick={() => handleDelete(plan.id, plan.name)}
-                    disabled={isSubmitting}
-                    style={{
-                      padding: '8px 16px',
-                      backgroundColor: isSubmitting ? '#bdc3c7' : '#e74c3c',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                      minWidth: '80px',
-                      opacity: isSubmitting ? 0.6 : 1
-                    }}
-                  >
-                    {isSubmitting ? 'Löscht...' : 'Löschen'}
-                  </button>
+                  <>
+                    <button
+                      onClick={() => navigate(`/weekly-plans/${plan.id}/edit`)}
+                      style={{
+                        padding: '8px 16px',
+                        backgroundColor: '#f39c12',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        minWidth: '80px'
+                      }}
+                    >
+                      Bearbeiten
+                    </button>
+                    <button
+                      onClick={() => handleDelete(plan.id, plan.name)}
+                      disabled={isSubmitting}
+                      style={{
+                        padding: '8px 16px',
+                        backgroundColor: isSubmitting ? '#bdc3c7' : '#e74c3c',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                        minWidth: '80px',
+                        opacity: isSubmitting ? 0.6 : 1
+                      }}
+                    >
+                      {isSubmitting ? 'Löscht...' : 'Löschen'}
+                    </button>
+                  </>
                 )}
               </div>
             </div>

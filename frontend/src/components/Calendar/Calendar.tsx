@@ -1,0 +1,250 @@
+// frontend/src/components/Calendar/Calendar.tsx
+import React from 'react';
+import styles from './Calendar.module.css';
+
+export interface CalendarProps {
+    year: number;
+    month: number; // 0-11 (0 = January)
+    weeks: Array<{
+        id: string;
+        startDate: string;
+        endDate: string;
+        minEmployees: number;
+        maxEmployees: number;
+    }>;
+    onMonthChange: (year: number, month: number) => void;
+    getDayInfo?: (date: Date) => {
+        isInPlan: boolean;
+        weekId?: string;
+        isAssigned?: boolean;
+        preferenceLevel?: 1 | 2 | 3;
+    };
+    onDayClick?: (date: Date, weekId?: string) => void;
+}
+
+const Calendar: React.FC<CalendarProps> = ({
+    year,
+    month,
+    weeks,
+    onMonthChange,
+    getDayInfo,
+    onDayClick,
+}) => {
+    const monthNames = [
+        'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+        'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
+    ];
+
+    const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+
+    // Get first day of month and last day of month
+    const firstDayOfMonth = new Date(year, month, 1);
+    const lastDayOfMonth = new Date(year, month + 1, 0);
+
+    // Get the Monday of the week containing the 1st of the month
+    const firstDayOfCalendar = new Date(firstDayOfMonth);
+    const dayOfWeek = firstDayOfMonth.getDay();
+    // Adjust for Monday-first week (0 = Sunday, 1 = Monday, ... 6 = Saturday)
+    const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    firstDayOfCalendar.setDate(firstDayOfCalendar.getDate() - diffToMonday);
+
+    // Get the Sunday of the week containing the last day of the month
+    const lastDayOfCalendar = new Date(lastDayOfMonth);
+    const lastDayOfWeek = lastDayOfMonth.getDay();
+    const diffToSunday = lastDayOfWeek === 0 ? 0 : 7 - lastDayOfWeek;
+    lastDayOfCalendar.setDate(lastDayOfCalendar.getDate() + diffToSunday);
+
+    // Generate calendar grid
+    const generateCalendarGrid = () => {
+        const grid: Array<Array<{
+            date: Date;
+            isCurrentMonth: boolean;
+            dayInfo?: ReturnType<NonNullable<typeof getDayInfo>>;
+        }>> = [];
+
+        let currentDate = new Date(firstDayOfCalendar);
+
+        while (currentDate <= lastDayOfCalendar) {
+            const week: Array<{
+                date: Date;
+                isCurrentMonth: boolean;
+                dayInfo?: ReturnType<NonNullable<typeof getDayInfo>>;
+            }> = [];
+
+            for (let i = 0; i < 7; i++) {
+                const date = new Date(currentDate);
+                const isCurrentMonth = date.getMonth() === month;
+
+                const dayInfo = getDayInfo ? getDayInfo(date) : undefined;
+
+                week.push({
+                    date,
+                    isCurrentMonth,
+                    dayInfo,
+                });
+
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+
+            grid.push(week);
+        }
+
+        return grid;
+    };
+
+    const handlePrevMonth = () => {
+        const newDate = new Date(year, month - 1, 1);
+        onMonthChange(newDate.getFullYear(), newDate.getMonth());
+    };
+
+    const handleNextMonth = () => {
+        const newDate = new Date(year, month + 1, 1);
+        onMonthChange(newDate.getFullYear(), newDate.getMonth());
+    };
+
+    const handleToday = () => {
+        const today = new Date();
+        onMonthChange(today.getFullYear(), today.getMonth());
+    };
+
+    const getWeekNumber = (date: Date) => {
+        const target = new Date(date.valueOf());
+        const dayNr = (date.getDay() + 6) % 7;
+        target.setDate(target.getDate() - dayNr + 3);
+        const firstThursday = target.valueOf();
+        target.setMonth(0, 1);
+        if (target.getDay() !== 4) {
+            target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
+        }
+        return 1 + Math.ceil((firstThursday - target.valueOf()) / 604800000);
+    };
+
+    const calendarGrid = generateCalendarGrid();
+
+    return (
+        <div className={styles.calendar}>
+            <div className={styles.calendarHeader}>
+                <button onClick={handlePrevMonth} className={styles.navButton}>
+                    &lt;
+                </button>
+
+                <div className={styles.monthYear}>
+                    <span className={styles.monthName}>{monthNames[month]}</span>
+                    <span className={styles.year}>{year}</span>
+                    <button onClick={handleToday} className={styles.todayButton}>
+                        Heute
+                    </button>
+                </div>
+
+                <button onClick={handleNextMonth} className={styles.navButton}>
+                    &gt;
+                </button>
+            </div>
+
+            <div className={styles.calendarGrid}>
+                {/* Day names header */}
+                <div className={styles.weekRow}>
+                    <div className={styles.weekNumberHeader}>KW</div>
+                    {dayNames.map((day, index) => (
+                        <div key={index} className={styles.dayName}>
+                            {day}
+                        </div>
+                    ))}
+                </div>
+
+                {/* Calendar weeks */}
+                {calendarGrid.map((week, weekIndex) => (
+                    <div key={weekIndex} className={styles.weekRow}>
+                        <div className={styles.weekNumber}>
+                            {getWeekNumber(week[0].date)}
+                        </div>
+
+                        {week.map((day, dayIndex) => {
+                            const dayClass = [
+                                styles.day,
+                                !day.isCurrentMonth ? styles.adjacentMonth : '',
+                                day.dayInfo?.isInPlan ? styles.inPlan : '',
+                                day.dayInfo?.isAssigned ? styles.assigned : '',
+                            ].filter(Boolean).join(' ');
+
+                            const getPreferenceStyle = () => {
+                                if (!day.dayInfo?.preferenceLevel) return {};
+
+                                const colors = {
+                                    1: { bg: '#dcfce7', color: '#22c55e' },
+                                    2: { bg: '#fef9c3', color: '#eab308' },
+                                    3: { bg: '#fee2e2', color: '#ef4444' },
+                                };
+
+                                return {
+                                    backgroundColor: colors[day.dayInfo.preferenceLevel].bg,
+                                    color: colors[day.dayInfo.preferenceLevel].color,
+                                };
+                            };
+
+                            return (
+                                <div
+                                    key={dayIndex}
+                                    className={dayClass}
+                                    style={getPreferenceStyle()}
+                                    onClick={() => onDayClick?.(day.date, day.dayInfo?.weekId)}
+                                    title={
+                                        day.dayInfo?.preferenceLevel
+                                            ? `Präferenz: ${day.dayInfo.preferenceLevel === 1 ? 'Bevorzugt' :
+                                                day.dayInfo.preferenceLevel === 2 ? 'Verfügbar' : 'Nicht verfügbar'
+                                            }`
+                                            : undefined
+                                    }
+                                >
+                                    <div className={styles.dayNumber}>{day.date.getDate()}</div>
+
+                                    {day.dayInfo?.isAssigned && (
+                                        <div className={styles.assignedMarker}>✓</div>
+                                    )}
+
+                                    {day.dayInfo?.preferenceLevel && (
+                                        <div className={styles.preferenceIndicator}>
+                                            {day.dayInfo.preferenceLevel}
+                                        </div>
+                                    )}
+
+                                    {!day.isCurrentMonth && (
+                                        <div className={styles.monthIndicator}>
+                                            {day.date.getMonth() + 1}/{day.date.getFullYear()}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                ))}
+            </div>
+
+            {/* Legend */}
+            <div className={styles.legend}>
+                <div className={styles.legendItem}>
+                    <div className={`${styles.legendColor} ${styles.pref1}`}></div>
+                    <span>1 = Bevorzugt</span>
+                </div>
+                <div className={styles.legendItem}>
+                    <div className={`${styles.legendColor} ${styles.pref2}`}></div>
+                    <span>2 = Verfügbar</span>
+                </div>
+                <div className={styles.legendItem}>
+                    <div className={`${styles.legendColor} ${styles.pref3}`}></div>
+                    <span>3 = Nicht verfügbar</span>
+                </div>
+                <div className={styles.legendItem}>
+                    <div className={`${styles.legendColor} ${styles.assigned}`}></div>
+                    <span>Zugewiesen</span>
+                </div>
+                <div className={styles.legendItem}>
+                    <div className={styles.adjacentMonthDay}>31</div>
+                    <span>Außerhalb des Monats</span>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default Calendar;

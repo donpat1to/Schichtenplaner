@@ -210,9 +210,9 @@ export interface ConsecutiveAssignmentConstraint {
   consecutiveSize: number;
 }
 
-export interface ScatterAssignmentConstraint {
+export interface ScatteredAssignmentConstraint {
   type: 'scattered';
   employeeId: string;
 }
 
-export type AssignmentConstraint = ConsecutiveAssignmentConstraint | ScatterAssignmentConstraint;
+export type AssignmentConstraint = ConsecutiveAssignmentConstraint | ScatteredAssignmentConstraint;

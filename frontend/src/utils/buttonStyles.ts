@@ -134,6 +134,12 @@ export const addTextButton = (disabled = false) =>
 export const cancelTextButton = (disabled = false) =>
   textButtonStyle(BUTTON_COLORS.cancel, disabled);
 
+export const saveTextButton = (disabled = false) =>
+  textButtonStyle(BUTTON_COLORS.primary, disabled);
+
+export const backTextButton = (disabled = false) =>
+  textButtonStyle(BUTTON_COLORS.primary, disabled);
+
 export const addOutlineButton = (disabled = false) =>
   outlineButtonStyle(BUTTON_COLORS.add, disabled);
 

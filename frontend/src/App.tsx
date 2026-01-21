@@ -13,6 +13,7 @@ import ShiftPlanEdit from './pages/ShiftPlans/ShiftPlanEdit';
 import ShiftPlanView from './pages/ShiftPlans/ShiftPlanView';
 import WeeklyPlanList from './pages/WeeklyPlans/WeeklyPlanList';
 import WeeklyPlanCreate from './pages/WeeklyPlans/WeeklyPlanCreate';
+import WeeklyPlanEdit from './pages/WeeklyPlans/WeeklyPlanEdit';
 import WeeklyPlanView from './pages/WeeklyPlans/WeeklyPlanView';
 import MyAvailability from './pages/MyAvailability/MyAvailability';
 import EmployeeManagement from './pages/Employees/EmployeeManagement';
@@ -142,6 +143,7 @@ const AppContent: React.FC = () => {
       <Route path="/shift-plans/:id" element={<ProtectedRoute><ShiftPlanView /></ProtectedRoute>} />
       <Route path="/weekly-plans" element={<ProtectedRoute><WeeklyPlanList /></ProtectedRoute>} />
       <Route path="/weekly-plans/new" element={<ProtectedRoute roles={['admin', 'maintenance']}><WeeklyPlanCreate /></ProtectedRoute>} />
+      <Route path="/weekly-plans/:id/edit" element={<ProtectedRoute roles={['admin', 'maintenance']}><WeeklyPlanEdit /></ProtectedRoute>} />
       <Route path="/weekly-plans/:id" element={<ProtectedRoute><WeeklyPlanView /></ProtectedRoute>} />
       <Route path="/my-availability" element={<ProtectedRoute><MyAvailability /></ProtectedRoute>} />
       <Route path="/employees" element={<ProtectedRoute roles={['admin', 'maintenance']}><EmployeeManagement /></ProtectedRoute>} />

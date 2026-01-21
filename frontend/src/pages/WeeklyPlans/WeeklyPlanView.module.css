@@ -211,7 +211,7 @@
   background-color: white;
   border-radius: 8px;
   padding: 20px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .matrixContainer h2 {
@@ -471,5 +471,89 @@
   .legend {
     flex-direction: column;
     gap: 10px;
+  }
+}
+
+.calendarContainer {
+  background-color: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-top: 20px;
+}
+
+.calendarContainer h2 {
+  margin: 0 0 20px 0;
+  font-size: 20px;
+  color: #2c3e50;
+}
+
+.calendarGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 20px;
+}
+
+.employeeCalendar {
+  background-color: #faf5ff;
+  border-radius: 8px;
+  padding: 15px;
+  border: 2px solid #e0e0e0;
+}
+
+.employeeCalendar.traineeRow {
+  background-color: #faf5ff;
+  border-color: #CDA8F0;
+}
+
+.employeeHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.employeeName {
+  font-weight: 600;
+  font-size: 16px;
+  color: #2c3e50;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.employeeInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.requiredWeeks {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.reqValue {
+  font-weight: 600;
+  color: #51258f;
+}
+
+@media (max-width: 768px) {
+  .calendarGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .employeeHeader {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .employeeInfo {
+    align-items: flex-start;
   }
 }

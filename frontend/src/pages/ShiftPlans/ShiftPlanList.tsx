@@ -117,7 +117,7 @@ const ShiftPlanList: React.FC = () => {
               borderRadius: '4px',
               cursor: 'pointer'
             }}>
-              + Neuer Plan
+              + Neuer Schichtplan
             </button>
           </Link>
         )}
@@ -197,20 +197,22 @@ const ShiftPlanList: React.FC = () => {
                 </button>
                 {hasRole(['admin', 'maintenance']) && (
                   <>
-                    <button
-                      onClick={() => navigate(`/shift-plans/${plan.id}/edit`)}
-                      style={{
-                        padding: '8px 16px',
-                        backgroundColor: '#f39c12',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        minWidth: '80px'
-                      }}
-                    >
-                      Bearbeiten
-                    </button>
+                    {plan.status === 'draft' && (
+                      <button
+                        onClick={() => navigate(`/shift-plans/${plan.id}/edit`)}
+                        style={{
+                          padding: '8px 16px',
+                          backgroundColor: '#f39c12',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          minWidth: '80px'
+                        }}
+                      >
+                        Bearbeiten
+                      </button>
+                    )}
                     <button
                       onClick={() => handleDelete(plan.id, plan.name)}
                       disabled={isSubmitting}

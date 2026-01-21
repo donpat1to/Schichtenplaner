@@ -5,6 +5,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
 import { useBackendValidation } from '../../hooks/useBackendValidation';
 import { weeklyPlanService, GenerateResult } from '../../services/weeklyPlanService';
+import Calendar from '../../components/Calendar/Calendar';
+import { format } from 'date-fns';
 import {
   WeeklyPlanWithDetails,
   EmployeeWithPreferences,
@@ -130,6 +132,61 @@ const WeeklyPlanView: React.FC = () => {
       cancelEditingPreferences();
       loadPlan();
     });
+  };
+
+  // State for current calendar view
+  const [currentMonth, setCurrentMonth] = useState<Date>(() => {
+    // Start with the first month of the plan
+    if (id) {
+      const today = new Date();
+      return new Date(today.getFullYear(), today.getMonth(), 1);
+    }
+    return new Date();
+  });
+
+  // Function to get day info for calendar
+  const getDayInfoForEmployee = useCallback((employeeId: string, date: Date) => {
+    if (!plan) return { isInPlan: false };
+
+    // Check if date is within any plan week
+    const week = plan.weeks.find(w => {
+      const weekStart = new Date(w.startDate);
+      const weekEnd = new Date(w.endDate);
+      return date >= weekStart && date <= weekEnd;
+    });
+
+    if (!week) return { isInPlan: false };
+
+    const employee = plan.employees?.find(e => e.id === employeeId);
+    if (!employee) return { isInPlan: true, weekId: week.id };
+
+    const pref = employee.preferences.find(p => p.weekId === week.id);
+    const isAssigned = employee.assignedWeeks.includes(week.id);
+
+    return {
+      isInPlan: true,
+      weekId: week.id,
+      isAssigned,
+      preferenceLevel: pref?.preferenceLevel,
+    };
+  }, [plan]);
+
+  // Function to handle month change
+  const handleMonthChange = (year: number, month: number) => {
+    setCurrentMonth(new Date(year, month, 1));
+  };
+
+  // Function to handle day click (for editing preferences)
+  const handleDayClick = (employeeId: string) => (date: Date, weekId?: string) => {
+    if (!editingPreferences || selectedEmployee !== employeeId || !weekId) return;
+
+    // Find the week that contains this date
+    if (!plan) return;
+
+    const week = plan.weeks.find(w => w.id === weekId);
+    if (!week) return;
+
+    togglePreference(weekId);
   };
 
   const handleGenerateAssignments = async () => {
@@ -388,127 +445,16 @@ const WeeklyPlanView: React.FC = () => {
         </div>
       )}
 
-      {/* Assignment Matrix */}
-      <div className={styles.matrixContainer}>
-        <h2>Wochen & Zuweisungen</h2>
-        <div className={styles.matrixWrapper}>
-          <table className={styles.matrix}>
-            <thead>
-              <tr>
-                <th className={styles.stickyCol}>Mitarbeiter</th>
-                <th className={styles.reqCol}>Wochen</th>
-                {plan.weeks.map(week => (
-                  <th key={week.id} className={styles.weekHeader}>
-                    <div>KW {getCalendarWeekNumber(new Date(week.startDate))}</div>
-                    <div className={styles.weekDate}>{formatWeekRange(week.startDate, week.endDate)}</div>
-                    <div className={styles.weekInfo}>{week.minEmployees}-{week.maxEmployees} MA</div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {plan.employees?.map(employee => {
-                const isEditing = editingPreferences && selectedEmployee === employee.id;
-                const canEditOwn = employee.id === user?.id && plan.status === 'draft';
-                const canEditAsAdmin = isAdmin && plan.status === 'draft';
-
-                return (
-                  <tr key={employee.id} className={employee.isTrainee ? styles.traineeRow : ''}>
-                    <td className={styles.stickyCol}>
-                      <div className={styles.employeeName}>
-                        {employee.firstname} {employee.lastname}
-                        {employee.isTrainee && <span className={styles.traineeBadge}>T</span>}
-                      </div>
-                      {(canEditOwn || canEditAsAdmin) && !editingPreferences && (
-                        <button
-                          onClick={() => startEditingPreferences(employee.id)}
-                          className={styles.editPrefsButton}
-                        >
-                          Präferenzen
-                        </button>
-                      )}
-                      {isEditing && (
-                        <div className={styles.editActions}>
-                          <button onClick={savePreferences} disabled={isSubmitting} className={styles.saveButton}>
-                            Speichern
-                          </button>
-                          <button onClick={cancelEditingPreferences} className={styles.cancelButton}>
-                            Abbruch
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                    <td className={styles.reqCol}>
-                      {isEditing ? (
-                        <input
-                          type="number"
-                          min="0"
-                          max={plan.weeks.length}
-                          value={requiredWeeks}
-                          onChange={(e) => setRequiredWeeks(parseInt(e.target.value) || 0)}
-                          className={styles.reqInput}
-                        />
-                      ) : (
-                        <span>{employee.requiredWeeks}</span>
-                      )}
-                    </td>
-                    {plan.weeks.map(week => {
-                      const pref = employee.preferences.find(p => p.weekId === week.id);
-                      const isAssigned = employee.assignedWeeks.includes(week.id);
-                      const editingPref = isEditing ? preferencesMap[week.id] : undefined;
-                      const displayPref = isEditing ? editingPref : pref?.preferenceLevel;
-                      const prefDisplay = getPreferenceDisplay(displayPref);
-
-                      return (
-                        <td
-                          key={week.id}
-                          className={`${styles.weekCell} ${isAssigned ? styles.assigned : ''}`}
-                          style={{ backgroundColor: prefDisplay.bg }}
-                          onClick={isEditing ? () => togglePreference(week.id) : undefined}
-                        >
-                          {isAssigned && (
-                            <div className={styles.assignedMarker}>Zugewiesen</div>
-                          )}
-                          {displayPref && (
-                            <div className={styles.prefIndicator} style={{ color: prefDisplay.color }}>
-                              {displayPref === 1 ? '1' : displayPref === 2 ? '2' : '3'}
-                            </div>
-                          )}
-                          {isEditing && (
-                            <div className={styles.clickHint}>Klicken</div>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Legend */}
-        <div className={styles.legend}>
-          <div className={styles.legendItem}>
-            <span className={styles.legendColor} style={{ backgroundColor: '#dcfce7' }}></span>
-            <span>1 = Bevorzugt</span>
-          </div>
-          <div className={styles.legendItem}>
-            <span className={styles.legendColor} style={{ backgroundColor: '#fef9c3' }}></span>
-            <span>2 = Verfügbar</span>
-          </div>
-          <div className={styles.legendItem}>
-            <span className={styles.legendColor} style={{ backgroundColor: '#fee2e2' }}></span>
-            <span>3 = Nicht verfügbar</span>
-          </div>
-          <div className={styles.legendItem}>
-            <span className={styles.legendColor} style={{ backgroundColor: '#90EE90', border: '2px solid #27ae60' }}></span>
-            <span>Zugewiesen</span>
-          </div>
-          <div className={styles.legendItem}>
-            <span className={styles.traineeBadge}>T</span>
-            <span>= Trainee</span>
-          </div>
+      {/* Assignment Calendar */}
+      <div className={styles.calendarContainer}>
+        <h2>Kalenderansicht</h2>
+        <div className={styles.calendarGrid}>
+          <Calendar
+            year={currentMonth.getFullYear()}
+            month={currentMonth.getMonth()}
+            weeks={plan.weeks}
+            onMonthChange={handleMonthChange}
+          />
         </div>
       </div>
 
