@@ -78,7 +78,6 @@
   gap: 10px;
   margin-bottom: 20px;
   padding: 15px;
-  background-color: #f8f9fa;
   border-radius: 8px;
   flex-wrap: wrap;
 }
@@ -206,86 +205,6 @@
   color: #cf1322;
 }
 
-/* Matrix Container */
-.matrixContainer {
-  background-color: white;
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.matrixContainer h2 {
-  margin: 0 0 20px 0;
-  font-size: 20px;
-  color: #2c3e50;
-}
-
-.matrixWrapper {
-  overflow-x: auto;
-  margin-bottom: 20px;
-}
-
-.matrix {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 800px;
-}
-
-.matrix th,
-.matrix td {
-  border: 1px solid #dee2e6;
-  padding: 8px;
-  text-align: center;
-  vertical-align: middle;
-}
-
-.matrix th {
-  background-color: #2c3e50;
-  color: white;
-  font-weight: 600;
-  font-size: 13px;
-}
-
-.stickyCol {
-  position: sticky;
-  left: 0;
-  background-color: white;
-  z-index: 1;
-  min-width: 180px;
-  text-align: left !important;
-}
-
-.matrix th.stickyCol {
-  background-color: #2c3e50;
-  z-index: 2;
-}
-
-.reqCol {
-  min-width: 70px;
-  background-color: #f8f9fa;
-}
-
-.matrix th.reqCol {
-  background-color: #34495e;
-}
-
-.weekHeader {
-  min-width: 100px;
-}
-
-.weekDate {
-  font-size: 11px;
-  font-weight: normal;
-  opacity: 0.9;
-  margin-top: 4px;
-}
-
-.weekInfo {
-  font-size: 10px;
-  font-weight: normal;
-  opacity: 0.7;
-  margin-top: 2px;
-}
 
 .traineeRow {
   background-color: #faf5ff !important;

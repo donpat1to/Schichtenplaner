@@ -1,5 +1,5 @@
 // frontend/src/pages/WeeklyPlans/WeeklyPlanView.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react'; // Added useRef
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
@@ -15,6 +15,10 @@ import {
   formatWeekRange,
   getCalendarWeekNumber,
 } from '../../models/WeeklyPlan';
+import {
+  ICONS,
+  backTextButton,
+} from '../../utils/buttonStyles';
 import styles from './WeeklyPlanView.module.css';
 
 const WeeklyPlanView: React.FC = () => {
@@ -33,7 +37,21 @@ const WeeklyPlanView: React.FC = () => {
   const [solverResult, setSolverResult] = useState<GenerateResult | null>(null);
   const [showSolverResult, setShowSolverResult] = useState(false);
 
+
+  // NEW: Export state
+  const [exporting, setExporting] = useState(false);
+  const [exportType, setExportType] = useState<'excel' | 'pdf' | null>(null);
+  const [dropdownWidth, setDropdownWidth] = useState(0);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
   const isAdmin = hasRole(['admin', 'maintenance']);
+
+  // NEW: Export dropdown width effect
+  useEffect(() => {
+    if (dropdownRef.current) {
+      setDropdownWidth(dropdownRef.current.offsetWidth / 40);
+    }
+  }, [exportType]);
 
   const loadPlan = useCallback(async () => {
     if (!id) return;
@@ -189,6 +207,56 @@ const WeeklyPlanView: React.FC = () => {
     togglePreference(weekId);
   };
 
+  // NEW: Export function similar to ShiftPlanView
+  const handleExport = async () => {
+    if (!id || !plan || !exportType) return;
+
+    try {
+      setExporting(true);
+
+      let blob: Blob;
+      if (exportType === 'excel') {
+        blob = await weeklyPlanService.exportToExcel(id);
+      } else {
+        blob = await weeklyPlanService.exportToPDF(id);
+      }
+
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const filename = `Wochenplan_${plan.name}_${new Date().toISOString().split('T')[0]}.${exportType === 'excel' ? 'xlsx' : 'pdf'}`;
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      showNotification({
+        type: 'success',
+        title: 'Export erfolgreich',
+        message: `${exportType === 'excel' ? 'Excel' : 'PDF'}-Datei wurde heruntergeladen`
+      });
+
+    } catch (error: any) {
+      console.error(`Error exporting to ${exportType}:`, error);
+
+      let message = 'Export fehlgeschlagen';
+      if (error.message) {
+        message = error.message;
+      }
+
+      showNotification({
+        type: 'error',
+        title: 'Export fehlgeschlagen',
+        message: `Der ${exportType === 'excel' ? 'Excel' : 'PDF'}-Export konnte nicht durchgeführt werden: ${message}`
+      });
+    } finally {
+      setExporting(false);
+      setExportType(null);
+    }
+  };
+
   const handleGenerateAssignments = async () => {
     if (!id) return;
 
@@ -225,6 +293,7 @@ const WeeklyPlanView: React.FC = () => {
     });
   };
 
+  // Clear assignments function similar to ShiftPlanView
   const handleClearAssignments = async () => {
     if (!id) return;
 
@@ -239,13 +308,41 @@ const WeeklyPlanView: React.FC = () => {
     if (!confirmed) return;
 
     await executeWithValidation(async () => {
-      await weeklyPlanService.clearAssignments(id);
-      showNotification({
-        type: 'success',
-        title: 'Gelöscht',
-        message: 'Alle Zuweisungen wurden gelöscht'
-      });
-      loadPlan();
+      try {
+        console.log('🔄 STARTING COMPLETE ASSIGNMENT CLEARING PROCESS');
+
+        // Use the service method to clear assignments
+        await weeklyPlanService.clearAssignments(id);
+
+        console.log('✅ All assignments cleared');
+
+        // Update plan status to draft
+        if (plan?.status !== 'draft') {
+          await weeklyPlanService.updateWeeklyPlan(id, {
+            status: 'draft'
+          });
+          console.log('📝 Plan status set to draft');
+        }
+
+        // Force complete data refresh
+        await loadPlan();
+
+        console.log('🎯 ASSIGNMENT CLEARING COMPLETE');
+
+        showNotification({
+          type: 'success',
+          title: 'Zuweisungen gelöscht',
+          message: 'Alle Zuweisungen wurden erfolgreich gelöscht.'
+        });
+
+      } catch (error) {
+        console.error('❌ Error clearing assignments:', error);
+        showNotification({
+          type: 'error',
+          title: 'Fehler',
+          message: `Löschen der Zuweisungen fehlgeschlagen: ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`
+        });
+      }
     });
   };
 
@@ -270,31 +367,6 @@ const WeeklyPlanView: React.FC = () => {
         message: 'Der Wochenplan wurde erfolgreich veröffentlicht'
       });
       loadPlan();
-    });
-  };
-
-  const handleExport = async (format: 'excel' | 'pdf') => {
-    if (!id || !plan) return;
-
-    await executeWithValidation(async () => {
-      const blob = format === 'excel'
-        ? await weeklyPlanService.exportToExcel(id)
-        : await weeklyPlanService.exportToPDF(id);
-
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Wochenplan_${plan.name}_${new Date().toISOString().split('T')[0]}.${format === 'excel' ? 'xlsx' : 'pdf'}`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
-      showNotification({
-        type: 'success',
-        title: 'Export erfolgreich',
-        message: `${format.toUpperCase()}-Datei wurde heruntergeladen`
-      });
     });
   };
 
@@ -342,7 +414,7 @@ const WeeklyPlanView: React.FC = () => {
       <div className={styles.container}>
         <div className={styles.error}>
           <h2>Wochenplan nicht gefunden</h2>
-          <button onClick={() => navigate('/weekly-plans')} className={styles.backButton}>
+          <button onClick={() => navigate('/weekly-plans')} style={backTextButton(false)}>
             Zurück zur Übersicht
           </button>
         </div>
@@ -350,7 +422,7 @@ const WeeklyPlanView: React.FC = () => {
     );
   }
 
-  const hasAssignments = plan.employees?.some(e => e.assignedWeeks.length > 0) || false;
+  const hasAssignments = plan.employees?.some(e => e.assignedWeeks.length > 0);
 
   return (
     <div className={styles.container}>
@@ -369,54 +441,11 @@ const WeeklyPlanView: React.FC = () => {
           )}
         </div>
         <div className={styles.headerActions}>
-          <button onClick={() => navigate('/weekly-plans')} className={styles.backButton}>
+          <button onClick={() => navigate('/weekly-plans')} style={backTextButton(false)}>
             Zurück
           </button>
         </div>
       </div>
-
-      {/* Admin Actions */}
-      {isAdmin && plan.status === 'draft' && (
-        <div className={styles.actionBar}>
-          <button
-            onClick={handleGenerateAssignments}
-            disabled={isSubmitting}
-            className={styles.primaryButton}
-          >
-            Zuweisungen generieren
-          </button>
-          {hasAssignments && (
-            <>
-              <button
-                onClick={handleClearAssignments}
-                disabled={isSubmitting}
-                className={styles.dangerButton}
-              >
-                Zuweisungen löschen
-              </button>
-              <button
-                onClick={handlePublish}
-                disabled={isSubmitting}
-                className={styles.successButton}
-              >
-                Veröffentlichen
-              </button>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Export Actions (only for published plans) */}
-      {plan.status === 'published' && isAdmin && (
-        <div className={styles.actionBar}>
-          <button onClick={() => handleExport('excel')} disabled={isSubmitting} className={styles.secondaryButton}>
-            Excel Export
-          </button>
-          <button onClick={() => handleExport('pdf')} disabled={isSubmitting} className={styles.secondaryButton}>
-            PDF Export
-          </button>
-        </div>
-      )}
 
       {/* Solver Result */}
       {showSolverResult && solverResult && (
@@ -445,10 +474,108 @@ const WeeklyPlanView: React.FC = () => {
         </div>
       )}
 
-      {/* Assignment Calendar */}
-      <div className={styles.calendarContainer}>
-        <h2>Kalenderansicht</h2>
-        <div className={styles.calendarGrid}>
+      {/* Main Content */}
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '8px',
+        padding: '20px',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+      }}>
+        {/* Admin Actions */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-end',
+            justifyContent: 'flex-end',
+            marginTop: '20px',
+            gap: '5px'
+          }}
+        >
+          {hasRole(['admin', 'maintenance']) && plan.status !== 'archived' && !hasAssignments && (
+            <button
+              onClick={handleGenerateAssignments}
+              disabled={isSubmitting}
+              className={styles.primaryButton}
+            >
+              Zuweisungen generieren
+            </button>
+          )}
+
+          {hasRole(['admin', 'maintenance']) && hasAssignments && plan.status === 'draft' && (
+            <button
+              onClick={handlePublish}
+              disabled={isSubmitting}
+              className={styles.successButton}
+            >
+              Veröffentlichen
+            </button>
+          )}
+
+          {hasRole(['admin', 'maintenance']) && hasAssignments && plan.status === 'published' && (
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button
+                onClick={handleClearAssignments}
+                disabled={isSubmitting}
+                className={styles.dangerButton}
+              >
+                Zuweisungen löschen
+              </button>
+
+              <div
+                ref={dropdownRef}
+                style={{
+                  transform: exportType
+                    ? `translateX(-${dropdownWidth}px)`
+                    : 'translateX(0)',
+                  transition: 'transform 0.05s ease-in-out',
+                  position: 'relative',
+                }}
+              >
+                <select
+                  value={exportType || ''}
+                  onChange={(e) =>
+                    setExportType(e.target.value as 'pdf' | 'excel' | null)
+                  }
+                  style={{
+                    padding: '10px',
+                    backgroundColor: 'white',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    minWidth: '100px',
+                  }}
+                >
+                  <option value="">Export</option>
+                  <option value="pdf">PDF</option>
+                  <option value="excel">Excel</option>
+                </select>
+              </div>
+
+              {exportType && (
+                <button
+                  onClick={handleExport}
+                  disabled={exporting || isSubmitting}
+                  className={styles.secondaryButton}
+                  style={{
+                    opacity: exporting ? 0.7 : 1,
+                    transition: 'opacity 0.05s ease',
+                    minWidth: '100px',
+                  }}
+                >
+                  {exporting ? '🔄 Exportiert...' : 'Export'}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Assignment Calendar */}
+        <div style={{
+          marginTop: '20px',
+          fontSize: '14px'
+        }}>
+          <h2>Kalenderansicht</h2>
           <Calendar
             year={currentMonth.getFullYear()}
             month={currentMonth.getMonth()}
@@ -457,15 +584,7 @@ const WeeklyPlanView: React.FC = () => {
           />
         </div>
       </div>
-
-      {/* Info for non-admin users */}
-      {!isAdmin && plan.status === 'draft' && (
-        <div className={styles.infoBox}>
-          <strong>Hinweis:</strong> Klicken Sie auf "Präferenzen" neben Ihrem Namen, um Ihre Verfügbarkeit einzutragen.
-          Wählen Sie für jede Woche: 1 (Bevorzugt), 2 (Verfügbar) oder 3 (Nicht verfügbar).
-        </div>
-      )}
-    </div>
+    </div >
   );
 };
 

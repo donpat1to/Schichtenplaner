@@ -12,6 +12,7 @@ import { useNotification } from '../../contexts/NotificationContext';
 import { formatDate, formatTime } from '../../utils/foramatters';
 import { saveAs } from 'file-saver';
 import styles from './ShiftPlanView.module.css';
+import { backTextButton } from '@/utils/buttonStyles';
 
 // Local interface extensions (same as AvailabilityManager)
 interface ExtendedTimeSlot extends TimeSlot {
@@ -362,7 +363,7 @@ const ShiftPlanView: React.FC = () => {
     }
   };
 
-  const handleRecreateAssignments = async () => {
+  const handleClearingAssignments = async () => {
     if (!shiftPlan) return;
 
     try {
@@ -1081,7 +1082,7 @@ const ShiftPlanView: React.FC = () => {
   const validation = validateTimetableStructure();
 
   return (
-    <div style={{ padding: '20px' }}>
+    <div className={styles.container}>
       {/* Header */}
       <div className={styles.header}>
         <div className={styles.headerLeft}>
@@ -1116,31 +1117,12 @@ const ShiftPlanView: React.FC = () => {
         <div className={styles.headerActions}>
           <button
             onClick={() => navigate('/shift-plans')}
-            className={styles.backButton}
+            style={backTextButton(false)}
           >
             Zurück
           </button>
         </div>
       </div>
-
-      {/* "Zuweisungen neu berechnen" button */}
-      {shiftPlan.status === 'published' && hasRole(['admin', 'maintenance']) && (
-        <button
-          onClick={handleRecreateAssignments}
-          disabled={recreating}
-          style={{
-            padding: '10px 20px',
-            backgroundColor: '#e74c3c',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: recreating ? 'not-allowed' : 'pointer',
-            fontWeight: 'bold'
-          }}
-        >
-          {recreating ? 'Lösche Zuweisungen...' : 'Zuweisungen neu berechnen'}
-        </button>
-      )}
 
       {/* Availability Status - only show for drafts */}
       {shiftPlan.status === 'draft' && (
@@ -1206,17 +1188,6 @@ const ShiftPlanView: React.FC = () => {
                 )}
               </div>
             )}
-          </div>
-
-          {/* Plan Structure Info */}
-          <div style={{
-            backgroundColor: '#e8f4fd',
-            border: '1px solid #b8d4f0',
-            borderRadius: '4px',
-            padding: '12px 16px',
-            fontSize: '14px'
-          }}>
-            <strong>Plan-Struktur:</strong> {allTimeSlots.length} Schichttypen an {days.length} Tagen
           </div>
         </div>
       )}
@@ -1417,35 +1388,48 @@ const ShiftPlanView: React.FC = () => {
         </div>
       )}
 
-      {/* Timetable */}
+      {/* Main Content */}
       <div style={{
         backgroundColor: 'white',
         borderRadius: '8px',
         padding: '20px',
         boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
       }}>
-        <h3>
-          Schichtplan
-          {shiftPlan.status === 'published' && ' (Aktuelle Zuweisungen)'}
-          {assignmentResult && shiftPlan.status === 'draft' && ' (Exemplarische Woche)'}
-        </h3>
-
-        {renderTimetable()}
-
+        {/* Admin Action Buttons */}
         {shiftPlan.status === 'published' && hasRole(['admin', 'maintenance']) && (
           <div style={{
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'flex-end',
             justifyContent: 'flex-end',
             marginTop: '20px',
-            gap: '10px'
+            gap: '5px'
           }}>
+            {/* "Zuweisungen neu berechnen" button */}
+            {shiftPlan.status === 'published' && hasRole(['admin', 'maintenance']) && (
+              <button
+                onClick={handleClearingAssignments}
+                disabled={recreating}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#e74c3c',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: recreating ? 'not-allowed' : 'pointer',
+                  fontWeight: 'normal',
+                  position: 'relative'
+                }}
+              >
+                {recreating ? 'Lösche Zuweisungen...' : 'Zuweisungen entfernen'}
+              </button>
+            )}
+
             {/* Export Dropdown Container */}
             <div
               ref={dropdownRef}
               style={{
                 transform: exportType ? `translateX(-${dropdownWidth}px)` : 'translateX(0)',
-                transition: 'transform 0.3s ease-in-out',
+                transition: 'transform 0.05s ease-in-out',
                 position: 'relative'
               }}
             >
@@ -1453,12 +1437,12 @@ const ShiftPlanView: React.FC = () => {
                 value={exportType || ''}
                 onChange={(e) => setExportType(e.target.value as 'pdf' | 'excel' | null)}
                 style={{
-                  padding: '10px 20px',
+                  padding: '10px 10px',
                   backgroundColor: 'white',
                   border: '1px solid #ddd',
                   borderRadius: '4px',
                   cursor: 'pointer',
-                  minWidth: '120px'
+                  minWidth: '100px'
                 }}
               >
                 <option value="">Export</option>
@@ -1479,16 +1463,26 @@ const ShiftPlanView: React.FC = () => {
                   border: 'none',
                   borderRadius: '4px',
                   cursor: exporting ? 'not-allowed' : 'pointer',
-                  fontWeight: 'bold',
+                  fontStyle: 'normal',
+                  fontVariant: 'small-caps',
                   opacity: exporting ? 0.7 : 1,
-                  transition: 'opacity 0.2s ease'
+                  transition: 'opacity 0.05s ease',
+                  minWidth: '100px'
                 }}
               >
-                {exporting ? '🔄 Exportiert...' : 'EXPORT'}
+                {exporting ? '🔄 Exportiert...' : 'Export'}
               </button>
             )}
           </div>
         )}
+
+        {/* Timetable */}
+        <div style={{
+          marginTop: '20px',
+          fontSize: '14px'
+        }}>
+          {renderTimetable()}
+        </div>
 
         {/* Summary */}
         {days.length > 0 && (

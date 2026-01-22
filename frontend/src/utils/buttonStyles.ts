@@ -154,3 +154,93 @@ export const borderlessDeleteButton = (disabled = false) =>
 
 export const borderlessEditButton = (disabled = false) =>
   borderlessIconButtonStyle(BUTTON_COLORS.edit, disabled);
+
+
+/*
+{exportType && (
+  <button
+    onClick={handleExport}
+    disabled={exporting}
+    style={{
+      padding: '10px 20px',
+      backgroundColor: '#51258f',
+      color: 'white',
+      border: 'none',
+      borderRadius: '4px',
+      cursor: exporting ? 'not-allowed' : 'pointer',
+      fontStyle: 'normal',
+      fontVariant: 'small-caps',
+      opacity: exporting ? 0.7 : 1,
+      transition: 'opacity 0.05s ease',
+      minWidth: '100px'
+    }}
+  >
+    {exporting ? '🔄 Exportiert...' : 'Export'}
+  </button>
+)}
+
+
+Implementation Example:
+
+        {shiftPlan.status === 'published' && hasRole(['admin', 'maintenance']) && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            marginTop: '20px',
+            gap: '5px'
+          }}>
+            {/* Export Dropdown Container *//*}
+<div
+  ref={ dropdownRef }
+style = {{
+transform: exportType ? `translateX(-${dropdownWidth}px)` : 'translateX(0)',
+transition: 'transform 0.05s ease-in-out',
+position: 'relative'
+}}
+>
+<select
+    value={ exportType || '' }
+onChange = {(e) => setExportType(e.target.value as 'pdf' | 'excel' | null)}
+style = {{
+padding: '10px 10px',
+backgroundColor: 'white',
+border: '1px solid #ddd',
+borderRadius: '4px',
+cursor: 'pointer',
+minWidth: '100px'
+}}
+  >
+<option value="" > Export </option>
+< option value = "pdf" > PDF </option>
+< option value = "excel" > Excel </option>
+</select>
+</div>
+
+{/* Export Button - erscheint nur wenn eine Option ausgewählt ist *//* }
+{
+  exportType && (
+    <button
+                onClick={ handleExport }
+  disabled = { exporting }
+  style = {{
+    padding: '10px 20px',
+      backgroundColor: '#51258f',
+        color: 'white',
+          border: 'none',
+            borderRadius: '4px',
+              cursor: exporting ? 'not-allowed' : 'pointer',
+                fontStyle: 'normal',
+                  fontVariant: 'small-caps',
+                    opacity: exporting ? 0.7 : 1,
+                      transition: 'opacity 0.05s ease',
+                        minWidth: '100px'
+  }
+}
+              >
+  { exporting? '🔄 Exportiert...': 'Export' }
+  </button>
+            )}
+</div>
+        )}
+*/
