@@ -161,7 +161,7 @@ CREATE TABLE IF NOT EXISTS plan_weeks (
   start_date TEXT NOT NULL,
   end_date TEXT NOT NULL,
   min_employees INTEGER DEFAULT 2,
-  max_employees INTEGER DEFAULT 3,
+  max_employees INTEGER DEFAULT 4,
   FOREIGN KEY (plan_id) REFERENCES weekly_plans(id) ON DELETE CASCADE,
   UNIQUE(plan_id, week_number)
 );

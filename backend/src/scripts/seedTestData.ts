@@ -33,29 +33,17 @@ interface TestData {
     availability_scale: {
         [key: string]: string;
     };
-    weekly_plan?: {
+    weekly_plan: {
         plan_name: string;
         description: string;
         period: string;
-        status: string;
-        created_by: string;
-        weeks: {
-            week_number: number;
-            start_date: string;
-            end_date: string;
-            min_employees: number;
-            max_employees: number;
-        }[];
         employee_preferences: {
             [employeeName: string]: {
                 required_weeks: number;
-                assignment_style: 'consecutive' | 'scattered' | 'flexible';
+                assignment_style: 'consecutive' | 'flexible' | 'scattered';
                 assignment_style_consecutive: number;
                 preferences: { [weekNumber: string]: number };
             };
-        };
-        assignments?: {
-            [weekNumber: string]: string[];
         };
     };
 }
@@ -106,6 +94,73 @@ function parseTimeSlot(time: string): { startTime: string; endTime: string } {
     };
 }
 
+// Helper function to get ISO week number (Kalenderwoche) - copied from controller
+function getWeekNumber(date: Date): number {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+}
+
+// Helper function to generate weeks from date range - copied from controller
+function generateWeeksFromDateRange(startDate: string, endDate: string): Array<{
+    weekNumber: number;
+    startDate: string;
+    endDate: string;
+    minEmployees: number;
+    maxEmployees: number;
+}> {
+    const weeks: Array<{
+        weekNumber: number;
+        startDate: string;
+        endDate: string;
+        minEmployees: number;
+        maxEmployees: number;
+    }> = [];
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    // Ensure dates are valid
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        throw new Error('Invalid date format');
+    }
+
+    // Adjust to Monday of the week containing start date
+    const dayOfWeek = start.getDay();
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    start.setDate(start.getDate() + mondayOffset);
+
+    // Adjust end date to Sunday of the week containing end date
+    const endDayOfWeek = end.getDay();
+    const sundayOffset = endDayOfWeek === 0 ? 0 : 7 - endDayOfWeek;
+    const adjustedEnd = new Date(end);
+    adjustedEnd.setDate(end.getDate() + sundayOffset);
+
+    let currentWeekStart = new Date(start);
+
+    while (currentWeekStart <= adjustedEnd) {
+        const weekEnd = new Date(currentWeekStart);
+        weekEnd.setDate(currentWeekStart.getDate() + 6);
+
+        // Get calendar week number (Kalenderwoche)
+        const weekNumber = getWeekNumber(currentWeekStart);
+
+        weeks.push({
+            weekNumber,
+            startDate: currentWeekStart.toISOString().split('T')[0],
+            endDate: weekEnd.toISOString().split('T')[0],
+            minEmployees: 2,
+            maxEmployees: 4,
+        });
+
+        // Move to next week
+        currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+    }
+
+    return weeks;
+}
+
 export async function seedTestData(): Promise<void> {
     try {
         console.log('🌱 Starting test data seeding...');
@@ -117,7 +172,8 @@ export async function seedTestData(): Promise<void> {
         if (!fs.existsSync(testDataPath)) {
             console.log('❌ test.json file not found at:', testDataPath);
             const alternativePaths = [
-                path.resolve(__dirname, './test.json')
+                path.resolve(__dirname, '../../test.json'),
+                path.resolve(__dirname, '../test.json')
             ];
 
             for (const altPath of alternativePaths) {
@@ -167,10 +223,10 @@ export async function seedTestData(): Promise<void> {
                 // Insert employee
                 await db.run(
                     `INSERT INTO employees (
-            id, email, password, firstname, lastname, 
-            employee_type, contract_type, can_work_alone, 
-            is_trainee, is_active
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                        id, email, password, firstname, lastname, 
+                        employee_type, contract_type, can_work_alone, 
+                        is_trainee, is_active
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                     [
                         employeeId,
                         email,
@@ -206,9 +262,9 @@ export async function seedTestData(): Promise<void> {
 
             await db.run(
                 `INSERT INTO shift_plans (
-          id, name, description, start_date, end_date, 
-          is_template, status, created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                    id, name, description, start_date, end_date, 
+                    is_template, status, created_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     planId,
                     testData.plan_name,
@@ -216,7 +272,7 @@ export async function seedTestData(): Promise<void> {
                     startDate.trim(),
                     endDate.trim(),
                     0, // is_template = false
-                    'published',
+                    testData.status,
                     createdBy
                 ]
             );
@@ -241,7 +297,7 @@ export async function seedTestData(): Promise<void> {
 
                 await db.run(
                     `INSERT INTO time_slots (id, plan_id, name, start_time, end_time, description) 
-           VALUES (?, ?, ?, ?, ?, ?)`,
+                    VALUES (?, ?, ?, ?, ?, ?)`,
                     [timeSlotId, planId, name, startTime, endTime, `Time slot: ${time}`]
                 );
 
@@ -262,7 +318,7 @@ export async function seedTestData(): Promise<void> {
 
                     await db.run(
                         `INSERT INTO shifts (id, plan_id, time_slot_id, day_of_week, required_employees, color) 
-             VALUES (?, ?, ?, ?, ?, ?)`,
+                        VALUES (?, ?, ?, ?, ?, ?)`,
                         [shiftId, planId, timeSlotId, dayOfWeek, 2, '#3498db']
                     );
 
@@ -270,14 +326,20 @@ export async function seedTestData(): Promise<void> {
                 }
             }
 
-            // 5. Generate scheduled shifts for one week (for template demonstration)
-            console.log('📋 Generating scheduled shifts...');
+            // 5. Generate scheduled shifts for the entire period
+            console.log('📋 Generating scheduled shifts for the entire period...');
             const start = new Date(startDate.trim());
+            const end = new Date(endDate.trim());
 
-            for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
-                const currentDate = new Date(start);
-                currentDate.setDate(start.getDate() + dayOffset);
+            // Generate all dates in the period
+            const allDates: Date[] = [];
+            const currentDate = new Date(start);
+            while (currentDate <= end) {
+                allDates.push(new Date(currentDate));
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
 
+            for (const currentDate of allDates) {
                 const dayOfWeek = currentDate.getDay() === 0 ? 7 : currentDate.getDay();
                 const dayName = Object.keys(testData.shifts).find(day =>
                     mapDayToNumber(day) === dayOfWeek
@@ -290,7 +352,7 @@ export async function seedTestData(): Promise<void> {
 
                         await db.run(
                             `INSERT INTO scheduled_shifts (id, plan_id, date, time_slot_id, required_employees, assigned_employees) 
-               VALUES (?, ?, ?, ?, ?, ?)`,
+                            VALUES (?, ?, ?, ?, ?, ?)`,
                             [
                                 scheduledShiftId,
                                 planId,
@@ -321,7 +383,7 @@ export async function seedTestData(): Promise<void> {
 
                             await db.run(
                                 `INSERT INTO employee_availability (id, employee_id, plan_id, shift_id, preference_level) 
-                 VALUES (?, ?, ?, ?, ?)`,
+                                VALUES (?, ?, ?, ?, ?)`,
                                 [availabilityId, employeeId, planId, shiftId, preferenceLevel]
                             );
                         }
@@ -329,10 +391,10 @@ export async function seedTestData(): Promise<void> {
                 }
             }
 
-            // 7. Create weekly plan if data exists
+            // 7. Create weekly plan
             if (testData.weekly_plan) {
                 console.log('📊 Creating weekly plan...');
-                await seedWeeklyPlanData(testData.weekly_plan, employeeMap);
+                await seedWeeklyPlanData(testData.weekly_plan, employeeMap, createdBy);
             }
 
             await db.run('COMMIT');
@@ -344,17 +406,12 @@ export async function seedTestData(): Promise<void> {
             console.log(`   - Time Slots: ${Object.keys(timeSlotMap).length}`);
             console.log(`   - Shifts: ${Object.keys(shiftMap).length}`);
             console.log(`   - Period: ${testData.period}`);
+            console.log(`   - Scheduled Shifts: ${allDates.length} days`);
 
             if (testData.weekly_plan) {
                 console.log(`   - Weekly Plan: ${testData.weekly_plan.plan_name}`);
-                console.log(`   - Weeks: ${testData.weekly_plan.weeks.length}`);
-
-                // Count assignment styles
-                const styles = { consecutive: 0, scattered: 0, flexible: 0 };
-                Object.values(testData.weekly_plan.employee_preferences).forEach(emp => {
-                    styles[emp.assignment_style]++;
-                });
-                console.log(`   - Assignment Styles: ${styles.consecutive} consecutive, ${styles.scattered} scattered, ${styles.flexible} flexible`);
+                console.log(`   - Period: ${testData.weekly_plan.period}`);
+                console.log(`   - Employees with preferences: ${Object.keys(testData.weekly_plan.employee_preferences).length}`);
             }
 
         } catch (error) {
@@ -371,16 +428,13 @@ export async function seedTestData(): Promise<void> {
 
 async function seedWeeklyPlanData(
     weeklyPlanData: TestData['weekly_plan'],
-    employeeMap: { [name: string]: string }
+    employeeMap: { [name: string]: string },
+    creatorId: string
 ): Promise<void> {
     if (!weeklyPlanData) return;
 
     const weeklyPlanId = uuidv4();
     const [startDate, endDate] = weeklyPlanData.period.split(' bis ');
-
-    // Find creator employee ID
-    const creatorName = weeklyPlanData.created_by;
-    const creatorId = employeeMap[creatorName] || employeeMap[Object.keys(employeeMap)[0]];
 
     console.log(`📅 Creating weekly plan: ${weeklyPlanData.plan_name}`);
 
@@ -396,18 +450,19 @@ async function seedWeeklyPlanData(
             weeklyPlanData.description,
             startDate.trim(),
             endDate.trim(),
-            weeklyPlanData.status,
+            'draft',
             creatorId
         ]
     );
 
-    // 2. Create weeks
+    // 2. Generate weeks from date range
+    console.log(`📆 Generating weeks from date range...`);
+    const weeks = generateWeeksFromDateRange(startDate.trim(), endDate.trim());
     const weekMap: { [weekNumber: string]: string } = {};
-    console.log(`📆 Creating ${weeklyPlanData.weeks.length} weeks...`);
 
-    for (const week of weeklyPlanData.weeks) {
+    for (const week of weeks) {
         const weekId = uuidv4();
-        weekMap[week.week_number.toString()] = weekId;
+        weekMap[week.weekNumber.toString()] = weekId;
 
         await db.run(
             `INSERT INTO plan_weeks (
@@ -417,15 +472,15 @@ async function seedWeeklyPlanData(
             [
                 weekId,
                 weeklyPlanId,
-                week.week_number,
-                week.start_date,
-                week.end_date,
-                week.min_employees,
-                week.max_employees
+                week.weekNumber,
+                week.startDate,
+                week.endDate,
+                week.minEmployees,
+                week.maxEmployees
             ]
         );
 
-        console.log(`   Week ${week.week_number}: ${week.start_date} - ${week.end_date}`);
+        console.log(`   Week ${week.weekNumber}: ${week.startDate} - ${week.endDate}`);
     }
 
     // 3. Create employee work requirements and preferences
@@ -479,44 +534,6 @@ async function seedWeeklyPlanData(
         }
 
         console.log(`   ${employeeName}: ${data.required_weeks} weeks, ${data.assignment_style} style (consecutive size: ${data.assignment_style_consecutive})`);
-    }
-
-    // 4. Create assignments if they exist
-    if (weeklyPlanData.assignments) {
-        console.log('🏷️  Creating weekly assignments...');
-
-        for (const [weekNumberStr, employeeNames] of Object.entries(weeklyPlanData.assignments)) {
-            const weekId = weekMap[weekNumberStr];
-
-            if (!weekId) {
-                console.warn(`⚠️  Week ${weekNumberStr} not found for assignments`);
-                continue;
-            }
-
-            for (const employeeName of employeeNames) {
-                const employeeId = employeeMap[employeeName];
-
-                if (!employeeId) {
-                    console.warn(`⚠️  Employee ${employeeName} not found for assignment`);
-                    continue;
-                }
-
-                await db.run(
-                    `INSERT INTO weekly_assignments (
-                        id, plan_id, week_id, employee_id, assigned_by
-                    ) VALUES (?, ?, ?, ?, ?)`,
-                    [
-                        uuidv4(),
-                        weeklyPlanId,
-                        weekId,
-                        employeeId,
-                        creatorId
-                    ]
-                );
-            }
-
-            console.log(`   Week ${weekNumberStr}: ${employeeNames.join(', ')}`);
-        }
     }
 
     console.log(`✅ Weekly plan created with ID: ${weeklyPlanId}`);

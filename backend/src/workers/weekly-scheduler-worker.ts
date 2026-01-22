@@ -256,6 +256,14 @@ async function runWeeklyScheduling() {
     console.log(`Assignments: ${solution.assignments.length}`);
     console.log(`Violations: ${solution.violations.length}`);
 
+    // Log actual violation messages
+    if (solution.violations.length > 0) {
+      console.log('\nViolation Details:');
+      solution.violations.forEach((v, i) => {
+        console.log(`  ${i + 1}. ${v}`);
+      });
+    }
+
     // Build resolution report
     const resolutionReport: string[] = [
       `Solved in ${processingTime}ms`,

@@ -234,57 +234,11 @@
   },
   "weekly_plan": {
     "plan_name": "Test Wochenplan Q4 2025",
-    "description": "Wochenplan für das vierte Quartal 2025",
-    "period": "2025-10-01 bis 2025-12-31",
-    "status": "draft",
-    "created_by": "Basti",
-    "weeks": [
-      {
-        "week_number": 40,
-        "start_date": "2025-10-01",
-        "end_date": "2025-10-07",
-        "min_employees": 2,
-        "max_employees": 3
-      },
-      {
-        "week_number": 41,
-        "start_date": "2025-10-08",
-        "end_date": "2025-10-14",
-        "min_employees": 2,
-        "max_employees": 3
-      },
-      {
-        "week_number": 42,
-        "start_date": "2025-10-15",
-        "end_date": "2025-10-21",
-        "min_employees": 2,
-        "max_employees": 4
-      },
-      {
-        "week_number": 43,
-        "start_date": "2025-10-22",
-        "end_date": "2025-10-28",
-        "min_employees": 2,
-        "max_employees": 3
-      },
-      {
-        "week_number": 44,
-        "start_date": "2025-10-29",
-        "end_date": "2025-11-04",
-        "min_employees": 3,
-        "max_employees": 4
-      },
-      {
-        "week_number": 45,
-        "start_date": "2025-11-05",
-        "end_date": "2025-11-11",
-        "min_employees": 2,
-        "max_employees": 3
-      }
-    ],
+    "description": "Wochenplan für Oktober bis Anfang November 2025",
+    "period": "2025-10-06 bis 2025-11-16",
     "employee_preferences": {
       "Jerome": {
-        "required_weeks": 4,
+        "required_weeks": 3,
         "assignment_style": "consecutive",
         "assignment_style_consecutive": 2,
         "preferences": {
@@ -293,7 +247,8 @@
           "42": 1,
           "43": 3,
           "44": 2,
-          "45": 1
+          "45": 1,
+          "46": 2
         }
       },
       "Patrick": {
@@ -306,7 +261,8 @@
           "42": 3,
           "43": 2,
           "44": 1,
-          "45": 3
+          "45": 3,
+          "46": 3
         }
       },
       "Andrey": {
@@ -319,11 +275,12 @@
           "42": 2,
           "43": 2,
           "44": 3,
-          "45": 3
+          "45": 3,
+          "46": 1
         }
       },
       "Fabian": {
-        "required_weeks": 3,
+        "required_weeks": 2,
         "assignment_style": "flexible",
         "assignment_style_consecutive": 1,
         "preferences": {
@@ -332,7 +289,8 @@
           "42": 1,
           "43": 1,
           "44": 2,
-          "45": 3
+          "45": 3,
+          "46": 2
         }
       },
       "Lu": {
@@ -345,11 +303,12 @@
           "42": 1,
           "43": 2,
           "44": 1,
-          "45": 3
+          "45": 3,
+          "46": 2
         }
       },
       "Basti": {
-        "required_weeks": 5,
+        "required_weeks": 0,
         "assignment_style": "consecutive",
         "assignment_style_consecutive": 3,
         "preferences": {
@@ -358,11 +317,12 @@
           "42": 1,
           "43": 1,
           "44": 1,
-          "45": 1
+          "45": 1,
+          "46": 1
         }
       },
       "Kilian": {
-        "required_weeks": 3,
+        "required_weeks": 2,
         "assignment_style": "scattered",
         "assignment_style_consecutive": 1,
         "preferences": {
@@ -371,7 +331,8 @@
           "42": 1,
           "43": 3,
           "44": 2,
-          "45": 1
+          "45": 1,
+          "46": 3
         }
       },
       "Gerald": {
@@ -384,7 +345,8 @@
           "42": 2,
           "43": 1,
           "44": 3,
-          "45": 2
+          "45": 2,
+          "46": 1
         }
       },
       "Uliana": {
@@ -397,7 +359,8 @@
           "42": 2,
           "43": 1,
           "44": 2,
-          "45": 1
+          "45": 1,
+          "46": 2
         }
       },
       "Nico": {
@@ -410,11 +373,12 @@
           "42": 3,
           "43": 1,
           "44": 1,
-          "45": 3
+          "45": 3,
+          "46": 2
         }
       },
       "Linuuuus": {
-        "required_weeks": 3,
+        "required_weeks": 2,
         "assignment_style": "consecutive",
         "assignment_style_consecutive": 2,
         "preferences": {
@@ -423,7 +387,8 @@
           "42": 1,
           "43": 3,
           "44": 2,
-          "45": 1
+          "45": 1,
+          "46": 3
         }
       }
     }

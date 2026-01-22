@@ -12,28 +12,51 @@ import {
   WeeklyPlanWithDetails,
   PlanWeek,
   EmployeeWithPreferences,
+  WeeklyPlan,
 } from '../models/WeeklyPlan.js';
 import { AuthRequest } from '../middleware/auth.js';
 import ExcelJS from 'exceljs';
 import { chromium } from 'playwright-chromium';
 
-// Helper function to generate weeks from date range
+// Helper function to get ISO week number (Kalenderwoche)
+function getWeekNumber(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+}
+
+// Helper function to generate weeks from date range with calendar week numbers
 function generateWeeksFromDateRange(startDate: string, endDate: string): Omit<PlanWeek, 'id' | 'planId'>[] {
   const weeks: Omit<PlanWeek, 'id' | 'planId'>[] = [];
   const start = new Date(startDate);
   const end = new Date(endDate);
+
+  // Ensure dates are valid
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    throw new Error('Invalid date format');
+  }
 
   // Adjust to Monday of the week containing start date
   const dayOfWeek = start.getDay();
   const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
   start.setDate(start.getDate() + mondayOffset);
 
-  let weekNumber = 1;
+  // Adjust end date to Sunday of the week containing end date
+  const endDayOfWeek = end.getDay();
+  const sundayOffset = endDayOfWeek === 0 ? 0 : 7 - endDayOfWeek;
+  const adjustedEnd = new Date(end);
+  adjustedEnd.setDate(end.getDate() + sundayOffset);
+
   let currentWeekStart = new Date(start);
 
-  while (currentWeekStart <= end) {
+  while (currentWeekStart <= adjustedEnd) {
     const weekEnd = new Date(currentWeekStart);
     weekEnd.setDate(currentWeekStart.getDate() + 6);
+
+    // Get calendar week number (Kalenderwoche)
+    const weekNumber = getWeekNumber(currentWeekStart);
 
     weeks.push({
       weekNumber,
@@ -43,7 +66,7 @@ function generateWeeksFromDateRange(startDate: string, endDate: string): Omit<Pl
       maxEmployees: 4,
     });
 
-    weekNumber++;
+    // Move to next week
     currentWeekStart.setDate(currentWeekStart.getDate() + 7);
   }
 
@@ -280,25 +303,116 @@ export const createWeeklyPlan = async (req: Request, res: Response): Promise<voi
 export const updateWeeklyPlan = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, description, status }: UpdateWeeklyPlanRequest = req.body;
+    const { name, description, status, startDate, endDate }: UpdateWeeklyPlanRequest = req.body;
 
-    const existingPlan = await db.get('SELECT * FROM weekly_plans WHERE id = ?', [id]);
+    const existingPlan = await db.get<{
+      id: string;
+      name: string;
+      description: string;
+      start_date: string;
+      end_date: string;
+      status: 'draft' | 'published' | 'archived';
+      created_by: string;
+      created_at: string;
+    }>('SELECT * FROM weekly_plans WHERE id = ?', [id]);
+
     if (!existingPlan) {
       res.status(404).json({ error: 'Weekly plan not found' });
       return;
     }
 
-    await db.run(
-      `UPDATE weekly_plans
-       SET name = COALESCE(?, name),
-           description = COALESCE(?, description),
-           status = COALESCE(?, status)
-       WHERE id = ?`,
-      [name, description, status, id]
-    );
+    // If plan is not in draft status, don't allow date changes
+    if (existingPlan.status !== 'draft' && (startDate || endDate)) {
+      res.status(400).json({
+        error: 'Cannot change dates of a non-draft plan. Please revert to draft status first.'
+      });
+      return;
+    }
 
-    const updatedPlan = await getWeeklyPlanById(id);
-    res.json(updatedPlan);
+    await db.run('BEGIN TRANSACTION');
+
+    try {
+      // Update basic plan information
+      await db.run(
+        `UPDATE weekly_plans
+         SET name = COALESCE(?, name),
+             description = COALESCE(?, description),
+             status = COALESCE(?, status)
+         WHERE id = ?`,
+        [name, description, status, id]
+      );
+
+      // If start or end dates are provided, need to update and regenerate weeks
+      if (startDate || endDate) {
+        // Get new start and end dates (use provided or existing values)
+        const newStartDate = startDate || existingPlan.start_date;
+        const newEndDate = endDate || existingPlan.end_date;
+
+        // Update plan dates
+        await db.run(
+          `UPDATE weekly_plans
+           SET start_date = ?, end_date = ?
+           WHERE id = ?`,
+          [newStartDate, newEndDate, id]
+        );
+
+        // Check if dates actually changed
+        const datesChanged =
+          (startDate && startDate !== existingPlan.start_date) ||
+          (endDate && endDate !== existingPlan.end_date);
+
+        if (datesChanged) {
+          // Get existing weeks to check for associated data
+          const existingWeeks = await db.all<any>(
+            'SELECT * FROM plan_weeks WHERE plan_id = ? ORDER BY week_number',
+            [id]
+          );
+
+          // Check if there are existing assignments - if yes, don't allow date changes
+          if (existingWeeks.length > 0) {
+            const hasAssignments = await db.get<any>(
+              `SELECT COUNT(*) as count FROM weekly_assignments 
+               WHERE plan_id = ?`,
+              [id]
+            );
+
+            if (hasAssignments.count > 0) {
+              await db.run('ROLLBACK');
+              res.status(400).json({
+                error: 'Cannot change dates when assignments already exist. Please clear assignments first.'
+              });
+              return;
+            }
+          }
+
+          // Delete all existing weeks (cascade delete will also remove related preferences)
+          await db.run('DELETE FROM plan_weeks WHERE plan_id = ?', [id]);
+
+          // Generate new weeks
+          const weeks = generateWeeksFromDateRange(newStartDate, newEndDate);
+          for (const week of weeks) {
+            const weekId = uuidv4();
+            await db.run(
+              `INSERT INTO plan_weeks (id, plan_id, week_number, start_date, end_date, min_employees, max_employees)
+               VALUES (?, ?, ?, ?, ?, ?, ?)`,
+              [weekId, id, week.weekNumber, week.startDate, week.endDate, week.minEmployees, week.maxEmployees]
+            );
+          }
+
+          // Note: We don't delete work requirements (weekly_work_requirements),
+          // as they still apply even if weeks change
+          // Preferences are also not deleted as week IDs changed and old preferences were cascade deleted
+        }
+      }
+
+      await db.run('COMMIT');
+
+      const updatedPlan = await getWeeklyPlanById(id);
+      res.json(updatedPlan);
+    } catch (error) {
+      await db.run('ROLLBACK');
+      throw error;
+    }
   } catch (error) {
     console.error('Error updating weekly plan:', error);
     res.status(500).json({ error: 'Internal server error' });

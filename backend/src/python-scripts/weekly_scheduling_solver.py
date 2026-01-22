@@ -142,7 +142,7 @@ class WeeklySchedulingSolver:
                     total_required += req.get('requiredWeeks', 0)
 
             total_min_slots = sum(w.get('minEmployees', 2) for w in weeks)
-            total_max_slots = sum(w.get('maxEmployees', 3) for w in weeks)
+            total_max_slots = sum(w.get('maxEmployees', 4) for w in weeks)
 
             print(f"\n=== FEASIBILITY CHECK ===", file=sys.stderr)
             print(f"Total required weeks (schedulable employees): {total_required}", file=sys.stderr)
@@ -212,7 +212,7 @@ class WeeklySchedulingSolver:
                 week_vars = [self.assignment_vars[(emp['id'], week['id'])] for emp in schedulable_employees]
 
                 min_emp = week.get('minEmployees', 2)
-                max_emp = week.get('maxEmployees', 3)
+                max_emp = week.get('maxEmployees', 4)
 
                 # Count how many employees are available for this week
                 available_count = sum(1 for emp in schedulable_employees if pref_lookup.get((emp['id'], week['id']), 3) in [1, 2])
@@ -345,18 +345,7 @@ class WeeklySchedulingSolver:
                                 'employeeId': emp['id']
                             })
 
-                # Add manager assignments based on preference = 1
-                for manager in managers:
-                    for week in weeks:
-                        pref_level = pref_lookup.get((manager['id'], week['id']), 3)
-                        if pref_level == 1:  # Preferred
-                            assignments.append({
-                                'weekId': week['id'],
-                                'employeeId': manager['id']
-                            })
-                            print(f"  Manager {manager['firstname']} {manager['lastname']} auto-assigned to week {week.get('weekNumber')}", file=sys.stderr)
-
-                print(f"\nTotal assignments: {len(assignments)}", file=sys.stderr)
+                # Adding manager assignments is being skipped
 
                 # Validate and detect violations
                 violations = self._detect_violations(
@@ -364,7 +353,13 @@ class WeeklySchedulingSolver:
                 )
 
             else:
+                # Provide detailed infeasibility analysis
                 violations.append(f"SOLVER_FAILED: No feasible solution found (status: {self._status_string(status)})")
+
+                # Analyze why it's infeasible
+                violations.extend(self._analyze_infeasibility(
+                    schedulable_employees, weeks, req_lookup, pref_lookup, total_required, total_max_slots, total_min_slots
+                ))
 
             success = status in [cp_model.OPTIMAL, cp_model.FEASIBLE] and len(violations) == 0
 
@@ -400,6 +395,70 @@ class WeeklySchedulingSolver:
                 }
             }
 
+    def _analyze_infeasibility(
+        self,
+        employees: List[Dict],
+        weeks: List[Dict],
+        req_lookup: Dict,
+        pref_lookup: Dict,
+        total_required: int,
+        total_max_slots: int,
+        total_min_slots: int
+    ) -> List[str]:
+        """Analyze why the problem is infeasible and provide detailed feedback"""
+        violations = []
+
+        # Check global capacity issue
+        if total_required > total_max_slots:
+            violations.append(
+                f"CAPACITY_EXCEEDED: Employees want {total_required} total week-slots but only {total_max_slots} are available. "
+                f"Reduce employee requiredWeeks or increase maxEmployees per week."
+            )
+
+        if total_required < total_min_slots:
+            violations.append(
+                f"INSUFFICIENT_DEMAND: Employees want {total_required} total week-slots but minimum required is {total_min_slots}. "
+                f"Increase employee requiredWeeks or reduce minEmployees per week."
+            )
+
+        # Check individual employee feasibility
+        for emp in employees:
+            req = req_lookup.get(emp['id'])
+            if not req:
+                continue
+
+            required_weeks = req.get('requiredWeeks', 0)
+            if required_weeks == 0:
+                continue
+
+            # Count how many weeks this employee is actually available for
+            available_weeks = sum(
+                1 for w in weeks
+                if pref_lookup.get((emp['id'], w['id']), 3) in [1, 2]
+            )
+
+            if required_weeks > available_weeks:
+                violations.append(
+                    f"EMPLOYEE_OVERCOMMIT: {emp['firstname']} {emp['lastname']} wants {required_weeks} weeks "
+                    f"but is only available for {available_weeks} weeks. Reduce their requiredWeeks or add more availability."
+                )
+
+        # Check per-week feasibility
+        for week in weeks:
+            min_emp = week.get('minEmployees', 2)
+            available_for_week = sum(
+                1 for emp in employees
+                if pref_lookup.get((emp['id'], week['id']), 3) in [1, 2]
+            )
+
+            if available_for_week < min_emp:
+                violations.append(
+                    f"WEEK_UNDERSTAFFED: Week {week.get('weekNumber')} requires minimum {min_emp} employees "
+                    f"but only {available_for_week} are available. Add more employee availability for this week."
+                )
+
+        return violations
+
     def _detect_violations(
         self,
         assignments: List[Dict],
@@ -423,7 +482,7 @@ class WeeklySchedulingSolver:
             if count < week.get('minEmployees', 2):
                 violations.append(f"UNDERSTAFFED: Week {week.get('weekNumber')} has {count} employees but requires minimum {week.get('minEmployees')}")
 
-            if count > week.get('maxEmployees', 3):
+            if count > week.get('maxEmployees', 4):
                 violations.append(f"OVERSTAFFED: Week {week.get('weekNumber')} has {count} employees but maximum is {week.get('maxEmployees')}")
 
         # Check trainee supervision

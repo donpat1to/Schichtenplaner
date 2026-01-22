@@ -5,7 +5,6 @@ import { weeklyPlanService } from '../../services/weeklyPlanService';
 import {
     PlanWeek,
     UpdateWeeklyPlanRequest,
-    UpdateWeekRequest,
     WeeklyPlanWithDetails,
     formatWeekRange,
 } from '../../models/WeeklyPlan';
@@ -14,7 +13,7 @@ import { useBackendValidation } from '../../hooks/useBackendValidation';
 import Calendar from '../../components/Calendar/Calendar';
 import {
     ICONS,
-    addTextButton,
+    backTextButton,
 } from '../../utils/buttonStyles';
 
 interface WeekFormData {
@@ -127,101 +126,11 @@ const WeeklyPlanEdit: React.FC = () => {
         });
     };
 
-    // Add a new week
-    const handleAddWeek = () => {
-        setSelectedWeek(null);
-        setWeekFormData({
-            id: '',
-            weekNumber: weeklyPlan?.weeks?.length ? weeklyPlan.weeks.length + 1 : 1,
-            startDate: '',
-            endDate: '',
-            minEmployees: 1,
-            maxEmployees: 3,
-            isEditing: true,
-        });
-        setShowWeekForm(true);
-    };
-
-    // Edit an existing week
-    const handleEditWeek = (week: PlanWeek) => {
-        setSelectedWeek(week);
-        setWeekFormData({
-            id: week.id,
-            weekNumber: week.weekNumber,
-            startDate: week.startDate,
-            endDate: week.endDate,
-            minEmployees: week.minEmployees,
-            maxEmployees: week.maxEmployees,
-            isEditing: true,
-        });
-        setShowWeekForm(true);
-    };
-
-    // Calendar day info handler
-    const getCalendarDayInfo = (date: Date) => {
-        if (!weeklyPlan?.weeks) return { isInPlan: false };
-
-        const dateStr = date.toISOString().split('T')[0];
-
-        // Check if date is within any week
-        const week = weeklyPlan.weeks.find(w => {
-            const start = new Date(w.startDate);
-            const end = new Date(w.endDate);
-            return date >= start && date <= end;
-        });
-
-        if (week) {
-            // Check if there are assignments for this week
-            const isAssigned = weeklyPlan.assignments?.some(a => a.weekId === week.id) || false;
-
-            // Get employee preferences for this week (simplified - you might want to aggregate)
-            // For now, just show if the week exists
-            return {
-                isInPlan: true,
-                weekId: week.id,
-                isAssigned,
-                weekNumber: week.weekNumber,
-            };
-        }
-
-        return { isInPlan: false };
-    };
-
-    // Handle calendar day click
-    const handleCalendarDayClick = (date: Date, weekId?: string) => {
-        if (weekId && weeklyPlan) {
-            const week = weeklyPlan.weeks?.find(w => w.id === weekId);
-            if (week) {
-                handleEditWeek(week);
-            }
-        }
-    };
-
     // Handle calendar month change
     const handleCalendarMonthChange = (year: number, month: number) => {
         setCalendarYear(year);
         setCalendarMonth(month);
     };
-
-    // Calculate plan statistics
-    const planStatistics = useMemo(() => {
-        if (!weeklyPlan) return null;
-
-        const totalWeeks = weeklyPlan.weeks?.length || 0;
-        const totalAssigned = weeklyPlan.assignments?.length || 0;
-        const totalRequired = weeklyPlan.requirements?.reduce((sum, req) => sum + req.requiredWeeks, 0) || 0;
-        const employeesCount = new Set(weeklyPlan.requirements?.map(r => r.employeeId)).size;
-        const employeesWithPrefs = new Set(weeklyPlan.preferences?.map(p => p.employeeId)).size;
-
-        return {
-            totalWeeks,
-            totalAssigned,
-            totalRequired,
-            coverageRate: totalWeeks > 0 ? (totalAssigned / (totalWeeks * 3)) * 100 : 0, // Assuming 3 employees per week as default
-            employeesCount,
-            employeesWithPrefs,
-        };
-    }, [weeklyPlan]);
 
     if (loading) {
         return (
@@ -265,15 +174,7 @@ const WeeklyPlanEdit: React.FC = () => {
                     <button
                         onClick={() => navigate('/weekly-plans')}
                         disabled={isSubmitting}
-                        style={{
-                            padding: '8px 16px',
-                            backgroundColor: '#95a5a6',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                            opacity: isSubmitting ? 0.6 : 1
-                        }}
+                        style={backTextButton(false)}
                     >
                         Zurück
                     </button>
@@ -436,8 +337,6 @@ const WeeklyPlanEdit: React.FC = () => {
                         month={calendarMonth}
                         weeks={weeklyPlan.weeks || []}
                         onMonthChange={handleCalendarMonthChange}
-                        getDayInfo={getCalendarDayInfo}
-                        onDayClick={handleCalendarDayClick}
                     />
                 </div>
             </div>
@@ -476,17 +375,6 @@ const WeeklyPlanEdit: React.FC = () => {
                         <p style={{ color: '#666', marginBottom: '24px' }}>
                             Fügen Sie Wochen hinzu, um mit der Planung zu beginnen.
                         </p>
-                        <button
-                            onClick={handleAddWeek}
-                            disabled={isSubmitting}
-                            style={{
-                                ...addTextButton(isSubmitting),
-                                padding: '12px 24px',
-                                fontSize: '16px',
-                            }}
-                        >
-                            {ICONS.add} Erste Woche hinzufügen
-                        </button>
                     </div>
                 ) : (
                     <div style={{ overflowX: 'auto' }}>
