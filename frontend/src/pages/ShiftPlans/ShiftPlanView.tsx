@@ -13,6 +13,7 @@ import { formatDate, formatTime } from '../../utils/foramatters';
 import { saveAs } from 'file-saver';
 import styles from './ShiftPlanView.module.css';
 import { backTextButton } from '@/utils/buttonStyles';
+import { isAdmin } from '@/models/helpers/employeeHelpers';
 
 // Local interface extensions (same as AvailabilityManager)
 interface ExtendedTimeSlot extends TimeSlot {
@@ -61,6 +62,7 @@ const ShiftPlanView: React.FC = () => {
   const [exportType, setExportType] = useState<'pdf' | 'excel' | null>(null);
   const [dropdownWidth, setDropdownWidth] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [employeesAvailibilityReadyMap, setEmployeesAvailibilityReadyMap] = useState<{ id: string, name: string }[]>([]);
 
   useEffect(() => {
     loadShiftPlanData();
@@ -82,9 +84,9 @@ const ShiftPlanView: React.FC = () => {
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        // Seite ist wieder sichtbar - Daten neu laden
-        console.log('🔄 Seite ist wieder sichtbar - lade Daten neu...');
-        reloadAvailabilities();
+        // Komplette Daten neu laden statt nur Verfügbarkeiten
+        console.log('🔄 Seite ist wieder sichtbar - lade alle Daten neu...');
+        loadShiftPlanData();  // Dies lädt ALLES neu: Plan, Mitarbeiter, Verfügbarkeiten
       }
     };
 
@@ -93,7 +95,7 @@ const ShiftPlanView: React.FC = () => {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, []);
+  }, [id]);
 
   // Add this useEffect to debug state changes
   useEffect(() => {
@@ -293,73 +295,6 @@ const ShiftPlanView: React.FC = () => {
       });
     } finally {
       setExporting(false);
-    }
-  };
-
-  const loadShiftPlanData = async () => {
-    if (!id) return;
-
-    try {
-      setLoading(true);
-
-      // Load plan and employees first
-      const [plan, employeesData] = await Promise.all([
-        shiftPlanService.getShiftPlan(id),
-        employeeService.getEmployees(),
-      ]);
-
-      setShiftPlan(plan);
-      setEmployees(employeesData.filter(emp => emp.isActive));
-
-      // CRITICAL: Load scheduled shifts and verify they exist
-      const shiftsData = await shiftAssignmentService.getScheduledShiftsForPlan(id);
-      console.log('📋 Loaded scheduled shifts:', shiftsData.length);
-
-      if (shiftsData.length === 0) {
-        console.warn('⚠️ No scheduled shifts found for plan:', id);
-        showNotification({
-          type: 'warning',
-          title: 'Keine Schichten gefunden',
-          message: 'Der Schichtplan hat keine generierten Schichten. Bitte überprüfen Sie die Plan-Konfiguration.'
-        });
-      }
-
-      setScheduledShifts(shiftsData);
-
-      // Load availabilities - USING THE SAME LOGIC AS AVAILABILITYMANAGER
-      console.log('🔄 LADE VERFÜGBARKEITEN FÜR PLAN:', id);
-
-      const availabilityPromises = employeesData
-        .filter(emp => emp.isActive)
-        .map(emp => employeeService.getAvailabilities(emp.id));
-
-      const allAvailabilities = await Promise.all(availabilityPromises);
-      const flattenedAvailabilities = allAvailabilities.flat();
-
-      // Filter to only include availabilities for the current plan - SAME LOGIC AS AVAILABILITYMANAGER
-      const planAvailabilities = flattenedAvailabilities.filter(
-        availability => availability.planId === id
-      );
-
-      console.log('✅ VERFÜGBARKEITEN FÜR DIESEN PLAN:', planAvailabilities.length);
-
-      setAvailabilities(planAvailabilities);
-
-      // Run validation
-      const validation = validateTimetableStructure();
-      if (!validation.isValid) {
-        console.warn('⚠️ TIMETABLE VALIDATION ERRORS:', validation.errors);
-      }
-
-    } catch (error) {
-      console.error('Error loading shift plan data:', error);
-      showNotification({
-        type: 'error',
-        title: 'Fehler',
-        message: 'Daten konnten nicht geladen werden.'
-      });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -712,19 +647,108 @@ const ShiftPlanView: React.FC = () => {
     return !hasCriticalViolations;
   };
 
+  // Add this function to create availability status map
+  const setAvailabilityStatus = () => {
+    if (!id || employees.length === 0) return;
+
+    const employeesWithAvailabilities = employees.filter(emp => {
+      const empAvailabilities = availabilities.filter(avail => avail.employeeId === emp.id);
+      return empAvailabilities.length > 0;
+    });
+
+    const statusMap = employeesWithAvailabilities.map(emp => ({
+      id: emp.id,
+      name: `${emp.firstname} ${emp.lastname}`
+    }));
+
+    setEmployeesAvailibilityReadyMap(statusMap);
+  };
+
+  // Call this function after loading availabilities
+  useEffect(() => {
+    if (employees.length > 0 && availabilities.length > 0) {
+      setAvailabilityStatus();
+    }
+  }, [employees, availabilities]);
+
+  // Update the getAvailabilityStatus function to use the map
   const getAvailabilityStatus = () => {
     const totalEmployees = employees.length;
-    const employeesWithAvailabilities = new Set(
-      availabilities.map(avail => avail.employeeId)
-    ).size;
+    const employeesWithAvailabilities = employeesAvailibilityReadyMap.length;
+
+    // Get employees without availabilities
+    const employeesWithoutAvailabilities = employees.filter(emp =>
+      !employeesAvailibilityReadyMap.some(item => item.id === emp.id)
+    ).map(emp => ({
+      id: emp.id,
+      name: `${emp.firstname} ${emp.lastname}`,
+      email: emp.email
+    }));
 
     return {
       completed: employeesWithAvailabilities,
       total: totalEmployees,
-      percentage: Math.round((employeesWithAvailabilities / totalEmployees) * 100)
+      percentage: Math.round((employeesWithAvailabilities / totalEmployees) * 100),
+      employeesWithAvailabilities: employeesAvailibilityReadyMap,
+      employeesWithoutAvailabilities: employeesWithoutAvailabilities
     };
   };
 
+  // Also update the loadShiftPlanData function to include setAvailabilityStatus
+  const loadShiftPlanData = async () => {
+    if (!id) return;
+
+    try {
+      setLoading(true);
+
+      // Load plan and employees first
+      const [plan, employeesData] = await Promise.all([
+        shiftPlanService.getShiftPlan(id),
+        employeeService.getEmployees(),
+      ]);
+
+      setShiftPlan(plan);
+      const activeEmployees = employeesData.filter(emp => emp.isActive);
+      setEmployees(activeEmployees);
+
+      // Load scheduled shifts
+      const shiftsData = await shiftAssignmentService.getScheduledShiftsForPlan(id);
+      console.log('📋 Loaded scheduled shifts:', shiftsData.length);
+      setScheduledShifts(shiftsData);
+
+      // Load availabilities
+      console.log('🔄 LADE VERFÜGBARKEITEN FÜR PLAN:', id);
+      const availabilityPromises = activeEmployees.map(emp =>
+        employeeService.getAvailabilities(emp.id)
+      );
+
+      const allAvailabilities = await Promise.all(availabilityPromises);
+      const flattenedAvailabilities = allAvailabilities.flat();
+
+      // Filter to only include availabilities for the current plan
+      const planAvailabilities = flattenedAvailabilities.filter(
+        availability => availability.planId === id
+      );
+
+      console.log('✅ VERFÜGBARKEITEN FÜR DIESEN PLAN:', planAvailabilities.length);
+      setAvailabilities(planAvailabilities);
+
+      // Set availability status map
+      setAvailabilityStatus();
+
+    } catch (error) {
+      console.error('Error loading shift plan data:', error);
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: 'Daten konnten nicht geladen werden.'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Update the reloadAvailabilities function to also update the map
   const reloadAvailabilities = async () => {
     try {
       console.log('🔄 Lade Verfügbarkeiten neu...');
@@ -743,11 +767,20 @@ const ShiftPlanView: React.FC = () => {
       );
 
       setAvailabilities(planAvailabilities);
+
+      // Update the availability status map
+      setAvailabilityStatus();
+
       console.log('✅ Verfügbarkeiten neu geladen:', planAvailabilities.length);
 
     } catch (error) {
       console.error('❌ Fehler beim Neuladen der Verfügbarkeiten:', error);
     }
+  };
+
+  // Add a helper function to check if a specific employee has set availabilities
+  const hasEmployeeSetAvailabilities = (employeeId: string): boolean => {
+    return employeesAvailibilityReadyMap.some(item => item.id === employeeId);
   };
 
   const getAssignmentsForScheduledShift = (scheduledShift: ScheduledShift): string[] => {
@@ -1136,9 +1169,6 @@ const ShiftPlanView: React.FC = () => {
           <h3>Veröffentlichungsvoraussetzungen</h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '15px' }}>
             <div>
-              <div style={{ fontSize: '14px', color: '#666', marginBottom: '5px' }}>
-                Verfügbarkeitseinträge:
-              </div>
               <div style={{ fontSize: '18px', fontWeight: 'bold' }}>
                 {availabilityStatus.completed} / {availabilityStatus.total} Mitarbeiter
               </div>

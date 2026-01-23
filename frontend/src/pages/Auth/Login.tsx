@@ -12,7 +12,7 @@ const Login: React.FC = () => {
   const { login, user } = useAuth();
   const { showNotification } = useNotification();
   const navigate = useNavigate();
-  
+
   const holdTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
 
@@ -78,9 +78,9 @@ const Login: React.FC = () => {
         title: 'Erfolgreich angemeldet',
         message: `Willkommen zurück!`
       });
-      
+
       navigate('/');
-      
+
     } catch (error: any) {
       console.error('❌ Login error:', error);
       showNotification({
@@ -102,10 +102,10 @@ const Login: React.FC = () => {
   }
 
   return (
-    <div style={{ 
-      display: 'flex', 
-      justifyContent: 'center', 
-      alignItems: 'center', 
+    <div style={{
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
       minHeight: '100vh',
       backgroundColor: '#f5f5f5'
     }}>
@@ -118,7 +118,7 @@ const Login: React.FC = () => {
         maxWidth: '400px'
       }}>
         <h2 style={{ textAlign: 'center', marginBottom: '30px' }}>Anmeldung</h2>
-        
+
         <div style={{ marginBottom: '20px', width: '100%' }}>
           <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
             E-Mail
@@ -129,21 +129,36 @@ const Login: React.FC = () => {
             onChange={(e) => setEmail(e.target.value)}
             required
             style={{
+              padding: '0.875rem 1rem',
+              border: '1.5px solid #e8e8e8',
+              borderRadius: '8px',
+              fontSize: '0.95rem',
+              background: '#FBFAF6',
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              color: '#161718',
               width: '100%',
-              padding: '10px',
-              border: '1px solid #ddd',
-              borderRadius: '4px',
-              fontSize: '16px'
+              paddingRight: '40px',
+              boxSizing: 'border-box' as const,
             }}
             placeholder="ihre-email@example.com"
           />
         </div>
 
-        <div style={{ marginBottom: '30px', width: '100%' }}>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+        <div style={{
+          marginBottom: '30px', display: 'flex',
+          flexDirection: 'column' as const,
+          gap: '0.5rem',
+          width: '100%',
+        }}>
+          <label style={{
+            display: 'block', marginBottom: '8px', fontWeight: 'bold', width: '100%',
+          }}>
             Passwort
           </label>
-          <div style={{ position: 'relative' }}>
+          <div style={{
+            position: 'relative' as const,
+            width: '100%',
+          }}>
             <input
               ref={passwordInputRef}
               type={showPassword ? 'text' : 'password'}
@@ -151,12 +166,16 @@ const Login: React.FC = () => {
               onChange={(e) => setPassword(e.target.value)}
               required
               style={{
+                padding: '0.875rem 1rem',
+                border: '1.5px solid #e8e8e8',
+                borderRadius: '8px',
+                fontSize: '0.95rem',
+                background: '#FBFAF6',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                color: '#161718',
                 width: '100%',
-                padding: '10px',
-                paddingRight: '10px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                fontSize: '16px'
+                paddingRight: '40px',
+                boxSizing: 'border-box' as const,
               }}
               placeholder="Ihr Passwort"
             />
@@ -170,20 +189,20 @@ const Login: React.FC = () => {
               onTouchCancel={handleTouchEnd} // Handle touch cancellation
               onContextMenu={handleContextMenu}
               style={{
-                position: 'absolute',
+                position: 'absolute' as const,
                 right: '10px',
                 top: '50%',
                 transform: 'translateY(-50%)',
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
-                padding: '1px',
-                borderRadius: '1px',
-                backgroundColor: showPassword ? '#e0e0e0' : 'transparent',
+                padding: '5px',
+                borderRadius: '4px',
                 transition: 'background-color 0.2s',
-                userSelect: 'none',
-                WebkitUserSelect: 'none',
-                touchAction: 'manipulation'
+                userSelect: 'none' as const,
+                WebkitUserSelect: 'none' as const,
+                touchAction: 'manipulation' as const,
+                backgroundColor: showPassword ? '#e0e0e0' : 'transparent',
               }}
               title="Gedrückt halten zum Anzeigen des Passworts"
             >

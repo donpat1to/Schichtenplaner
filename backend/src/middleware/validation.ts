@@ -587,8 +587,8 @@ export const validateAvailabilities = [
     .withMessage('Each shift ID must be a valid UUID'),
 
   body('availabilities.*.preferenceLevel')
-    .isInt({ min: 0, max: 2 })
-    .withMessage('Preference level must be 0 (unavailable), 1 (available), or 2 (preferred)'),
+    .isInt({ min: 1, max: 3 })
+    .withMessage('Preference level must be 1 (available), 2 (preferred), or 3 (unavailable)'),
 
   body('availabilities.*.notes')
     .optional()

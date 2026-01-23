@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { employeeService } from '../../../services/employeeService';
+import { EmployeeService, employeeService } from '../../../services/employeeService';
 import { shiftPlanService } from '../../../services/shiftPlanService';
 import { weeklyPlanService } from '../../../services/weeklyPlanService';
 import { Employee, EmployeeAvailability } from '../../../models/Employee';
@@ -56,12 +56,16 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
   const [selectedWeeklyPlanId, setSelectedWeeklyPlanId] = useState<string>('');
   const [selectedWeeklyPlan, setSelectedWeeklyPlan] = useState<WeeklyPlanWithDetails | null>(null);
   const [weeklyPreferencesMap, setWeeklyPreferencesMap] = useState<Record<string, 1 | 2 | 3>>({});
-  const [requiredWeeks, setRequiredWeeks] = useState(0);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const { showNotification } = useNotification();
   const { executeWithValidation, isSubmitting } = useBackendValidation();
+
+  const [largeContractMinimumWeeks, setLargeContractMinimumWeeks] = useState(0);
+  const [smallContractMinimumWeeks, setSmallContractMinimumWeeks] = useState(0);
+  const [requiredWeeks, setRequiredWeeks] = useState(0);
+  const [requiredWeeksChanged, setRequiredWeeksChanged] = useState(false);
 
   const daysOfWeek = [
     { id: 1, name: 'Montag' },
@@ -190,7 +194,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         const plan = await weeklyPlanService.getWeeklyPlan(selectedWeeklyPlanId);
         setSelectedWeeklyPlan(plan);
 
-        // Find this employee's preferences in the plan data
+        // Find this employee's preferences
         const employeeData = plan.employees?.find(e => e.id === employee.id);
         if (employeeData) {
           const prefs: Record<string, 1 | 2 | 3> = {};
@@ -198,11 +202,31 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
             prefs[p.weekId] = p.preferenceLevel;
           });
           setWeeklyPreferencesMap(prefs);
-          setRequiredWeeks(employeeData.requiredWeeks);
+
+          // Only load requiredWeeks from backend if not changed by user
+          if (!requiredWeeksChanged && employeeData.requiredWeeks !== undefined) {
+            setRequiredWeeks(employeeData.requiredWeeks);
+          }
         } else {
           setWeeklyPreferencesMap({});
-          setRequiredWeeks(0);
+          // Reset requiredWeeksChanged flag if no employee data found
+          setRequiredWeeksChanged(false);
         }
+
+        // Calculate contract weeks recommendations
+        const weeksCount = plan.weeks.length;
+        const assignmentsPerWeekNeeded = plan.weeks[0].minEmployees;
+        const weeksNeeded = assignmentsPerWeekNeeded * weeksCount;
+
+        const employees = await employeeService.getEmployees(false);
+        const employeeSmallContractCount = employees.filter(e => e.employeeType === 'personell' && e.contractType === 'small').length;
+        const employeeLargeContractCount = employees.filter(e => e.employeeType === 'personell' && e.contractType === 'large').length;
+
+        const workloadUnitsAvailable = employeeSmallContractCount + employeeLargeContractCount * 2;
+        const weeksPerWorkloadUnit = weeksNeeded / workloadUnitsAvailable;
+
+        setLargeContractMinimumWeeks(Math.ceil(2 * weeksPerWorkloadUnit));
+        setSmallContractMinimumWeeks(Math.ceil(weeksPerWorkloadUnit));
 
       } catch (err: any) {
         console.error('Error loading weekly plan:', err);
@@ -287,6 +311,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
           employeeId: employee.id,
           planId: selectedPlanId,
           shiftId: shiftId,
+          contractType: employee.contractType,
           preferenceLevel: level,
           isAvailable: level !== 3
         };
@@ -305,6 +330,11 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       }
       return { ...prev, [weekId]: level as 1 | 2 | 3 };
     });
+  };
+
+  const handleRequiredWeeksChange = (value: number) => {
+    setRequiredWeeks(value);
+    setRequiredWeeksChanged(true);
   };
 
   const toggleWeeklyPreference = (weekId: string) => {
@@ -409,7 +439,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
           padding: '15px 20px',
           fontWeight: 'bold'
         }}>
-          Verfügbarkeit für Schichtplan
+          Wochenpräferenzen
           <div style={{ fontSize: '14px', fontWeight: 'normal', marginTop: '5px' }}>
             {sortedTimeSlots.length} Zeitslots • {days.length} Tage
           </div>
@@ -564,7 +594,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         overflow: 'hidden'
       }}>
         <div style={{
-          backgroundColor: '#51258f',
+          backgroundColor: '#2c3e50',
           color: 'white',
           padding: '15px 20px',
           fontWeight: 'bold'
@@ -592,7 +622,8 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
             min="0"
             max={selectedWeeklyPlan.weeks.length}
             value={requiredWeeks}
-            onChange={(e) => setRequiredWeeks(parseInt(e.target.value) || 0)}
+            onChange={(e) => handleRequiredWeeksChange(parseInt(e.target.value) || 0)}
+            onKeyDown={(e) => e.preventDefault()}
             disabled={!canEdit}
             style={{
               padding: '8px 12px',
@@ -704,6 +735,15 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       return;
     }
 
+    if (!user) {
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: 'Benutzer nicht gefunden'
+      });
+      return;
+    }
+
     const validAvailabilities = availabilities.filter(avail => {
       return avail.shiftId && selectedPlan?.shifts?.some(shift => shift.id === avail.shiftId);
     });
@@ -716,6 +756,54 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       });
       return;
     }
+
+    if (isOwnProfile) {
+      if (user.contractType === 'large') {
+        if (validAvailabilities.filter(avail => avail.preferenceLevel === 1 || avail.preferenceLevel === 2).length < 3) {
+          showNotification({
+            type: 'error',
+            title: 'Fehler',
+            message: 'Bitte wählen Sie mindestens 3 verfügbare Schichten aus, da Sie einen großen Vertrag haben'
+          });
+          return;
+        }
+      }
+
+      if (user.contractType === 'small') {
+        if (validAvailabilities.filter(avail => avail.preferenceLevel === 1 || avail.preferenceLevel === 2).length < 2) {
+          showNotification({
+            type: 'error',
+            title: 'Fehler',
+            message: 'Bitte wählen Sie mindestens 2 verfügbare Schichten aus, da Sie einen kleinen Vertrag haben'
+          });
+          return;
+        }
+      }
+    } else if (isAdmin) {
+      if (employee.contractType === 'large') {
+        if (validAvailabilities.filter(avail => avail.preferenceLevel === 1 || avail.preferenceLevel === 2).length < 3) {
+          showNotification({
+            type: 'error',
+            title: 'Fehler',
+            message: 'Bitte wählen Sie mindestens 3 verfügbare Schichten aus, da der Mitarbeiter einen großen Vertrag hat'
+          });
+          return;
+        }
+      }
+
+      if (employee.contractType === 'small') {
+        if (validAvailabilities.filter(avail => avail.preferenceLevel === 1 || avail.preferenceLevel === 2).length < 2) {
+          showNotification({
+            type: 'error',
+            title: 'Fehler',
+            message: 'Bitte wählen Sie mindestens 2 verfügbare Schichten aus, da der Mitarbeiter einen kleinen Vertrag hat'
+          });
+          return;
+        }
+      }
+    }
+
+
 
     await executeWithValidation(async () => {
       setSaving(true);
@@ -744,7 +832,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
   };
 
   const handleSaveWeeklyPreferences = async () => {
-    if (!selectedWeeklyPlanId) {
+    if (!selectedWeeklyPlan) {
       showNotification({
         type: 'error',
         title: 'Fehler',
@@ -753,10 +841,16 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       return;
     }
 
-    const preferences = Object.entries(weeklyPreferencesMap).map(([weekId, level]) => ({
-      weekId,
-      preferenceLevel: level,
-    }));
+    // Für alle Wochen im Plan sicherstellen, dass wir einen Wert haben
+    // Wenn undefined, dann 3 (Nicht möglich) setzen
+    const preferences = selectedWeeklyPlan.weeks.map(week => {
+      const level = weeklyPreferencesMap[week.id];
+      return {
+        weekId: week.id,
+        // Wenn undefined, dann 3, ansonsten den gesetzten Wert
+        preferenceLevel: level !== undefined ? level : 3,
+      };
+    });
 
     await executeWithValidation(async () => {
       setSaving(true);
@@ -861,7 +955,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         )}
       </div>
 
-      {/* Plan Type Selector */}
+      {/* Plan Type Selector & Plan Selection */}
       <div style={{
         marginBottom: '30px',
         padding: '20px',
@@ -869,42 +963,125 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         borderRadius: '8px',
         border: '1px solid #e9ecef'
       }}>
-        <h4 style={{ margin: '0 0 15px 0', color: '#495057' }}>
-          Plantyp auswählen
-        </h4>
+        {/* Plan Type Selector */}
+        <div style={{ marginBottom: '20px' }}>
+          <h4 style={{ margin: '0 0 15px 0', color: '#495057' }}>
+            Plantyp auswählen
+          </h4>
 
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button
-            onClick={() => setPlanType('shift')}
-            style={{
-              padding: '12px 24px',
-              border: planType === 'shift' ? '2px solid #3498db' : '2px solid #ddd',
-              borderRadius: '8px',
-              backgroundColor: planType === 'shift' ? '#e8f4fd' : 'white',
-              color: planType === 'shift' ? '#3498db' : '#666',
-              fontWeight: planType === 'shift' ? 'bold' : 'normal',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-          >
-            📋 Schichtpläne
-          </button>
-          <button
-            onClick={() => setPlanType('weekly')}
-            style={{
-              padding: '12px 24px',
-              border: planType === 'weekly' ? '2px solid #51258f' : '2px solid #ddd',
-              borderRadius: '8px',
-              backgroundColor: planType === 'weekly' ? '#f5f0ff' : 'white',
-              color: planType === 'weekly' ? '#51258f' : '#666',
-              fontWeight: planType === 'weekly' ? 'bold' : 'normal',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-          >
-            📆 Wochenpläne
-          </button>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              onClick={() => setPlanType('shift')}
+              style={{
+                padding: '12px 24px',
+                border: planType === 'shift' ? '2px solid #51258f' : '2px solid #ddd',
+                borderRadius: '8px',
+                backgroundColor: planType === 'shift' ? '#f5f0ff' : 'white',
+                color: planType === 'shift' ? '#51258f' : '#666',
+                fontWeight: planType === 'shift' ? 'bold' : 'normal',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              📋 Schichtpläne
+            </button>
+            <button
+              onClick={() => setPlanType('weekly')}
+              style={{
+                padding: '12px 24px',
+                border: planType === 'weekly' ? '2px solid #51258f' : '2px solid #ddd',
+                borderRadius: '8px',
+                backgroundColor: planType === 'weekly' ? '#f5f0ff' : 'white',
+                color: planType === 'weekly' ? '#51258f' : '#666',
+                fontWeight: planType === 'weekly' ? 'bold' : 'normal',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              📆 Wochenpläne
+            </button>
+          </div>
         </div>
+
+        {/* Plan Selection */}
+        {planType === 'shift' ? (
+          <div>
+            <h4 style={{ margin: '0 0 15px 0', color: '#495057' }}>
+              Schichtplan auswählen
+            </h4>
+
+            <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <select
+                value={selectedPlanId}
+                onChange={(e) => setSelectedPlanId(e.target.value)}
+                style={{
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  minWidth: '250px'
+                }}
+              >
+                <option value="">Bitte auswählen...</option>
+                {shiftPlans.map(plan => (
+                  <option key={plan.id} value={plan.id}>
+                    {plan.name} {plan.shifts && `(${plan.shifts.length} Shifts)`}
+                  </option>
+                ))}
+              </select>
+
+              {selectedPlan && (
+                <div style={{ fontSize: '14px', color: '#666' }}>
+                  <strong>Status:</strong> {selectedPlan.status}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div>
+            <h4 style={{ margin: '0 0 15px 0', color: '#495057' }}>
+              Wochenplan auswählen
+            </h4>
+
+            <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <select
+                value={selectedWeeklyPlanId}
+                onChange={(e) => setSelectedWeeklyPlanId(e.target.value)}
+                style={{
+                  padding: '8px 12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  minWidth: '250px'
+                }}
+              >
+                <option value="">Bitte auswählen...</option>
+                {weeklyPlans.map(plan => (
+                  <option key={plan.id} value={plan.id}>
+                    {plan.name} ({plan.weeks?.length || 0} Wochen)
+                  </option>
+                ))}
+              </select>
+
+              {selectedWeeklyPlan && (
+                <div style={{ fontSize: '14px', color: '#666' }}>
+                  <strong>Status:</strong> {selectedWeeklyPlan.status}
+                </div>
+              )}
+            </div>
+
+            {weeklyPlans.length === 0 && (
+              <div style={{
+                marginTop: '10px',
+                padding: '10px',
+                backgroundColor: '#e8f4fd',
+                border: '1px solid #b6d7e8',
+                borderRadius: '4px',
+                fontSize: '12px'
+              }}>
+                ℹ️ Nur Wochenpläne im Entwurfsstatus können bearbeitet werden.
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Availability Legend */}
@@ -942,99 +1119,20 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
             </div>
           ))}
         </div>
-      </div>
-
-      {/* Plan Selection */}
-      {planType === 'shift' ? (
-        <div style={{
-          marginBottom: '30px',
-          padding: '20px',
-          backgroundColor: '#f8f9fa',
-          borderRadius: '8px',
-          border: '1px solid #e9ecef'
-        }}>
-          <h4 style={{ margin: '0 0 15px 0', color: '#495057' }}>
-            Schichtplan auswählen
-          </h4>
-
-          <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <select
-              value={selectedPlanId}
-              onChange={(e) => setSelectedPlanId(e.target.value)}
-              style={{
-                padding: '8px 12px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                minWidth: '250px'
-              }}
-            >
-              <option value="">Bitte auswählen...</option>
-              {shiftPlans.map(plan => (
-                <option key={plan.id} value={plan.id}>
-                  {plan.name} {plan.shifts && `(${plan.shifts.length} Shifts)`}
-                </option>
-              ))}
-            </select>
-
-            {selectedPlan && (
-              <div style={{ fontSize: '14px', color: '#666' }}>
-                <strong>Status:</strong> {selectedPlan.status}
-              </div>
-            )}
-          </div>
-        </div>
-      ) : (
-        <div style={{
-          marginBottom: '30px',
-          padding: '20px',
-          backgroundColor: '#f8f9fa',
-          borderRadius: '8px',
-          border: '1px solid #e9ecef'
-        }}>
-          <h4 style={{ margin: '0 0 15px 0', color: '#495057' }}>
-            Wochenplan auswählen
-          </h4>
-
-          <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <select
-              value={selectedWeeklyPlanId}
-              onChange={(e) => setSelectedWeeklyPlanId(e.target.value)}
-              style={{
-                padding: '8px 12px',
-                border: '1px solid #ddd',
-                borderRadius: '4px',
-                minWidth: '250px'
-              }}
-            >
-              <option value="">Bitte auswählen...</option>
-              {weeklyPlans.map(plan => (
-                <option key={plan.id} value={plan.id}>
-                  {plan.name} ({plan.weeks?.length || 0} Wochen)
-                </option>
-              ))}
-            </select>
-
-            {selectedWeeklyPlan && (
-              <div style={{ fontSize: '14px', color: '#666' }}>
-                <strong>Status:</strong> {selectedWeeklyPlan.status}
-              </div>
-            )}
-          </div>
-
-          {weeklyPlans.length === 0 && (
-            <div style={{
-              marginTop: '10px',
-              padding: '10px',
-              backgroundColor: '#e8f4fd',
-              border: '1px solid #b6d7e8',
-              borderRadius: '4px',
-              fontSize: '12px'
-            }}>
-              ℹ️ Nur Wochenpläne im Entwurfsstatus können bearbeitet werden.
+        {planType === 'weekly' && (
+          <>
+            <div style={{ marginTop: '10px' }}>
+              Basierend auf aktueller Mitarbeiterverteilung werden für diesen Plan empfohlen:
             </div>
-          )}
-        </div>
-      )}
+            <div style={{ marginTop: '5px' }}>
+              • <strong>Große Verträge:</strong> Mindestens {largeContractMinimumWeeks} Wochen
+            </div>
+            <div>
+              • <strong>Kleine Verträge:</strong> Mindestens {smallContractMinimumWeeks} Wochen
+            </div>
+          </>
+        )}
+      </div>
 
       {/* Render appropriate timetable/preferences */}
       {planType === 'shift' ? renderShiftTimetable() : renderWeeklyPreferences()}

@@ -45,6 +45,7 @@ export interface EmployeeAvailability {
   employeeId: string;
   planId: string;
   shiftId: string;
+  contractType?: 'small' | 'large' | 'flexible';
   preferenceLevel: 1 | 2 | 3; // 1:preferred, 2:available, 3:unavailable
   notes?: string;
 }
