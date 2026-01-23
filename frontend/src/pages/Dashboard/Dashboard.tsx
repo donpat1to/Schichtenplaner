@@ -52,9 +52,9 @@ const Dashboard: React.FC = () => {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      
+
       console.log('🔄 Loading dashboard data...');
-      
+
       const [shiftPlans, employees] = await Promise.all([
         shiftPlanService.getShiftPlans(),
         employeeService.getEmployees(),
@@ -126,12 +126,12 @@ const Dashboard: React.FC = () => {
 
   const findCurrentShiftPlan = (plans: ShiftPlan[], today: string): ShiftPlan | null => {
     // First, try to find a published plan where today is within the date range
-    const activePlan = plans.find(plan => 
-      plan.status === 'published' && 
+    const activePlan = plans.find(plan =>
+      plan.status === 'published' &&
       !plan.isTemplate &&
-      plan.startDate && 
+      plan.startDate &&
       plan.endDate &&
-      plan.startDate <= today && 
+      plan.startDate <= today &&
       plan.endDate >= today
     );
 
@@ -167,13 +167,13 @@ const Dashboard: React.FC = () => {
 
         for (const scheduledShift of scheduledShifts) {
           // Ensure assignedEmployees is an array
-          const assignedEmployees = Array.isArray(scheduledShift.assignedEmployees) 
-            ? scheduledShift.assignedEmployees 
+          const assignedEmployees = Array.isArray(scheduledShift.assignedEmployees)
+            ? scheduledShift.assignedEmployees
             : [];
-          
+
           if (scheduledShift.date >= today && assignedEmployees.includes(user.id)) {
             const timeSlot = plan.timeSlots.find(ts => ts.id === scheduledShift.timeSlotId);
-            
+
             userShifts.push({
               id: scheduledShift.id,
               date: formatShiftDate(scheduledShift.date),
@@ -190,11 +190,11 @@ const Dashboard: React.FC = () => {
       return userShifts
         .sort((a, b) => {
           // Convert formatted dates back to Date objects for sorting
-          const dateA = a.date === 'Heute' ? today : a.date === 'Morgen' ? 
+          const dateA = a.date === 'Heute' ? today : a.date === 'Morgen' ?
             new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split('T')[0] : a.date;
-          const dateB = b.date === 'Heute' ? today : b.date === 'Morgen' ? 
+          const dateB = b.date === 'Heute' ? today : b.date === 'Morgen' ?
             new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split('T')[0] : b.date;
-          
+
           return new Date(dateA).getTime() - new Date(dateB).getTime();
         })
         .slice(0, 5);
@@ -251,14 +251,14 @@ const Dashboard: React.FC = () => {
 
   const formatPlanPeriod = (plan: ShiftPlan): string => {
     if (!plan.startDate || !plan.endDate) return 'Kein Zeitraum definiert';
-    
+
     const start = new Date(plan.startDate).toLocaleDateString('de-DE');
     const end = new Date(plan.endDate).toLocaleDateString('de-DE');
     return `${start} - ${end}`;
   };
 
-  const calculatePlanProgress = (plan: ShiftPlan, shifts: ScheduledShift[]): { 
-    covered: number; total: number; percentage: number 
+  const calculatePlanProgress = (plan: ShiftPlan, shifts: ScheduledShift[]): {
+    covered: number; total: number; percentage: number
   } => {
     if (!plan.id || shifts.length === 0) {
       console.log(`📊 Plan ${plan.name} has no scheduled shifts`);
@@ -286,7 +286,7 @@ const Dashboard: React.FC = () => {
       percentage
     };
   };
-  
+
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '40px' }}>
@@ -302,12 +302,12 @@ const Dashboard: React.FC = () => {
 
   const PlanDebugInfo = () => {
     if (!data.currentShiftPlan) return null;
-    
+
     return (
-      <div style={{ 
-        backgroundColor: '#fff3cd', 
-        padding: '15px', 
-        borderRadius: '8px', 
+      <div style={{
+        backgroundColor: '#fff3cd',
+        padding: '15px',
+        borderRadius: '8px',
         marginBottom: '20px',
         border: '1px solid #ffeaa7',
         fontSize: '14px'
@@ -321,7 +321,7 @@ const Dashboard: React.FC = () => {
         <div><strong>Shifts Defined:</strong> {data.currentShiftPlan.shifts?.length || 0}</div>
         <div><strong>Time Slots:</strong> {data.currentShiftPlan.timeSlots?.length || 0}</div>
         <div><strong>Scheduled Shifts:</strong> {data.currentShiftPlan.shifts.length || 0}</div>
-        
+
         {data.currentShiftPlan.shifts && data.currentShiftPlan.shifts.length > 0 && (
           <div style={{ marginTop: '10px' }}>
             <strong>Defined Shifts:</strong>
@@ -337,8 +337,8 @@ const Dashboard: React.FC = () => {
     );
   };
 
-  const progress = data.currentShiftPlan 
-    ? calculatePlanProgress(data.currentShiftPlan, currentPlanShifts) 
+  const progress = data.currentShiftPlan
+    ? calculatePlanProgress(data.currentShiftPlan, currentPlanShifts)
     : { covered: 0, total: 0, percentage: 0 };
 
   return (
@@ -396,12 +396,12 @@ const Dashboard: React.FC = () => {
       {hasRole(['admin', 'maintenance']) && (
         <div style={{ marginBottom: '30px' }}>
           <h2 style={{ marginBottom: '15px', color: '#2c3e50' }}>Schnellaktionen</h2>
-          <div style={{ 
-            display: 'grid', 
+          <div style={{
+            display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
             gap: '15px'
           }}>
-            <Link to="/shift-plans/new" style={{ textDecoration: 'none' }}>
+            <Link to="/plans/new" style={{ textDecoration: 'none' }}>
               <div style={{
                 backgroundColor: '#3498db',
                 color: 'white',
@@ -441,7 +441,7 @@ const Dashboard: React.FC = () => {
               </div>
             </Link>
 
-            <Link to="/shift-plans" style={{ textDecoration: 'none' }}>
+            <Link to="/plans" style={{ textDecoration: 'none' }}>
               <div style={{
                 backgroundColor: '#9b59b6',
                 color: 'white',
@@ -465,8 +465,8 @@ const Dashboard: React.FC = () => {
       )}
 
       {/* Haupt-Grid mit Informationen */}
-      <div style={{ 
-        display: 'grid', 
+      <div style={{
+        display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
         gap: '25px',
         marginBottom: '30px'
@@ -490,7 +490,7 @@ const Dashboard: React.FC = () => {
                   {formatPlanPeriod(data.currentShiftPlan)}
                 </div>
               </div>
-              
+
               <div style={{ marginBottom: '15px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
                   <span>Fortschritt:</span>
@@ -518,7 +518,7 @@ const Dashboard: React.FC = () => {
                   </div>
                 )}
               </div>
-              
+
               <div style={{
                 display: 'inline-block',
                 backgroundColor: data.currentShiftPlan.status === 'published' ? '#2ecc71' : '#f39c12',
@@ -536,7 +536,7 @@ const Dashboard: React.FC = () => {
               <div style={{ fontSize: '48px', marginBottom: '10px' }}>📅</div>
               <div>Kein aktiver Schichtplan</div>
               {hasRole(['admin', 'maintenance']) && (
-                <Link to="/shift-plans/new">
+                <Link to="/plans/new">
                   <button style={{
                     marginTop: '10px',
                     padding: '8px 16px',
@@ -587,8 +587,8 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Unteres Grid */}
-      <div style={{ 
-        display: 'grid', 
+      <div style={{
+        display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
         gap: '25px'
       }}>
@@ -659,10 +659,9 @@ const Dashboard: React.FC = () => {
                     padding: '12px',
                     backgroundColor: '#f8f9fa',
                     borderRadius: '6px',
-                    borderLeft: `4px solid ${
-                      plan.status === 'published' ? '#2ecc71' : 
+                    borderLeft: `4px solid ${plan.status === 'published' ? '#2ecc71' :
                       plan.status === 'draft' ? '#f39c12' : '#95a5a6'
-                    }`
+                      }`
                   }}>
                     <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
                       {plan.name}
@@ -670,8 +669,8 @@ const Dashboard: React.FC = () => {
                     <div style={{ fontSize: '14px', color: '#666' }}>
                       {formatPlanPeriod(plan)}
                     </div>
-                    <div style={{ 
-                      fontSize: '12px', 
+                    <div style={{
+                      fontSize: '12px',
                       color: '#999',
                       display: 'flex',
                       justifyContent: 'space-between',
@@ -679,8 +678,8 @@ const Dashboard: React.FC = () => {
                       marginTop: '4px'
                     }}>
                       <span>
-                        Status: {plan.status === 'published' ? 'Veröffentlicht' : 
-                                plan.status === 'draft' ? 'Entwurf' : 'Archiviert'}
+                        Status: {plan.status === 'published' ? 'Veröffentlicht' :
+                          plan.status === 'draft' ? 'Entwurf' : 'Archiviert'}
                       </span>
                       <Link to={`/shift-plans/${plan.id}`} style={{ color: '#3498db', textDecoration: 'none' }}>
                         Anzeigen →
@@ -693,7 +692,7 @@ const Dashboard: React.FC = () => {
               <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
                 <div style={{ fontSize: '48px', marginBottom: '10px' }}>📋</div>
                 <div>Noch keine Schichtpläne erstellt</div>
-                <Link to="/shift-plans/new">
+                <Link to="/plans/new">
                   <button style={{
                     marginTop: '10px',
                     padding: '8px 16px',

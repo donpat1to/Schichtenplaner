@@ -2,10 +2,10 @@
 // Shared date and time formatting utilities
 export const formatDate = (dateString: string | undefined): string => {
   if (!dateString) return 'Kein Datum';
-  
+
   const date = new Date(dateString);
   if (isNaN(date.getTime())) return 'Ungültiges Datum';
-  
+
   return date.toLocaleDateString('de-DE', {
     day: '2-digit',
     month: '2-digit',
@@ -19,10 +19,10 @@ export const formatTime = (timeString: string): string => {
 
 export const formatDateTime = (dateString: string): string => {
   if (!dateString) return 'Kein Datum';
-  
+
   const date = new Date(dateString);
   if (isNaN(date.getTime())) return 'Ungültiges Datum';
-  
+
   return date.toLocaleDateString('de-DE', {
     weekday: 'long',
     day: '2-digit',

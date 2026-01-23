@@ -9,7 +9,7 @@ import { AssignmentResult } from '../../models/scheduling';
 import { ShiftPlan, TimeSlot, ScheduledShift } from '../../models/ShiftPlan';
 import { Employee, EmployeeAvailability } from '../../models/Employee';
 import { useNotification } from '../../contexts/NotificationContext';
-import { formatDate, formatTime } from '../../utils/foramatters';
+import { formatDate, formatTime } from '../../utils/formatters';
 import { saveAs } from 'file-saver';
 import styles from './ShiftPlanView.module.css';
 import { backTextButton } from '@/utils/buttonStyles';
@@ -1149,7 +1149,7 @@ const ShiftPlanView: React.FC = () => {
         </div>
         <div className={styles.headerActions}>
           <button
-            onClick={() => navigate('/shift-plans')}
+            onClick={() => navigate('/plans')}
             style={backTextButton(false)}
           >
             Zurück

@@ -87,7 +87,7 @@ const WeeklyPlanEdit: React.FC = () => {
                     title: 'Fehler',
                     message: 'Wochenplan konnte nicht geladen werden.'
                 });
-                navigate('/weekly-plans');
+                navigate('/plans');
             } finally {
                 setLoading(false);
             }
@@ -172,7 +172,7 @@ const WeeklyPlanEdit: React.FC = () => {
                 <h1 style={{ margin: 0 }}>{weeklyPlan.name} bearbeiten</h1>
                 <div style={{ display: 'flex', gap: '10px' }}>
                     <button
-                        onClick={() => navigate('/weekly-plans')}
+                        onClick={() => navigate('/plans')}
                         disabled={isSubmitting}
                         style={backTextButton(false)}
                     >

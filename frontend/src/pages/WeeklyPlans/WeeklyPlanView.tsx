@@ -414,7 +414,7 @@ const WeeklyPlanView: React.FC = () => {
       <div className={styles.container}>
         <div className={styles.error}>
           <h2>Wochenplan nicht gefunden</h2>
-          <button onClick={() => navigate('/weekly-plans')} style={backTextButton(false)}>
+          <button onClick={() => navigate('/plans')} style={backTextButton(false)}>
             Zurück zur Übersicht
           </button>
         </div>
@@ -441,7 +441,7 @@ const WeeklyPlanView: React.FC = () => {
           )}
         </div>
         <div className={styles.headerActions}>
-          <button onClick={() => navigate('/weekly-plans')} style={backTextButton(false)}>
+          <button onClick={() => navigate('/plans')} style={backTextButton(false)}>
             Zurück
           </button>
         </div>

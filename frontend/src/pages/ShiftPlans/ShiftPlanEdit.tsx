@@ -5,7 +5,7 @@ import { shiftPlanService } from '../../services/shiftPlanService';
 import { ShiftPlan, Shift, TimeSlot } from '../../models/ShiftPlan';
 import { useNotification } from '../../contexts/NotificationContext';
 import { useBackendValidation } from '../../hooks/useBackendValidation';
-import { formatTime } from '../../utils/foramatters';
+import { formatTime } from '../../utils/formatters';
 import {
   ICONS,
   smallDeleteButton,
@@ -85,7 +85,7 @@ const ShiftPlanEdit: React.FC = () => {
         setShiftPlan(plan);
       } catch (error) {
         console.error('Error loading shift plan:', error);
-        navigate('/shift-plans');
+        navigate('/plans');
       } finally {
         setLoading(false);
       }
@@ -417,7 +417,7 @@ const ShiftPlanEdit: React.FC = () => {
             {showGridEditor ? 'Tabellen-Editor ausblenden' : 'Tabellen-Editor anzeigen'}
           </button>
           <button
-            onClick={() => navigate('/shift-plans')}
+            onClick={() => navigate('/plans')}
             disabled={isSubmitting}
             style={{
               padding: '8px 16px',

@@ -17,9 +17,7 @@ const Navigation: React.FC = () => {
   const pillNavMeasurementRef = useRef<HTMLDivElement>(null);
 
   const navigationItems = [
-    { path: '/', label: 'Dashboard', roles: ['admin', 'maintenance', 'user'] },
-    { path: '/shift-plans', label: 'Schichtpläne', roles: ['admin', 'maintenance', 'user'] },
-    { path: '/weekly-plans', label: 'Wochenpläne', roles: ['admin', 'maintenance', 'user'] },
+    { path: '/plans', label: 'Pläne', roles: ['admin', 'maintenance', 'user'] },
     { path: '/employees', label: 'Mitarbeiter', roles: ['admin', 'maintenance'] },
   ];
 
