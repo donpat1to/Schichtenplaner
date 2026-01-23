@@ -501,34 +501,35 @@ const Settings: React.FC = () => {
                   </div>
                 </div>
               </div>
-
-              <div style={styles.actions}>
-                <button
-                  type="submit"
-                  disabled={isSubmitting || !profileForm.firstname.trim() || !profileForm.lastname.trim()}
-                  style={{
-                    ...styles.button,
-                    ...styles.buttonPrimary,
-                    ...((isSubmitting || !profileForm.firstname.trim() || !profileForm.lastname.trim()) ? styles.buttonDisabled : {})
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isSubmitting && profileForm.firstname.trim() && profileForm.lastname.trim()) {
-                      e.currentTarget.style.background = styles.buttonPrimaryHover.background;
-                      e.currentTarget.style.transform = styles.buttonPrimaryHover.transform;
-                      e.currentTarget.style.boxShadow = styles.buttonPrimaryHover.boxShadow;
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isSubmitting && profileForm.firstname.trim() && profileForm.lastname.trim()) {
-                      e.currentTarget.style.background = styles.buttonPrimary.background;
-                      e.currentTarget.style.transform = 'none';
-                      e.currentTarget.style.boxShadow = styles.buttonPrimary.boxShadow;
-                    }
-                  }}
-                >
-                  {isSubmitting ? '⏳ Wird gespeichert...' : 'Profil aktualisieren'}
-                </button>
-              </div>
+              {currentUser.roles?.includes('admin') && (
+                <div style={styles.actions}>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || !profileForm.firstname.trim() || !profileForm.lastname.trim()}
+                    style={{
+                      ...styles.button,
+                      ...styles.buttonPrimary,
+                      ...((isSubmitting || !profileForm.firstname.trim() || !profileForm.lastname.trim()) ? styles.buttonDisabled : {})
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isSubmitting && profileForm.firstname.trim() && profileForm.lastname.trim()) {
+                        e.currentTarget.style.background = styles.buttonPrimaryHover.background;
+                        e.currentTarget.style.transform = styles.buttonPrimaryHover.transform;
+                        e.currentTarget.style.boxShadow = styles.buttonPrimaryHover.boxShadow;
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isSubmitting && profileForm.firstname.trim() && profileForm.lastname.trim()) {
+                        e.currentTarget.style.background = styles.buttonPrimary.background;
+                        e.currentTarget.style.transform = 'none';
+                        e.currentTarget.style.boxShadow = styles.buttonPrimary.boxShadow;
+                      }
+                    }}
+                  >
+                    {isSubmitting ? '⏳ Wird gespeichert...' : 'Profil aktualisieren'}
+                  </button>
+                </div>
+              )}
             </form>
           </>
         )}
