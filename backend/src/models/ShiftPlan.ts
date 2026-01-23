@@ -6,7 +6,7 @@ export interface ShiftPlan {
   startDate?: string;
   endDate?: string;
   isTemplate: boolean;
-  status: 'draft' | 'published' | 'archived' | 'template';
+  status: 'draft' | 'published' | 'archived';
   createdBy: string;
   createdAt: string;
   timeSlots: TimeSlot[];
@@ -67,7 +67,7 @@ export interface UpdateShiftPlanRequest {
   startDate?: string;
   endDate?: string;
   isTemplate?: boolean;
-  status?: 'draft' | 'published' | 'archived' | 'template';
+  status?: 'draft' | 'published' | 'archived';
   timeSlots?: Omit<TimeSlot, 'id' | 'planId'>[];
   shifts?: Omit<Shift, 'id' | 'planId'>[];
 }

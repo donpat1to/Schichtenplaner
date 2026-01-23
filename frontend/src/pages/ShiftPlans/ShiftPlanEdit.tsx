@@ -5,6 +5,7 @@ import { shiftPlanService } from '../../services/shiftPlanService';
 import { ShiftPlan, Shift, TimeSlot } from '../../models/ShiftPlan';
 import { useNotification } from '../../contexts/NotificationContext';
 import { useBackendValidation } from '../../hooks/useBackendValidation';
+import Timetable from '../../components/Timetable/Timetable'
 import { formatTime } from '../../utils/formatters';
 import {
   ICONS,
@@ -14,9 +15,6 @@ import {
   addOutlineButton,
   BUTTON_COLORS,
 } from '../../utils/buttonStyles';
-import ShiftCell from './components/ShiftCell';
-import TimeSlotEditor from './components/TimeSlotEditor';
-import AddDayButton from './components/AddDayButton';
 
 const DAYS_OF_WEEK = [
   { id: 1, name: 'Montag', shortName: 'Mo' },
@@ -583,296 +581,25 @@ const ShiftPlanEdit: React.FC = () => {
           )}
 
           {/* Grid Editor */}
-          {(hasTimeSlots || hasActiveDays) && (
-            <div style={{
-              marginBottom: '30px',
-              border: '1px solid #e0e0e0',
-              borderRadius: '8px',
-              overflow: 'hidden'
-            }}>
-              {/* Header bar matching ShiftPlanView */}
-              <div style={{
-                backgroundColor: '#2c3e50',
-                color: 'white',
-                padding: '15px 20px',
-                fontWeight: 'bold'
-              }}>
-                Schichtplan bearbeiten
-                <div style={{ fontSize: '14px', fontWeight: 'normal', marginTop: '5px' }}>
-                  {sortedTimeSlots.length} Zeitslots • {activeDays.length} Tage
-                </div>
-              </div>
-
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{
-                  width: '100%',
-                  borderCollapse: 'collapse',
-                  backgroundColor: 'white'
-                }}>
-                  <thead>
-                    <tr style={{ backgroundColor: '#f8f9fa' }}>
-                      <th style={{
-                        padding: '12px 16px',
-                        textAlign: 'left',
-                        border: '1px solid #dee2e6',
-                        fontWeight: 'bold',
-                        minWidth: '180px'
-                      }}>
-                        Schicht (Zeit)
-                      </th>
-                      {activeDays.map(dayId => {
-                        const day = DAYS_OF_WEEK.find(d => d.id === dayId);
-                        return (
-                          <th key={dayId} style={{
-                            padding: '12px 16px',
-                            textAlign: 'center',
-                            border: '1px solid #dee2e6',
-                            fontWeight: 'bold',
-                            minWidth: '120px'
-                          }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                              <span>{day?.name}</span>
-                              <button
-                                onClick={() => handleRemoveDay(dayId)}
-                                disabled={isSubmitting}
-                                style={smallDeleteButton(isSubmitting)}
-                                title="Tag entfernen"
-                              >
-                                {ICONS.delete}
-                              </button>
-                            </div>
-                          </th>
-                        );
-                      })}
-                      <th style={{
-                        padding: '12px 16px',
-                        textAlign: 'center',
-                        border: '1px solid #dee2e6',
-                        minWidth: '70px',
-                        backgroundColor: '#f8f9fa',
-                      }}>
-                        <AddDayButton
-                          activeDays={activeDays}
-                          onAddDay={handleAddDay}
-                          disabled={isSubmitting}
-                        />
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedTimeSlots.map((slot, index) => (
-                      <tr key={slot.id} style={{
-                        backgroundColor: index % 2 === 0 ? 'white' : '#f8f9fa'
-                      }}>
-                        <td style={{
-                          padding: '12px 16px',
-                          border: '1px solid #dee2e6',
-                          fontWeight: '500',
-                          backgroundColor: '#f8f9fa',
-                          position: 'sticky',
-                          left: 0
-                        }}>
-                          <TimeSlotEditor
-                            slot={slot}
-                            onUpdate={handleUpdateTimeSlot}
-                            onDelete={handleDeleteTimeSlot}
-                            shiftsCount={getShiftsCountForSlot(slot.id)}
-                            disabled={isSubmitting}
-                          />
-                        </td>
-                        {activeDays.map(dayId => (
-                          <ShiftCell
-                            key={`${slot.id}-${dayId}`}
-                            shift={getShift(slot.id, dayId)}
-                            dayOfWeek={dayId}
-                            timeSlotId={slot.id}
-                            onAdd={handleAddShift}
-                            onEdit={handleUpdateShift}
-                            onDelete={handleDeleteShift}
-                            disabled={isSubmitting}
-                          />
-                        ))}
-                        <td style={{
-                          border: '1px solid #dee2e6',
-                          padding: '8px',
-                          textAlign: 'center',
-                        }}>
-                          <button
-                            onClick={() => handleDeleteTimeSlot(slot.id)}
-                            disabled={isSubmitting}
-                            style={smallDeleteButton(isSubmitting)}
-                            title="Zeit-Slot löschen"
-                          >
-                            {ICONS.delete}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-
-                    {/* Add Time Slot Row */}
-                    <tr>
-                      <td colSpan={activeDays.length + 2} style={{
-                        padding: '16px',
-                        borderTop: '2px solid #dee2e6',
-                      }}>
-                        {showAddTimeSlot ? (
-                          <div style={{
-                            display: 'flex',
-                            gap: '12px',
-                            alignItems: 'flex-end',
-                            flexWrap: 'wrap',
-                          }}>
-                            <div>
-                              <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#666' }}>
-                                Name *
-                              </label>
-                              <input
-                                type="text"
-                                value={newTimeSlot.name}
-                                onChange={(e) => setNewTimeSlot({ ...newTimeSlot, name: e.target.value })}
-                                placeholder="z.B. Vormittag"
-                                style={{
-                                  padding: '8px',
-                                  borderRadius: '4px',
-                                  border: '1px solid #ddd',
-                                  width: '150px',
-                                }}
-                                disabled={isSubmitting}
-                              />
-                            </div>
-                            <div>
-                              <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#666' }}>
-                                Startzeit *
-                              </label>
-                              <input
-                                type="time"
-                                value={newTimeSlot.startTime}
-                                onChange={(e) => setNewTimeSlot({ ...newTimeSlot, startTime: e.target.value })}
-                                style={{
-                                  padding: '8px',
-                                  borderRadius: '4px',
-                                  border: '1px solid #ddd',
-                                }}
-                                disabled={isSubmitting}
-                              />
-                            </div>
-                            <div>
-                              <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#666' }}>
-                                Endzeit *
-                              </label>
-                              <input
-                                type="time"
-                                value={newTimeSlot.endTime}
-                                onChange={(e) => setNewTimeSlot({ ...newTimeSlot, endTime: e.target.value })}
-                                style={{
-                                  padding: '8px',
-                                  borderRadius: '4px',
-                                  border: '1px solid #ddd',
-                                }}
-                                disabled={isSubmitting}
-                              />
-                            </div>
-                            <div>
-                              <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#666' }}>
-                                Beschreibung
-                              </label>
-                              <input
-                                type="text"
-                                value={newTimeSlot.description}
-                                onChange={(e) => setNewTimeSlot({ ...newTimeSlot, description: e.target.value })}
-                                placeholder="Optional"
-                                style={{
-                                  padding: '8px',
-                                  borderRadius: '4px',
-                                  border: '1px solid #ddd',
-                                  width: '150px',
-                                }}
-                                disabled={isSubmitting}
-                              />
-                            </div>
-                            <button
-                              onClick={handleAddTimeSlot}
-                              disabled={isSubmitting || !newTimeSlot.name}
-                              style={addTextButton(isSubmitting || !newTimeSlot.name)}
-                            >
-                              {ICONS.add} Hinzufügen
-                            </button>
-                            <button
-                              onClick={() => {
-                                setShowAddTimeSlot(false);
-                                setNewTimeSlot({ name: '', startTime: '08:00', endTime: '12:00', description: '' });
-                              }}
-                              disabled={isSubmitting}
-                              style={cancelTextButton(isSubmitting)}
-                            >
-                              Abbrechen
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => setShowAddTimeSlot(true)}
-                            disabled={isSubmitting}
-                            style={addOutlineButton(isSubmitting)}
-                            onMouseEnter={(e) => {
-                              if (!isSubmitting) {
-                                e.currentTarget.style.backgroundColor = '#f0fff4';
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = 'transparent';
-                            }}
-                          >
-                            {ICONS.add} Neuer Zeit-Slot hinzufügen
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
+          {showGridEditor && (
+            <Timetable
+              mode="edit"
+              shifts={shiftPlan?.shifts || []}
+              timeSlots={sortedTimeSlots}
+              days={DAYS_OF_WEEK}
+              onAddDay={handleAddDay}
+              onRemoveDay={handleRemoveDay}
+              onAddTimeSlot={handleAddTimeSlot}
+              onUpdateTimeSlot={handleUpdateTimeSlot}
+              onDeleteTimeSlot={handleDeleteTimeSlot}
+              onAddShift={handleAddShift}
+              onUpdateShift={handleUpdateShift}
+              onDeleteShift={handleDeleteShift}
+              disabled={isSubmitting}
+              headerTitle="Schichtplan bearbeiten"
+              showLegend={true}
+            />
           )}
-
-          {/* Legend */}
-          <div style={{
-            marginTop: '20px',
-            padding: '16px',
-            backgroundColor: 'white',
-            borderRadius: '8px',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-          }}>
-            <h4 style={{ margin: '0 0 12px 0', color: '#2c3e50' }}>Legende</h4>
-            <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', fontSize: '13px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{
-                  width: '24px',
-                  height: '24px',
-                  backgroundColor: '#d5f4e6',
-                  border: `2px solid ${BUTTON_COLORS.add}`,
-                  borderRadius: '4px',
-                }} />
-                <span>Aktive Schicht (klicken zum Bearbeiten)</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{
-                  width: '24px',
-                  height: '24px',
-                  backgroundColor: '#f8f9fa',
-                  border: '2px dashed #dee2e6',
-                  borderRadius: '4px',
-                }} />
-                <span>Leere Zelle (klicken zum Hinzufügen)</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ color: BUTTON_COLORS.edit, fontSize: '16px' }}>{ICONS.edit}</span>
-                <span>Zeit-Slot bearbeiten</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ color: BUTTON_COLORS.delete, fontSize: '16px' }}>{ICONS.delete}</span>
-                <span>Löschen</span>
-              </div>
-            </div>
-          </div>
         </>
       )}
     </div>

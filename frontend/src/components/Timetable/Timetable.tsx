@@ -1,0 +1,609 @@
+// frontend/src/components/Timetable/Timetable.tsx
+import React, { useState, useMemo } from 'react';
+import { Shift, TimeSlot, ScheduledShift } from '../../models/ShiftPlan';
+import { Employee } from '../../models/Employee';
+import { AssignmentResult } from '../../models/scheduling';
+import TimeSlotEditor from './TimeSlotEditor';
+import ShiftCell from './ShiftCell';
+import AddDayButton from './AddDayButton';
+import { formatTime } from '../../utils/formatters';
+import { ICONS, BUTTON_COLORS, smallDeleteButton } from '../../utils/buttonStyles';
+import styles from './Timetable.module.css';
+
+export interface DayInfo {
+    id: number;
+    name: string;
+    shortName?: string;
+}
+
+export interface TimetableProps {
+    // Core data
+    mode: 'view' | 'edit';
+    shifts: Shift[];
+    timeSlots: TimeSlot[];
+    days: DayInfo[];
+    scheduledShifts?: ScheduledShift[];
+    assignmentResult?: AssignmentResult | null;
+    employees?: Employee[];
+    shiftPlanStatus?: string;
+
+    // Callbacks for edit mode
+    onAddDay?: (dayOfWeek: number) => void;
+    onRemoveDay?: (dayOfWeek: number) => void;
+    onAddTimeSlot?: (name: string, startTime: string, endTime: string, description?: string) => void;
+    onUpdateTimeSlot?: (slot: TimeSlot, name: string, startTime: string, endTime: string, description?: string) => void;
+    onDeleteTimeSlot?: (slotId: string) => void;
+    onAddShift?: (dayOfWeek: number, timeSlotId: string, requiredEmployees: number, color: string) => void;
+    onUpdateShift?: (shift: Shift, requiredEmployees: number, color: string) => void;
+    onDeleteShift?: (shiftId: string) => void;
+
+    // Helper functions
+    getDayOfWeek?: (dateString: string) => number;
+    showValidationWarnings?: boolean;
+    disabled?: boolean;
+
+    // UI customization
+    headerTitle?: string;
+    showLegend?: boolean;
+    compactMode?: boolean;
+}
+
+const DEFAULT_DAYS: DayInfo[] = [
+    { id: 1, name: 'Montag', shortName: 'Mo' },
+    { id: 2, name: 'Dienstag', shortName: 'Di' },
+    { id: 3, name: 'Mittwoch', shortName: 'Mi' },
+    { id: 4, name: 'Donnerstag', shortName: 'Do' },
+    { id: 5, name: 'Freitag', shortName: 'Fr' },
+    { id: 6, name: 'Samstag', shortName: 'Sa' },
+    { id: 7, name: 'Sonntag', shortName: 'So' },
+];
+
+const Timetable: React.FC<TimetableProps> = ({
+    mode = 'view',
+    shifts = [],
+    timeSlots = [],
+    days = [],
+    scheduledShifts = [],
+    assignmentResult = null,
+    employees = [],
+    shiftPlanStatus = 'draft',
+    onAddDay,
+    onRemoveDay,
+    onAddTimeSlot,
+    onUpdateTimeSlot,
+    onDeleteTimeSlot,
+    onAddShift,
+    onUpdateShift,
+    onDeleteShift,
+    getDayOfWeek,
+    showValidationWarnings = true,
+    disabled = false,
+    headerTitle = 'Schichtplan',
+    showLegend = true,
+    compactMode = false,
+}) => {
+    const [showAddTimeSlot, setShowAddTimeSlot] = useState(false);
+    const [newTimeSlot, setNewTimeSlot] = useState({
+        name: '',
+        startTime: '08:00',
+        endTime: '12:00',
+        description: '',
+    });
+    const [contentHeights, setContentHeights] = useState<Record<string, number>>({});
+
+    // Function to calculate dynamic row height based on content
+    const calculateRowHeight = (timeSlotId: string): string => {
+        if (mode === 'view' && shiftPlanStatus === 'published') {
+            // Find the maximum number of employees in this time slot
+            let maxEmployees = 0;
+
+            activeDays.forEach(dayId => {
+                const scheduledShift = scheduledShifts.find(scheduled => {
+                    if (!getDayOfWeek) return false;
+                    const scheduledDayOfWeek = getDayOfWeek(scheduled.date);
+                    return scheduledDayOfWeek === dayId &&
+                        scheduled.timeSlotId === timeSlotId;
+                });
+
+                if (scheduledShift) {
+                    const employeeCount = scheduledShift.assignedEmployees?.length || 0;
+                    if (employeeCount > maxEmployees) {
+                        maxEmployees = employeeCount;
+                    }
+                }
+            });
+
+            // Calculate height: base height + (employee count * employee row height)
+            const baseHeight = 60; // Base height in pixels
+            const employeeRowHeight = 25; // Height per employee row
+            const calculatedHeight = baseHeight + (maxEmployees * employeeRowHeight);
+
+            // Ensure minimum and maximum heights
+            return `${Math.max(60, Math.min(calculatedHeight, 200))}px`;
+        }
+
+        // For edit mode or draft status, use fixed height
+        return 'auto';
+    };
+
+    // Get active days based on shifts
+    const activeDays = useMemo(() => {
+        if (mode === 'edit' && days.length > 0) {
+            const daysWithShifts = new Set(shifts.map(s => s.dayOfWeek));
+            return Array.from(daysWithShifts).sort((a, b) => a - b);
+        }
+        return days.map(d => d.id);
+    }, [shifts, days, mode]);
+
+    // Sort time slots by start time
+    const sortedTimeSlots = useMemo(() => {
+        const timeToMinutes = (timeStr: string): number => {
+            if (!timeStr) return 0;
+            const [hours, minutes] = timeStr.split(':').map(Number);
+            return hours * 60 + minutes;
+        };
+
+        return [...timeSlots].sort((a, b) => {
+            const minutesA = timeToMinutes(a.startTime);
+            const minutesB = timeToMinutes(b.startTime);
+            return minutesA - minutesB;
+        });
+    }, [timeSlots]);
+
+    // Get shift for a specific cell
+    const getShift = (timeSlotId: string, dayOfWeek: number): Shift | null => {
+        return shifts.find(
+            s => s.timeSlotId === timeSlotId && s.dayOfWeek === dayOfWeek
+        ) || null;
+    };
+
+    // Count shifts for a time slot
+    const getShiftsCountForSlot = (slotId: string): number => {
+        return shifts.filter(s => s.timeSlotId === slotId).length;
+    };
+
+    // Get day name by ID
+    const getDayName = (dayId: number): string => {
+        const day = DEFAULT_DAYS.find(d => d.id === dayId) ||
+            days.find(d => d.id === dayId);
+        return day?.name || `Tag ${dayId}`;
+    };
+
+    // Get assignments for a scheduled shift
+    const getAssignmentsForScheduledShift = (scheduledShift: ScheduledShift): string[] => {
+        if (!assignmentResult || !getDayOfWeek) return [];
+
+        const dayOfWeek = getDayOfWeek(scheduledShift.date);
+
+        // Find the corresponding shift pattern for this day and time slot
+        const shiftPattern = shifts.find(shift =>
+            shift.dayOfWeek === dayOfWeek &&
+            shift.timeSlotId === scheduledShift.timeSlotId
+        );
+
+        if (shiftPattern && assignmentResult.assignments[shiftPattern.id]) {
+            return assignmentResult.assignments[shiftPattern.id];
+        }
+
+        return [];
+    };
+
+    // Validation function
+    const validateTimetableStructure = () => {
+        const validationErrors: string[] = [];
+
+        // Check for missing time slots
+        const usedTimeSlotIds = new Set(shifts.map(s => s.timeSlotId));
+        const availableTimeSlotIds = new Set(timeSlots.map(ts => ts.id));
+
+        usedTimeSlotIds.forEach(timeSlotId => {
+            if (!availableTimeSlotIds.has(timeSlotId)) {
+                validationErrors.push(`Zeitslot ${timeSlotId} wird verwendet, existiert aber nicht in timeSlots`);
+            }
+        });
+
+        // Check for shifts with invalid day numbers
+        shifts.forEach(shift => {
+            if (shift.dayOfWeek < 1 || shift.dayOfWeek > 7) {
+                validationErrors.push(`Shift ${shift.id} hat ungültigen Wochentag: ${shift.dayOfWeek}`);
+            }
+
+            // Check if shift timeSlotId exists in timeSlots
+            const timeSlotExists = timeSlots.some(ts => ts.id === shift.timeSlotId);
+            if (!timeSlotExists) {
+                validationErrors.push(`Shift ${shift.id} verweist auf nicht existierenden Zeitslot: ${shift.timeSlotId}`);
+            }
+        });
+
+        // Check for scheduled shifts consistency
+        scheduledShifts.forEach(scheduledShift => {
+            const timeSlotExists = timeSlots.some(ts => ts.id === scheduledShift.timeSlotId);
+            if (!timeSlotExists) {
+                validationErrors.push(`Scheduled Shift ${scheduledShift.id} verweist auf nicht existierenden Zeitslot: ${scheduledShift.timeSlotId}`);
+            }
+        });
+
+        return {
+            isValid: validationErrors.length === 0,
+            errors: validationErrors
+        };
+    };
+
+    // Handle add time slot
+    const handleAddTimeSlot = () => {
+        if (onAddTimeSlot && newTimeSlot.name && newTimeSlot.startTime && newTimeSlot.endTime) {
+            onAddTimeSlot(
+                newTimeSlot.name,
+                newTimeSlot.startTime,
+                newTimeSlot.endTime,
+                newTimeSlot.description || undefined
+            );
+            setNewTimeSlot({ name: '', startTime: '08:00', endTime: '12:00', description: '' });
+            setShowAddTimeSlot(false);
+        }
+    };
+
+    // Render employee boxes for view mode
+    const renderEmployeeBoxes = (employeeIds: string[]) => {
+        return employeeIds.map(empId => {
+            const employee = employees.find(emp => emp.id === empId);
+            if (!employee) return null;
+
+            // Determine background color based on employee role
+            let backgroundColor = '#642ab5'; // Default: non-trainee personnel (purple)
+
+            if (employee.isTrainee) {
+                backgroundColor = '#cda8f0'; // Trainee
+            } else if (employee.employeeType === 'manager') {
+                backgroundColor = '#CC0000'; // Manager
+            }
+
+            return (
+                <div
+                    key={empId}
+                    className={styles.employeeBox}
+                    style={{ backgroundColor }}
+                    title={`${employee.firstname} ${employee.lastname}${employee.isTrainee ? ' (Trainee)' : ''}`}
+                >
+                    {employee.firstname} {employee.lastname}
+                </div>
+            );
+        }).filter(Boolean);
+    };
+
+    // Render cell content based on mode
+    const renderCellContent = (timeSlotId: string, dayId: number) => {
+        const shift = getShift(timeSlotId, dayId);
+
+        if (mode === 'edit') {
+            return null; // ShiftCell component will handle rendering
+        }
+
+        // View mode
+        if (shiftPlanStatus === 'published' || assignmentResult) {
+            // Find scheduled shift for this day and time slot
+            const scheduledShift = scheduledShifts.find(scheduled => {
+                if (!getDayOfWeek) return false;
+                const scheduledDayOfWeek = getDayOfWeek(scheduled.date);
+                return scheduledDayOfWeek === dayId &&
+                    scheduled.timeSlotId === timeSlotId;
+            });
+
+            let assignedEmployees: string[] = [];
+
+            if (shiftPlanStatus === 'published' && scheduledShift) {
+                assignedEmployees = scheduledShift.assignedEmployees || [];
+            } else if (assignmentResult && scheduledShift && getDayOfWeek) {
+                assignedEmployees = getAssignmentsForScheduledShift(scheduledShift);
+            }
+
+            if (assignedEmployees.length > 0) {
+                return (
+                    <div className={styles.employeeContainer}>
+                        {renderEmployeeBoxes(assignedEmployees)}
+                    </div>
+                );
+            }
+        }
+
+        // Fallback: Show required employees count
+        if (shift) {
+            return (
+                <div className={styles.shiftInfo}>
+                    <div className={styles.requiredCount} style={{ backgroundColor: shift.color || '#27ae60' }}>
+                        {shift.requiredEmployees}
+                    </div>
+                    <div className={styles.requiredLabel}>Mitarbeiter</div>
+                </div>
+            );
+        }
+
+        return (
+            <div className={styles.noShift}>
+                {mode === 'view' ? 'Keine Schicht' : ''}
+            </div>
+        );
+    };
+
+    // Validation warnings
+    const validation = showValidationWarnings ? validateTimetableStructure() : { isValid: true, errors: [] };
+
+    // Check if timetable has data
+    const hasTimeSlots = timeSlots.length > 0;
+    const hasActiveDays = activeDays.length > 0;
+    const hasData = hasTimeSlots && hasActiveDays;
+
+    if (!hasData && mode === 'view') {
+        return (
+            <div className={styles.emptyState}>
+                <div className={styles.emptyIcon}>📅</div>
+                <h4>Keine Shifts im Plan definiert</h4>
+                <p>Der Schichtplan hat keine Shifts definiert oder keine Zeit-Slots konfiguriert.</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className={styles.timetableContainer}>
+            {/* Header */}
+            <div className={styles.header}>
+                <div className={styles.headerContent}>
+                    {headerTitle}
+                    {hasData && (
+                        <div className={styles.headerSubtitle}>
+                            {sortedTimeSlots.length} Zeitslots • {activeDays.length} Tage
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Validation Warnings */}
+            {!validation.isValid && showValidationWarnings && (
+                <div className={styles.validationWarning}>
+                    <h4>⚠️ Validierungswarnungen:</h4>
+                    <ul>
+                        {validation.errors.map((error, index) => (
+                            <li key={index}>{error}</li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            {/* Timetable Grid */}
+            {hasData ? (
+                <div className={styles.tableWrapper}>
+                    <table className={styles.timetable}>
+                        <thead>
+                            <tr>
+                                <th className={`${styles.timeSlotHeader} ${styles.stickyLeft}`}>
+                                    Schicht (Zeit)
+                                </th>
+                                {activeDays.map(dayId => (
+                                    <th key={dayId} className={styles.dayHeader}>
+                                        <div className={styles.dayHeaderContent}>
+                                            <span>{getDayName(dayId)}</span>
+                                            {mode === 'edit' && onRemoveDay && (
+                                                <button
+                                                    onClick={() => onRemoveDay(dayId)}
+                                                    disabled={disabled}
+                                                    className={styles.removeDayButton}
+                                                    title="Tag entfernen"
+                                                >
+                                                    {ICONS.delete}
+                                                </button>
+                                            )}
+                                        </div>
+                                    </th>
+                                ))}
+                                {mode === 'edit' && onAddDay && (
+                                    <th className={styles.addDayHeader}>
+                                        <AddDayButton
+                                            activeDays={activeDays}
+                                            onAddDay={onAddDay}
+                                            disabled={disabled}
+                                        />
+                                    </th>
+                                )}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {sortedTimeSlots.map((slot, index) => {
+                                const rowHeight = calculateRowHeight(slot.id);
+
+                                return (
+                                    <tr key={slot.id} className={index % 2 === 0 ? styles.rowEven : styles.rowOdd}>
+                                        {/* Time Slot Column */}
+                                        <td
+                                            className={`${styles.timeSlotCell} ${styles.stickyLeft}`}
+                                            style={{ height: rowHeight }}
+                                        >
+                                            {mode === 'edit' && onUpdateTimeSlot && onDeleteTimeSlot ? (
+                                                <TimeSlotEditor
+                                                    slot={slot}
+                                                    onUpdate={onUpdateTimeSlot}
+                                                    onDelete={onDeleteTimeSlot}
+                                                    shiftsCount={getShiftsCountForSlot(slot.id)}
+                                                    disabled={disabled}
+                                                />
+                                            ) : (
+                                                <div className={styles.timeSlotInfo}>
+                                                    <div className={styles.timeSlotName}>{slot.name}</div>
+                                                    <div className={styles.timeSlotTime}>
+                                                        {formatTime(slot.startTime)} - {formatTime(slot.endTime)}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </td>
+
+                                        {/* Day Columns */}
+                                        {activeDays.map(dayId => (
+                                            <td
+                                                key={`${slot.id}-${dayId}`}
+                                                className={styles.cell}
+                                                style={{ height: rowHeight }}
+                                            >
+                                                {mode === 'edit' && onAddShift && onUpdateShift && onDeleteShift ? (
+                                                    <ShiftCell
+                                                        shift={getShift(slot.id, dayId)}
+                                                        dayOfWeek={dayId}
+                                                        timeSlotId={slot.id}
+                                                        onAdd={onAddShift}
+                                                        onEdit={onUpdateShift}
+                                                        onDelete={onDeleteShift}
+                                                        disabled={disabled}
+                                                    />
+                                                ) : (
+                                                    <div className={styles.cellContent}>
+                                                        {renderCellContent(slot.id, dayId)}
+                                                    </div>
+                                                )}
+                                            </td>
+                                        ))}
+
+                                        {/* Delete Time Slot Column (Edit mode only) */}
+                                        {mode === 'edit' && onDeleteTimeSlot && (
+                                            <td className={styles.deleteSlotCell}>
+                                                <button
+                                                    onClick={() => onDeleteTimeSlot(slot.id)}
+                                                    disabled={disabled}
+                                                    className={styles.deleteSlotButton}
+                                                    title="Zeit-Slot löschen"
+                                                >
+                                                    {ICONS.delete}
+                                                </button>
+                                            </td>
+                                        )}
+                                    </tr>
+                                );
+                            })}
+
+                            {/* Add Time Slot Row (Edit mode only) */}
+                            {mode === 'edit' && onAddTimeSlot && (
+                                <tr className={styles.addTimeSlotRow}>
+                                    <td colSpan={activeDays.length + (onAddDay ? 2 : 1)} className={styles.addTimeSlotCell}>
+                                        {showAddTimeSlot ? (
+                                            <div className={styles.addTimeSlotForm}>
+                                                <div className={styles.formField}>
+                                                    <label>Name *</label>
+                                                    <input
+                                                        type="text"
+                                                        value={newTimeSlot.name}
+                                                        onChange={(e) => setNewTimeSlot({ ...newTimeSlot, name: e.target.value })}
+                                                        placeholder="z.B. Vormittag"
+                                                        disabled={disabled}
+                                                    />
+                                                </div>
+                                                <div className={styles.formField}>
+                                                    <label>Startzeit *</label>
+                                                    <input
+                                                        type="time"
+                                                        value={newTimeSlot.startTime}
+                                                        onChange={(e) => setNewTimeSlot({ ...newTimeSlot, startTime: e.target.value })}
+                                                        disabled={disabled}
+                                                    />
+                                                </div>
+                                                <div className={styles.formField}>
+                                                    <label>Endzeit *</label>
+                                                    <input
+                                                        type="time"
+                                                        value={newTimeSlot.endTime}
+                                                        onChange={(e) => setNewTimeSlot({ ...newTimeSlot, endTime: e.target.value })}
+                                                        disabled={disabled}
+                                                    />
+                                                </div>
+                                                <div className={styles.formField}>
+                                                    <label>Beschreibung</label>
+                                                    <input
+                                                        type="text"
+                                                        value={newTimeSlot.description}
+                                                        onChange={(e) => setNewTimeSlot({ ...newTimeSlot, description: e.target.value })}
+                                                        placeholder="Optional"
+                                                        disabled={disabled}
+                                                    />
+                                                </div>
+                                                <button
+                                                    onClick={handleAddTimeSlot}
+                                                    disabled={disabled || !newTimeSlot.name}
+                                                    className={styles.addButton}
+                                                >
+                                                    {ICONS.add} Hinzufügen
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        setShowAddTimeSlot(false);
+                                                        setNewTimeSlot({ name: '', startTime: '08:00', endTime: '12:00', description: '' });
+                                                    }}
+                                                    disabled={disabled}
+                                                    className={styles.cancelButton}
+                                                >
+                                                    Abbrechen
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <button
+                                                onClick={() => setShowAddTimeSlot(true)}
+                                                disabled={disabled}
+                                                className={styles.addTimeSlotButton}
+                                            >
+                                                {ICONS.add} Neuer Zeit-Slot hinzufügen
+                                            </button>
+                                        )}
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            ) : mode === 'edit' ? (
+                <div className={styles.emptyEditor}>
+                    <div className={styles.emptyIcon}>📋</div>
+                    <h3>Keine Schichten vorhanden</h3>
+                    <p>
+                        Fügen Sie zunächst einen Zeit-Slot hinzu und wählen Sie dann die Tage aus,
+                        an denen Schichten stattfinden sollen.
+                    </p>
+                    <button
+                        onClick={() => setShowAddTimeSlot(true)}
+                        className={styles.addFirstTimeSlotButton}
+                        disabled={disabled}
+                    >
+                        {ICONS.add} Zeit-Slot hinzufügen
+                    </button>
+                </div>
+            ) : null}
+
+            {/* Legend */}
+            {showLegend && mode === 'edit' && (
+                <div className={styles.legend}>
+                    <h4>Legende</h4>
+                    <div className={styles.legendItems}>
+                        <div className={styles.legendItem}>
+                            <div className={styles.legendIcon} style={{
+                                backgroundColor: '#d5f4e6',
+                                border: `2px solid ${BUTTON_COLORS.add}`
+                            }} />
+                            <span>Aktive Schicht (klicken zum Bearbeiten)</span>
+                        </div>
+                        <div className={styles.legendItem}>
+                            <div className={styles.legendIcon} style={{
+                                backgroundColor: '#f8f9fa',
+                                border: '2px dashed #dee2e6'
+                            }} />
+                            <span>Leere Zelle (klicken zum Hinzufügen)</span>
+                        </div>
+                        <div className={styles.legendItem}>
+                            <span className={styles.legendEditIcon}>{ICONS.edit}</span>
+                            <span>Zeit-Slot bearbeiten</span>
+                        </div>
+                        <div className={styles.legendItem}>
+                            <span className={styles.legendDeleteIcon}>{ICONS.delete}</span>
+                            <span>Löschen</span>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default Timetable;

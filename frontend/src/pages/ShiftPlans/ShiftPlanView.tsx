@@ -14,6 +14,7 @@ import { saveAs } from 'file-saver';
 import styles from './ShiftPlanView.module.css';
 import { backTextButton } from '@/utils/buttonStyles';
 import { isAdmin } from '@/models/helpers/employeeHelpers';
+import Timetable from '../../components/Timetable/Timetable'
 
 // Local interface extensions (same as AvailabilityManager)
 interface ExtendedTimeSlot extends TimeSlot {
@@ -809,304 +810,6 @@ const ShiftPlanView: React.FC = () => {
     return [];
   };
 
-  // Render timetable using the same structure as AvailabilityManager
-  const renderTimetable = () => {
-    const { days, allTimeSlots } = getTimetableData();
-    const validation = validateTimetableStructure();
-
-    if (days.length === 0 || allTimeSlots.length === 0) {
-      return (
-        <div style={{
-          padding: '40px',
-          textAlign: 'center',
-          backgroundColor: '#f8f9fa',
-          color: '#6c757d',
-          borderRadius: '8px',
-          border: '1px solid #e9ecef'
-        }}>
-          <div style={{ fontSize: '48px', marginBottom: '20px' }}>📅</div>
-          <h4>Keine Shifts im Plan definiert</h4>
-          <p>Der Schichtplan hat keine Shifts definiert oder keine Zeit-Slots konfiguriert.</p>
-        </div>
-      );
-    }
-
-    return (
-      <div style={{
-        marginBottom: '30px',
-        border: '1px solid #e0e0e0',
-        borderRadius: '8px',
-        overflow: 'hidden'
-      }}>
-        <div style={{
-          backgroundColor: '#2c3e50',
-          color: 'white',
-          padding: '15px 20px',
-          fontWeight: 'bold'
-        }}>
-          Schichtplan
-          <div style={{ fontSize: '14px', fontWeight: 'normal', marginTop: '5px' }}>
-            {allTimeSlots.length} Zeitslots • {days.length} Tage • Zeitbasierte Darstellung
-          </div>
-        </div>
-
-        {/* Validation Warnings - SAME AS AVAILABILITYMANAGER */}
-        {!validation.isValid && (
-          <div style={{
-            backgroundColor: '#fff3cd',
-            border: '1px solid #ffeaa7',
-            padding: '15px',
-            margin: '10px'
-          }}>
-            <h4 style={{ margin: '0 0 10px 0', color: '#856404' }}>⚠️ Validierungswarnungen:</h4>
-            <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '12px' }}>
-              {validation.errors.map((error, index) => (
-                <li key={index}>{error}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            backgroundColor: 'white'
-          }}>
-            <thead>
-              <tr style={{ backgroundColor: '#f8f9fa' }}>
-                <th style={{
-                  padding: '12px 16px',
-                  textAlign: 'left',
-                  border: '1px solid #dee2e6',
-                  fontWeight: 'bold',
-                  minWidth: '120px'
-                }}>
-                  Schicht (Zeit)
-                </th>
-                {days.map(weekday => (
-                  <th key={weekday.id} style={{
-                    padding: '12px 16px',
-                    textAlign: 'center',
-                    border: '1px solid #dee2e6',
-                    fontWeight: 'bold',
-                    minWidth: '120px'
-                  }}>
-                    {weekday.name}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {allTimeSlots.map((timeSlot, timeSlotIndex) => (
-                <tr key={timeSlot.id} style={{
-                  backgroundColor: timeSlotIndex % 2 === 0 ? 'white' : '#f8f9fa'
-                }}>
-                  <td style={{
-                    padding: '12px 16px',
-                    border: '1px solid #dee2e6',
-                    fontWeight: '500',
-                    backgroundColor: '#f8f9fa',
-                    position: 'sticky',
-                    left: 0
-                  }}>
-                    <div style={{ fontWeight: 'bold' }}>
-                      {timeSlot.name}
-                    </div>
-                    <div style={{ fontSize: '14px', color: '#666' }}>
-                      {formatTime(timeSlot.startTime)} - {formatTime(timeSlot.endTime)}
-                    </div>
-                  </td>
-                  {days.map(weekday => {
-                    const shift = timeSlot.shiftsByDay[weekday.id];
-
-                    if (!shift) {
-                      return (
-                        <td key={weekday.id} style={{
-                          padding: '12px 16px',
-                          border: '1px solid #dee2e6',
-                          textAlign: 'center',
-                          backgroundColor: '#f8f9fa',
-                          color: '#ccc',
-                          fontStyle: 'italic'
-                        }}>
-                          Keine Schicht
-                        </td>
-                      );
-                    }
-
-                    // Validation: Check if shift has correct timeSlotId and dayOfWeek - SAME AS AVAILABILITYMANAGER
-                    const isValidShift = shift.timeSlotId === timeSlot.id && shift.dayOfWeek === weekday.id;
-
-                    let assignedEmployees: string[] = [];
-                    let displayContent: React.ReactNode = null;
-
-                    // Helper function to create employee boxes
-                    const createEmployeeBoxes = (employeeIds: string[]) => {
-                      return employeeIds.map(empId => {
-                        const employee = employees.find(emp => emp.id === empId);
-                        if (!employee) return null;
-
-                        // Determine background color based on employee role
-                        let backgroundColor = '#642ab5'; // Default: non-trainee personnel (purple)
-
-                        if (employee.isTrainee) {
-                          backgroundColor = '#cda8f0'; // Trainee
-                        } else if (employee.employeeType === 'manager') {
-                          backgroundColor = '#CC0000'; // Manager
-                        }
-
-                        return (
-                          <div
-                            key={empId}
-                            style={{
-                              backgroundColor,
-                              color: 'white',
-                              padding: '4px 8px',
-                              borderRadius: '4px',
-                              marginBottom: '2px',
-                              fontSize: '12px',
-                              textAlign: 'center',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis'
-                            }}
-                            title={`${employee.firstname} ${employee.lastname}${employee.isTrainee ? ' (Trainee)' : ''}`}
-                          >
-                            {employee.firstname} {employee.lastname}
-                          </div>
-                        );
-                      }).filter(Boolean);
-                    };
-
-                    // Helper function to get fallback content
-                    const getFallbackContent = () => {
-                      const shiftsForSlot = shiftPlan?.shifts?.filter(s =>
-                        s.dayOfWeek === weekday.id &&
-                        s.timeSlotId === timeSlot.id
-                      ) || [];
-                      const totalRequired = shiftsForSlot.reduce((sum, s) => sum + s.requiredEmployees, 0);
-                      return totalRequired === 0 ? '-' : `0/${totalRequired}`;
-                    };
-
-                    if (shiftPlan?.status === 'published') {
-                      // For published plans, use actual assignments from scheduled shifts
-                      const scheduledShift = scheduledShifts.find(scheduled => {
-                        const scheduledDayOfWeek = getDayOfWeek(scheduled.date);
-                        return scheduledDayOfWeek === weekday.id &&
-                          scheduled.timeSlotId === timeSlot.id;
-                      });
-
-                      if (scheduledShift) {
-                        assignedEmployees = scheduledShift.assignedEmployees || [];
-
-                        // Log if we're still seeing old data
-                        if (assignedEmployees.length > 0) {
-                          console.warn(`⚠️ Found non-empty assignments for ${weekday.name} ${timeSlot.name}:`, assignedEmployees);
-                        }
-
-                        const employeeBoxes = createEmployeeBoxes(assignedEmployees);
-                        displayContent = employeeBoxes.length > 0 ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            {employeeBoxes}
-                          </div>
-                        ) : (
-                          <div style={{ color: '#666', fontStyle: 'italic' }}>
-                            {getFallbackContent()}
-                          </div>
-                        );
-                      }
-                    } else if (assignmentResult) {
-                      // For draft with preview, use assignment result
-                      const scheduledShift = scheduledShifts.find(scheduled => {
-                        const scheduledDayOfWeek = getDayOfWeek(scheduled.date);
-                        return scheduledDayOfWeek === weekday.id &&
-                          scheduled.timeSlotId === timeSlot.id;
-                      });
-
-                      if (scheduledShift) {
-                        assignedEmployees = getAssignmentsForScheduledShift(scheduledShift);
-                        const employeeBoxes = createEmployeeBoxes(assignedEmployees);
-                        displayContent = employeeBoxes.length > 0 ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            {employeeBoxes}
-                          </div>
-                        ) : (
-                          <div style={{ color: '#666', fontStyle: 'italic' }}>
-                            {getFallbackContent()}
-                          </div>
-                        );
-                      }
-                    }
-
-                    // If no display content set yet, use fallback
-                    if (!displayContent) {
-                      displayContent = (
-                        <div style={{ color: '#666', fontStyle: 'italic' }}>
-                          {getFallbackContent()}
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <td key={weekday.id} style={{
-                        padding: '12px 16px',
-                        border: '1px solid #dee2e6',
-                        textAlign: 'center',
-                        backgroundColor: !isValidShift ? '#fff3cd' : (assignedEmployees.length > 0 ? '#e8f5e8' : 'transparent'),
-                        color: assignedEmployees.length > 0 ? '#2c3e50' : '#666',
-                        fontSize: assignedEmployees.length > 0 ? '14px' : 'inherit',
-                        position: 'relative'
-                      }}>
-                        {/* Validation indicator - SAME AS AVAILABILITYMANAGER */}
-                        {!isValidShift && (
-                          <div style={{
-                            position: 'absolute',
-                            top: '2px',
-                            right: '2px',
-                            backgroundColor: '#f39c12',
-                            color: 'white',
-                            borderRadius: '50%',
-                            width: '16px',
-                            height: '16px',
-                            fontSize: '10px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                          }}
-                            title={`Shift Validierung: timeSlotId=${shift.timeSlotId}, dayOfWeek=${shift.dayOfWeek}`}
-                          >
-                            ⚠️
-                          </div>
-                        )}
-
-                        {displayContent}
-
-                        {/* Shift debug info - SAME AS AVAILABILITYMANAGER */}
-                        <div style={{
-                          fontSize: '10px',
-                          color: '#666',
-                          marginTop: '4px',
-                          textAlign: 'left',
-                          fontFamily: 'monospace'
-                        }}>
-                          {!isValidShift && (
-                            <div style={{ color: '#e74c3c', fontWeight: 'bold' }}>
-                              VALIDATION ERROR
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  };
-
   if (loading) return <div>Lade Schichtplan...</div>;
   if (!shiftPlan) return <div>Schichtplan nicht gefunden</div>;
 
@@ -1511,7 +1214,20 @@ const ShiftPlanView: React.FC = () => {
           marginTop: '20px',
           fontSize: '14px'
         }}>
-          {renderTimetable()}
+          <Timetable
+            mode="view"
+            shifts={shiftPlan?.shifts || []}
+            timeSlots={shiftPlan?.timeSlots || []}
+            days={days}
+            scheduledShifts={scheduledShifts}
+            assignmentResult={assignmentResult}
+            employees={employees}
+            shiftPlanStatus={shiftPlan?.status}
+            getDayOfWeek={getDayOfWeek}
+            showValidationWarnings={true}
+            headerTitle="Schichtplan"
+            showLegend={false}
+          />
         </div>
 
         {/* Summary */}
