@@ -681,7 +681,7 @@ const Dashboard: React.FC = () => {
                         Status: {plan.status === 'published' ? 'Veröffentlicht' :
                           plan.status === 'draft' ? 'Entwurf' : 'Archiviert'}
                       </span>
-                      <Link to={`/shift-plans/${plan.id}`} style={{ color: '#3498db', textDecoration: 'none' }}>
+                      <Link to={`/plans/${plan.id}`} style={{ color: '#3498db', textDecoration: 'none' }}>
                         Anzeigen →
                       </Link>
                     </div>
@@ -720,7 +720,7 @@ const Dashboard: React.FC = () => {
         }}>
           <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>🔗 Schnellzugriff</h3>
           <div style={{ display: 'grid', gap: '10px' }}>
-            <Link to="/shift-plans" style={{ textDecoration: 'none' }}>
+            <Link to="/plans" style={{ textDecoration: 'none' }}>
               <div style={{
                 display: 'flex',
                 alignItems: 'center',

@@ -166,14 +166,14 @@ const PlanList: React.FC = () => {
 
   const getPlanDetailsUrl = (plan: PlanItem) => {
     return plan.type === 'shift'
-      ? `/shift-plans/${plan.id}`
-      : `/weekly-plans/${plan.id}`;
+      ? `/plans/${plan.id}`
+      : `/plans/${plan.id}`;
   };
 
   const getEditUrl = (plan: PlanItem) => {
     return plan.type === 'shift'
-      ? `/shift-plans/${plan.id}/edit`
-      : `/weekly-plans/${plan.id}/edit`;
+      ? `/plans/${plan.id}/edit`
+      : `/plans/${plan.id}/edit`;
   };
 
   const canEditPlan = (plan: PlanItem) => {
@@ -221,23 +221,7 @@ const PlanList: React.FC = () => {
                   gap: '8px'
                 }}>
                   <span>📅</span>
-                  <span>Neuer Schichtplan</span>
-                </button>
-              </Link>
-              <Link to="/weekly-plans/new" style={{ textDecoration: 'none' }}>
-                <button style={{
-                  padding: '10px 20px',
-                  backgroundColor: '#2980b9',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}>
-                  <span>📆</span>
-                  <span>Neuer Wochenplan</span>
+                  <span>Neuer Plan</span>
                 </button>
               </Link>
             </>
@@ -267,19 +251,7 @@ const PlanList: React.FC = () => {
                   borderRadius: '4px',
                   cursor: 'pointer'
                 }}>
-                  Schichtplan erstellen
-                </button>
-              </Link>
-              <Link to="/weekly-plans/new">
-                <button style={{
-                  padding: '10px 20px',
-                  backgroundColor: '#2980b9',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer'
-                }}>
-                  Wochenplan erstellen
+                  Plan erstellen
                 </button>
               </Link>
             </div>

@@ -148,7 +148,7 @@ const PlanCreate: React.FC = () => {
         });
 
         setTimeout(() => {
-          navigate(`/shift-plans/${createdPlan.id}`);
+          navigate(`/plans/${createdPlan.id}`);
         }, 1000);
       } else {
         // Create weekly plan
@@ -167,7 +167,7 @@ const PlanCreate: React.FC = () => {
         });
 
         setTimeout(() => {
-          navigate(`/weekly-plans/${createdPlan.id}`);
+          navigate(`/plans/${createdPlan.id}`);
         }, 1000);
       }
     });

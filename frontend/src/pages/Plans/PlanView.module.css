@@ -1,0 +1,397 @@
+/* frontend/src/pages/Plans/PlanView.module.css */
+
+.container {
+  padding: 20px;
+  max-width: 100%;
+}
+
+.loading,
+.error {
+  text-align: center;
+  padding: 60px 20px;
+  font-size: 18px;
+  color: #666;
+}
+
+.error h2 {
+  margin-bottom: 20px;
+  color: #e74c3c;
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.headerLeft h1 {
+  margin: 0 0 10px 0;
+  font-size: 28px;
+  color: #2c3e50;
+}
+
+.headerMeta {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 8px;
+}
+
+.metaText {
+  color: #7f8c8d;
+  font-size: 14px;
+}
+
+.description {
+  color: #666;
+  font-size: 14px;
+  margin: 10px 0 0 0;
+  max-width: 600px;
+}
+
+.headerActions {
+  display: flex;
+  gap: 10px;
+}
+
+/* Main Content */
+.mainContent {
+  background-color: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Action Bar */
+.actionBar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  margin-bottom: 20px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Buttons */
+.primaryButton,
+.secondaryButton,
+.successButton,
+.dangerButton {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.primaryButton {
+  background-color: #51258f;
+  color: white;
+}
+
+.primaryButton:hover {
+  background-color: #642ab5;
+}
+
+.secondaryButton {
+  background-color: #95a5a6;
+  color: white;
+}
+
+.secondaryButton:hover {
+  background-color: #7f8c8d;
+}
+
+.successButton {
+  background-color: #27ae60;
+  color: white;
+}
+
+.successButton:hover {
+  background-color: #229954;
+}
+
+.dangerButton {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.dangerButton:hover {
+  background-color: #c0392b;
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled,
+.successButton:disabled,
+.dangerButton:disabled,
+.disabledButton {
+  background-color: #bdc3c7 !important;
+  cursor: not-allowed;
+}
+
+/* Export Controls */
+.exportSelect {
+  padding: 10px;
+  background-color: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  min-width: 100px;
+}
+
+.exportButton {
+  padding: 10px 20px;
+  background-color: #51258f;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-variant: small-caps;
+  transition: opacity 0.05s ease;
+  min-width: 100px;
+}
+
+.exportButton:hover {
+  background-color: #642ab5;
+}
+
+.exportButton:disabled {
+  cursor: not-allowed;
+}
+
+/* Solver Result */
+.solverResult {
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.solverHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.solverHeader h3 {
+  margin: 0;
+  color: #2c3e50;
+}
+
+.closeButton {
+  padding: 6px 12px;
+  background-color: #e0e0e0;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.closeButton:hover {
+  background-color: #d0d0d0;
+}
+
+.solverReport {
+  font-family: monospace;
+  font-size: 13px;
+  background-color: white;
+  padding: 15px;
+  border-radius: 4px;
+  border: 1px solid #e0e0e0;
+  margin-bottom: 10px;
+}
+
+.solverReport div {
+  margin-bottom: 4px;
+}
+
+.violations {
+  margin-top: 15px;
+  padding: 10px;
+  background-color: #fff5f5;
+  border: 1px solid #ffccc7;
+  border-radius: 4px;
+}
+
+.violations ul {
+  margin: 5px 0 0 20px;
+  padding: 0;
+}
+
+.violations li {
+  margin-bottom: 4px;
+  color: #cf1322;
+}
+
+/* Availability Status */
+.availabilityStatus {
+  background-color: white;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.availabilityStatus h3 {
+  margin: 0 0 15px 0;
+  color: #2c3e50;
+}
+
+.availabilityContent {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.availabilityCount {
+  font-size: 18px;
+  font-weight: bold;
+  color: #2c3e50;
+}
+
+.progressBar {
+  width: 200px;
+  height: 8px;
+  background-color: #e0e0e0;
+  border-radius: 4px;
+  margin-top: 5px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  transition: all 0.3s ease;
+}
+
+.availabilityHint {
+  font-size: 12px;
+  color: #666;
+  margin-top: 5px;
+}
+
+/* Assignment Result */
+.assignmentResult {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.successBox {
+  padding: 15px;
+  background-color: #d4edda;
+  border: 1px solid #c3e6cb;
+  border-radius: 4px;
+  color: #155724;
+  margin-bottom: 15px;
+}
+
+.successBox h5 {
+  margin: 0 0 10px 0;
+}
+
+.successBox p {
+  margin: 0;
+}
+
+.errorBox {
+  padding: 15px;
+  background-color: #f8d7da;
+  border: 1px solid #f5c6cb;
+  border-radius: 4px;
+  color: #721c24;
+  margin-bottom: 15px;
+}
+
+.errorBox h5 {
+  margin: 0 0 10px 0;
+}
+
+.errorBox ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.errorBox li {
+  font-size: 14px;
+}
+
+.assignmentActions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+/* Timetable Container */
+.timetableContainer {
+  margin-top: 20px;
+  font-size: 14px;
+}
+
+/* Calendar Container */
+.calendarContainer {
+  margin-top: 20px;
+}
+
+.calendarContainer h2 {
+  margin: 0 0 20px 0;
+  font-size: 20px;
+  color: #2c3e50;
+}
+
+/* Legend */
+.legend {
+  margin-top: 20px;
+  padding: 12px 16px;
+  background-color: #e8f4fd;
+  border-radius: 4px;
+  border: 1px solid #b8d4f0;
+  font-size: 14px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .header {
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .headerActions {
+    width: 100%;
+  }
+
+  .actionBar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .actionBar button,
+  .actionBar select {
+    width: 100%;
+  }
+
+  .availabilityContent {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .progressBar {
+    width: 100%;
+  }
+
+  .assignmentActions {
+    flex-direction: column;
+  }
+
+  .assignmentActions button {
+    width: 100%;
+  }
+}

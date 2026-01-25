@@ -7,12 +7,10 @@ import NotificationContainer from './components/Notification/NotificationContain
 import Layout from './components/Layout/Layout';
 import Login from './pages/Auth/Login';
 import Dashboard from './pages/Dashboard/Dashboard';
-import ShiftPlanEdit from './pages/ShiftPlans/ShiftPlanEdit';
-import ShiftPlanView from './pages/ShiftPlans/ShiftPlanView';
+import PlanView from './pages/Plans/PlanView';
 import PlanList from './pages/Plans/PlanList';
-import WeeklyPlanCreate from './pages/Plans/PlanCreate';
-import WeeklyPlanEdit from './pages/WeeklyPlans/WeeklyPlanEdit';
-import WeeklyPlanView from './pages/WeeklyPlans/WeeklyPlanView';
+import PlanCreate from './pages/Plans/PlanCreate';
+import PlanEdit from './pages/Plans/PlanEdit';
 import MyAvailability from './pages/MyAvailability/MyAvailability';
 import EmployeeManagement from './pages/Employees/EmployeeManagement';
 import Settings from './pages/Settings/Settings';
@@ -135,12 +133,10 @@ const AppContent: React.FC = () => {
     <Routes>
       {/* Protected Routes (require login) */}
       <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-      <Route path="/shift-plans/:id/edit" element={<ProtectedRoute roles={['admin', 'maintenance']}><ShiftPlanEdit /></ProtectedRoute>} />
-      <Route path="/shift-plans/:id" element={<ProtectedRoute><ShiftPlanView /></ProtectedRoute>} />
+      <Route path="/plans/:id" element={<ProtectedRoute><PlanView /></ProtectedRoute>} />
       <Route path="/plans" element={<ProtectedRoute><PlanList /></ProtectedRoute>} />
-      <Route path="/plans/new" element={<ProtectedRoute roles={['admin', 'maintenance']}><WeeklyPlanCreate /></ProtectedRoute>} />
-      <Route path="/weekly-plans/:id/edit" element={<ProtectedRoute roles={['admin', 'maintenance']}><WeeklyPlanEdit /></ProtectedRoute>} />
-      <Route path="/weekly-plans/:id" element={<ProtectedRoute><WeeklyPlanView /></ProtectedRoute>} />
+      <Route path="/plans/new" element={<ProtectedRoute roles={['admin', 'maintenance']}><PlanCreate /></ProtectedRoute>} />
+      <Route path="/plans/:id/edit" element={<ProtectedRoute roles={['admin', 'maintenance']}><PlanEdit /></ProtectedRoute>} />
       <Route path="/my-availability" element={<ProtectedRoute><MyAvailability /></ProtectedRoute>} />
       <Route path="/employees" element={<ProtectedRoute roles={['admin', 'maintenance']}><EmployeeManagement /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
