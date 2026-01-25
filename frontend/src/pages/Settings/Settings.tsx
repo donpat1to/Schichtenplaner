@@ -9,7 +9,8 @@ import { Employee } from '../../models/Employee';
 import { styles } from './type/SettingsType';
 
 const Settings: React.FC = () => {
-  const { user: currentUser, updateUser } = useAuth();
+  const { user: currentUser, updateUser, hasRole } = useAuth();
+  const isAdmin = hasRole(['admin', 'maintenance']);
   const { showNotification } = useNotification();
   const { executeWithValidation, clearErrors, isSubmitting } = useBackendValidation();
 
@@ -456,52 +457,62 @@ const Settings: React.FC = () => {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                     <div style={styles.field}>
                       <label style={styles.fieldLabel}>
-                        Vorname *
+                        Vorname {isAdmin && '*'}
                       </label>
                       <input
                         type="text"
                         name="firstname"
                         value={profileForm.firstname}
                         onChange={handleProfileChange}
-                        required
-                        style={styles.fieldInput}
+                        required={isAdmin}
+                        disabled={!isAdmin}
+                        style={isAdmin ? styles.fieldInput : styles.fieldInputDisabled}
                         placeholder="Ihr Vorname"
                         onFocus={(e) => {
-                          e.target.style.borderColor = '#1a1325';
-                          e.target.style.boxShadow = '0 0 0 3px rgba(26, 19, 37, 0.1)';
+                          if (isAdmin) {
+                            e.target.style.borderColor = '#1a1325';
+                            e.target.style.boxShadow = '0 0 0 3px rgba(26, 19, 37, 0.1)';
+                          }
                         }}
                         onBlur={(e) => {
-                          e.target.style.borderColor = '#e8e8e8';
-                          e.target.style.boxShadow = 'none';
+                          if (isAdmin) {
+                            e.target.style.borderColor = '#e8e8e8';
+                            e.target.style.boxShadow = 'none';
+                          }
                         }}
                       />
                     </div>
                     <div style={styles.field}>
                       <label style={styles.fieldLabel}>
-                        Nachname *
+                        Nachname {isAdmin && '*'}
                       </label>
                       <input
                         type="text"
                         name="lastname"
                         value={profileForm.lastname}
                         onChange={handleProfileChange}
-                        required
-                        style={styles.fieldInput}
+                        required={isAdmin}
+                        disabled={!isAdmin}
+                        style={isAdmin ? styles.fieldInput : styles.fieldInputDisabled}
                         placeholder="Ihr Nachname"
                         onFocus={(e) => {
-                          e.target.style.borderColor = '#1a1325';
-                          e.target.style.boxShadow = '0 0 0 3px rgba(26, 19, 37, 0.1)';
+                          if (isAdmin) {
+                            e.target.style.borderColor = '#1a1325';
+                            e.target.style.boxShadow = '0 0 0 3px rgba(26, 19, 37, 0.1)';
+                          }
                         }}
                         onBlur={(e) => {
-                          e.target.style.borderColor = '#e8e8e8';
-                          e.target.style.boxShadow = 'none';
+                          if (isAdmin) {
+                            e.target.style.borderColor = '#e8e8e8';
+                            e.target.style.boxShadow = 'none';
+                          }
                         }}
                       />
                     </div>
                   </div>
                 </div>
               </div>
-              {currentUser.roles?.includes('admin') && (
+              {isAdmin && (
                 <div style={styles.actions}>
                   <button
                     type="submit"

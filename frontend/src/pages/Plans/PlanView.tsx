@@ -839,6 +839,7 @@ const PlanView: React.FC = () => {
               year={currentMonth.getFullYear()}
               month={currentMonth.getMonth()}
               weeks={weeklyPlan.weeks}
+              employees={weeklyPlan.employees}
               onMonthChange={handleMonthChange}
             />
           </div>

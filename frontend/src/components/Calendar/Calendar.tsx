@@ -1,5 +1,6 @@
 // frontend/src/components/Calendar/Calendar.tsx
 import React from 'react';
+import { EmployeeWithPreferences } from '../../models/WeeklyPlan';
 import styles from './Calendar.module.css';
 
 export interface CalendarProps {
@@ -9,9 +10,11 @@ export interface CalendarProps {
         id: string;
         startDate: string;
         endDate: string;
+        weekNumber: number;
         minEmployees: number;
         maxEmployees: number;
     }>;
+    employees?: EmployeeWithPreferences[];
     onMonthChange: (year: number, month: number) => void;
     getDayInfo?: (date: Date) => {
         isInPlan: boolean;
@@ -26,6 +29,7 @@ const Calendar: React.FC<CalendarProps> = ({
     year,
     month,
     weeks,
+    employees = [],
     onMonthChange,
     getDayInfo,
     onDayClick,
@@ -119,6 +123,53 @@ const Calendar: React.FC<CalendarProps> = ({
         return 1 + Math.ceil((firstThursday - target.valueOf()) / 604800000);
     };
 
+    // Get plan week for a calendar week
+    const getPlanWeekForDate = (date: Date) => {
+        const dateStr = date.toISOString().split('T')[0];
+        return weeks.find(w => {
+            const start = new Date(w.startDate);
+            const end = new Date(w.endDate);
+            const checkDate = new Date(dateStr);
+            return checkDate >= start && checkDate <= end;
+        });
+    };
+
+    // Get employees assigned to a specific week
+    const getAssignedEmployeesForWeek = (weekId: string) => {
+        return employees.filter(emp => emp.assignedWeeks.includes(weekId));
+    };
+
+    // Render employee boxes for a week
+    const renderEmployeeBoxes = (weekId: string) => {
+        const assignedEmployees = getAssignedEmployeesForWeek(weekId);
+
+        if (assignedEmployees.length === 0) {
+            return null;
+        }
+
+        return assignedEmployees.map(employee => {
+            // Determine background color based on employee role
+            let backgroundColor = '#642ab5'; // Default: non-trainee personnel (purple)
+
+            if (employee.isTrainee) {
+                backgroundColor = '#cda8f0'; // Trainee (light purple)
+            } else if (employee.employeeType === 'manager') {
+                backgroundColor = '#CC0000'; // Manager (red)
+            }
+
+            return (
+                <div
+                    key={employee.id}
+                    className={styles.employeeBox}
+                    style={{ backgroundColor }}
+                    title={`${employee.firstname} ${employee.lastname}${employee.isTrainee ? ' (Trainee)' : ''}`}
+                >
+                    {employee.firstname} {employee.lastname}
+                </div>
+            );
+        });
+    };
+
     const calendarGrid = generateCalendarGrid();
 
     return (
@@ -143,7 +194,7 @@ const Calendar: React.FC<CalendarProps> = ({
 
             <div className={styles.calendarGrid}>
                 {/* Day names header */}
-                <div className={styles.weekRow}>
+                <div className={styles.headerRow}>
                     <div className={styles.weekNumberHeader}>KW</div>
                     {dayNames.map((day, index) => (
                         <div key={index} className={styles.dayName}>
@@ -153,71 +204,95 @@ const Calendar: React.FC<CalendarProps> = ({
                 </div>
 
                 {/* Calendar weeks */}
-                {calendarGrid.map((week, weekIndex) => (
-                    <div key={weekIndex} className={styles.weekRow}>
-                        <div className={styles.weekNumber}>
-                            {getWeekNumber(week[0].date)}
-                        </div>
+                {calendarGrid.map((week, weekIndex) => {
+                    const weekNumber = getWeekNumber(week[0].date);
+                    const planWeek = getPlanWeekForDate(week[0].date);
+                    const hasAssignedEmployees = planWeek
+                        ? getAssignedEmployeesForWeek(planWeek.id).length > 0
+                        : false;
 
-                        {week.map((day, dayIndex) => {
-                            const dayClass = [
-                                styles.day,
-                                !day.isCurrentMonth ? styles.adjacentMonth : '',
-                                day.dayInfo?.isInPlan ? styles.inPlan : '',
-                                day.dayInfo?.isAssigned ? styles.assigned : '',
-                            ].filter(Boolean).join(' ');
+                    return (
+                        <div key={weekIndex} className={styles.weekContainer}>
+                            {/* KW column spanning both rows */}
+                            <div className={styles.weekNumberCell}>
+                                <span className={styles.weekNumberText}>{weekNumber}</span>
+                            </div>
 
-                            const getPreferenceStyle = () => {
-                                if (!day.dayInfo?.preferenceLevel) return {};
+                            {/* Content area with days and employees */}
+                            <div className={styles.weekContent}>
+                                {/* Upper row: Day cells */}
+                                <div className={styles.daysRow}>
+                                    {week.map((day, dayIndex) => {
+                                        const dayClass = [
+                                            styles.day,
+                                            !day.isCurrentMonth ? styles.adjacentMonth : '',
+                                            day.dayInfo?.isInPlan ? styles.inPlan : '',
+                                            day.dayInfo?.isAssigned ? styles.assigned : '',
+                                        ].filter(Boolean).join(' ');
 
-                                const colors = {
-                                    1: { bg: '#dcfce7', color: '#22c55e' },
-                                    2: { bg: '#fef9c3', color: '#eab308' },
-                                    3: { bg: '#fee2e2', color: '#ef4444' },
-                                };
+                                        const getPreferenceStyle = () => {
+                                            if (!day.dayInfo?.preferenceLevel) return {};
 
-                                return {
-                                    backgroundColor: colors[day.dayInfo.preferenceLevel].bg,
-                                    color: colors[day.dayInfo.preferenceLevel].color,
-                                };
-                            };
+                                            const colors = {
+                                                1: { bg: '#dcfce7', color: '#22c55e' },
+                                                2: { bg: '#fef9c3', color: '#eab308' },
+                                                3: { bg: '#fee2e2', color: '#ef4444' },
+                                            };
 
-                            return (
-                                <div
-                                    key={dayIndex}
-                                    className={dayClass}
-                                    style={getPreferenceStyle()}
-                                    onClick={() => onDayClick?.(day.date, day.dayInfo?.weekId)}
-                                    title={
-                                        day.dayInfo?.preferenceLevel
-                                            ? `Präferenz: ${day.dayInfo.preferenceLevel === 1 ? 'Bevorzugt' :
-                                                day.dayInfo.preferenceLevel === 2 ? 'Verfügbar' : 'Nicht verfügbar'
-                                            }`
-                                            : undefined
-                                    }
-                                >
-                                    <div className={styles.dayNumber}>{day.date.getDate()}</div>
+                                            return {
+                                                backgroundColor: colors[day.dayInfo.preferenceLevel].bg,
+                                                color: colors[day.dayInfo.preferenceLevel].color,
+                                            };
+                                        };
 
-                                    {day.dayInfo?.isAssigned && (
-                                        <div className={styles.assignedMarker}>✓</div>
-                                    )}
+                                        return (
+                                            <div
+                                                key={dayIndex}
+                                                className={dayClass}
+                                                style={getPreferenceStyle()}
+                                                onClick={() => onDayClick?.(day.date, day.dayInfo?.weekId)}
+                                                title={
+                                                    day.dayInfo?.preferenceLevel
+                                                        ? `Präferenz: ${day.dayInfo.preferenceLevel === 1 ? 'Bevorzugt' :
+                                                            day.dayInfo.preferenceLevel === 2 ? 'Verfügbar' : 'Nicht verfügbar'
+                                                        }`
+                                                        : undefined
+                                                }
+                                            >
+                                                <div className={styles.dayNumber}>{day.date.getDate()}</div>
 
-                                    {day.dayInfo?.preferenceLevel && (
-                                        <div className={styles.preferenceIndicator}>
-                                            {day.dayInfo.preferenceLevel}
-                                        </div>
-                                    )}
+                                                {day.dayInfo?.isAssigned && (
+                                                    <div className={styles.assignedMarker}>✓</div>
+                                                )}
 
-                                    {!day.isCurrentMonth && (
-                                        <div className={styles.monthIndicator}>
-                                            {day.date.getMonth() + 1}/{day.date.getFullYear()}
+                                                {day.dayInfo?.preferenceLevel && (
+                                                    <div className={styles.preferenceIndicator}>
+                                                        {day.dayInfo.preferenceLevel}
+                                                    </div>
+                                                )}
+
+                                                {!day.isCurrentMonth && (
+                                                    <div className={styles.monthIndicator}>
+                                                        {day.date.getMonth() + 1}/{day.date.getFullYear()}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Lower row: Employee boxes */}
+                                <div className={styles.employeesRow}>
+                                    {planWeek && (
+                                        <div className={styles.employeeBoxContainer}>
+                                            {renderEmployeeBoxes(planWeek.id)}
                                         </div>
                                     )}
                                 </div>
-                            );
-                        })}
-                    </div>
-                ))}
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
 
             {/* Legend */}
@@ -241,6 +316,18 @@ const Calendar: React.FC<CalendarProps> = ({
                 <div className={styles.legendItem}>
                     <div className={styles.adjacentMonthDay}>31</div>
                     <span>Außerhalb des Monats</span>
+                </div>
+                <div className={styles.legendItem}>
+                    <div className={styles.employeeBoxLegend} style={{ backgroundColor: '#642ab5' }}></div>
+                    <span>Mitarbeiter</span>
+                </div>
+                <div className={styles.legendItem}>
+                    <div className={styles.employeeBoxLegend} style={{ backgroundColor: '#cda8f0' }}></div>
+                    <span>Trainee</span>
+                </div>
+                <div className={styles.legendItem}>
+                    <div className={styles.employeeBoxLegend} style={{ backgroundColor: '#CC0000' }}></div>
+                    <span>Manager</span>
                 </div>
             </div>
         </div>

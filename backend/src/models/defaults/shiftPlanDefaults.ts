@@ -3,41 +3,41 @@ import { TimeSlot, Shift } from '../ShiftPlan.js';
 
 // Default time slots for ZEBRA (specific workplace)
 export const DEFAULT_ZEBRA_TIME_SLOTS: (Omit<TimeSlot, 'id' | 'planId'> & { timeSlotId: string })[] = [
-  { 
+  {
     timeSlotId: 'morning',
-    name: 'Vormittag', 
-    startTime: '08:00', 
+    name: 'Vormittag',
+    startTime: '08:00',
     endTime: '12:00',
     description: 'Vormittagsschicht'
   },
-  { 
+  {
     timeSlotId: 'afternoon',
-    name: 'Nachmittag', 
-    startTime: '11:30', 
+    name: 'Nachmittag',
+    startTime: '11:30',
     endTime: '15:30',
     description: 'Nachmittagsschicht'
   },
 ];
 
 export const DEFAULT_TIME_SLOTS: (Omit<TimeSlot, 'id' | 'planId'> & { timeSlotId: string })[] = [
-  { 
+  {
     timeSlotId: 'morning',
-    name: 'Vormittag', 
-    startTime: '08:00', 
+    name: 'Vormittag',
+    startTime: '08:00',
     endTime: '12:00',
     description: 'Vormittagsschicht'
   },
-  { 
-    timeSlotId: 'afternoon', 
-    name: 'Nachmittag', 
-    startTime: '11:30', 
+  {
+    timeSlotId: 'afternoon',
+    name: 'Nachmittag',
+    startTime: '11:30',
     endTime: '15:30',
     description: 'Nachmittagsschicht'
   },
-  { 
+  {
     timeSlotId: 'evening',
-    name: 'Abend', 
-    startTime: '14:00', 
+    name: 'Abend',
+    startTime: '14:00',
     endTime: '18:00',
     description: 'Abendschicht'
   },
@@ -48,7 +48,7 @@ export const DEFAULT_ZEBRA_SHIFTS: Omit<Shift, 'id' | 'planId'>[] = [
   // Monday-Thursday: Morning + Afternoon
   ...Array.from({ length: 4 }, (_, i) => i + 1).flatMap(day => [
     { timeSlotId: 'morning', dayOfWeek: day, requiredEmployees: 2, color: '#3498db' },
-    { timeSlotId: 'afternoon', dayOfWeek: day, requiredEmployees: 2, color: '#e74c3c' }
+    { timeSlotId: 'afternoon', dayOfWeek: day, requiredEmployees: 2, color: '#3498db' }
   ]),
   // Friday: Morning only
   { timeSlotId: 'morning', dayOfWeek: 5, requiredEmployees: 2, color: '#3498db' }
@@ -114,7 +114,7 @@ export const TEMPLATE_PRESETS = {
 
 // Helper function to create plan from preset
 export function createPlanFromPreset(
-  presetName: keyof typeof TEMPLATE_PRESETS, 
+  presetName: keyof typeof TEMPLATE_PRESETS,
   isTemplate: boolean = true,
   startDate?: string,
   endDate?: string

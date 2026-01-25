@@ -75,11 +75,11 @@
     gap: 2px;
 }
 
-.weekRow {
+/* Header row with day names */
+.headerRow {
     display: grid;
     grid-template-columns: 60px repeat(7, 1fr);
     gap: 2px;
-    min-height: 80px;
 }
 
 .weekNumberHeader,
@@ -106,17 +106,74 @@
     justify-content: center;
 }
 
-.weekNumber {
+/* Week container - holds KW column and content area */
+.weekContainer {
+    display: flex;
+    gap: 2px;
+    min-height: 100px;
+}
+
+/* KW column - spans both day and employee rows */
+.weekNumberCell {
+    width: 60px;
+    min-width: 60px;
     background-color: #34495e;
     color: white;
-    font-size: 14px;
-    font-weight: 600;
+    border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
 }
 
+.weekNumberText {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+/* Content area containing days and employees */
+.weekContent {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+/* Days row - contains the 7 day cells */
+.daysRow {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+}
+
+/* Employees row - contains employee boxes */
+.employeesRow {
+    min-height: 36px;
+    background-color: #f8f9fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 4px;
+}
+
+/* Employee box container - horizontal layout with wrapping */
+.employeeBoxContainer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+/* Individual employee box */
+.employeeBox {
+    padding: 4px 10px;
+    border-radius: 4px;
+    color: white;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+/* Day cell */
 .day {
     position: relative;
     border: 1px solid #e0e0e0;
@@ -125,7 +182,7 @@
     cursor: default;
     transition: all 0.2s;
     background-color: #f8f9fa;
-    min-height: 80px;
+    min-height: 60px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -189,6 +246,7 @@
     right: 4px;
 }
 
+/* Legend */
 .legend {
     display: flex;
     flex-wrap: wrap;
@@ -247,6 +305,13 @@
     font-weight: 600;
 }
 
+.employeeBoxLegend {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+}
+
+/* Responsive */
 @media (max-width: 768px) {
     .calendarHeader {
         flex-direction: column;
@@ -258,17 +323,22 @@
         gap: 5px;
     }
 
-    .weekRow {
-        min-height: 60px;
+    .weekContainer {
+        min-height: 80px;
     }
 
     .day {
-        min-height: 60px;
+        min-height: 50px;
         padding: 4px;
     }
 
     .dayNumber {
         font-size: 14px;
+    }
+
+    .employeeBox {
+        font-size: 10px;
+        padding: 3px 6px;
     }
 
     .legend {
