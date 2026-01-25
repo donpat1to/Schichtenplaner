@@ -8,6 +8,7 @@ import { WeeklyPlanWithDetails, PlanWeek, formatWeekRange, getCalendarWeekNumber
 import { useNotification } from '../../../contexts/NotificationContext';
 import { useBackendValidation } from '../../../hooks/useBackendValidation';
 import { useAuth } from '../../../contexts/AuthContext';
+import Calendar from '../../../components/Calendar/Calendar';
 
 interface AvailabilityManagerProps {
   employee: Employee;
@@ -64,8 +65,13 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
 
   const [largeContractMinimumWeeks, setLargeContractMinimumWeeks] = useState(0);
   const [smallContractMinimumWeeks, setSmallContractMinimumWeeks] = useState(0);
+  const [largeContractMaximumWeeks, setLargeContractMaximumWeeks] = useState(0);
+  const [smallContractMaximumWeeks, setSmallContractMaximumWeeks] = useState(0);
   const [requiredWeeks, setRequiredWeeks] = useState(0);
   const [requiredWeeksChanged, setRequiredWeeksChanged] = useState(false);
+
+  // Calendar month state for weekly plan view
+  const [currentMonth, setCurrentMonth] = useState<Date>(() => new Date());
 
   const daysOfWeek = [
     { id: 1, name: 'Montag' },
@@ -216,17 +222,22 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         // Calculate contract weeks recommendations
         const weeksCount = plan.weeks.length;
         const assignmentsPerWeekNeeded = plan.weeks[0].minEmployees;
+        const assignmentsPerWeekMax = plan.weeks[0].maxEmployees;
         const weeksNeeded = assignmentsPerWeekNeeded * weeksCount;
+        const weeksMax = assignmentsPerWeekMax * weeksCount;
 
         const employees = await employeeService.getEmployees(false);
         const employeeSmallContractCount = employees.filter(e => e.employeeType === 'personell' && e.contractType === 'small').length;
         const employeeLargeContractCount = employees.filter(e => e.employeeType === 'personell' && e.contractType === 'large').length;
 
         const workloadUnitsAvailable = employeeSmallContractCount + employeeLargeContractCount * 2;
-        const weeksPerWorkloadUnit = weeksNeeded / workloadUnitsAvailable;
+        const weeksPerWorkloadUnitMin = weeksNeeded / workloadUnitsAvailable;
+        const weeksPerWorkloadUnitMax = weeksMax / workloadUnitsAvailable;
 
-        setLargeContractMinimumWeeks(Math.ceil(2 * weeksPerWorkloadUnit));
-        setSmallContractMinimumWeeks(Math.ceil(weeksPerWorkloadUnit));
+        setLargeContractMinimumWeeks(Math.ceil(2 * weeksPerWorkloadUnitMin));
+        setSmallContractMinimumWeeks(Math.ceil(weeksPerWorkloadUnitMin));
+        setLargeContractMaximumWeeks(Math.ceil(2 * weeksPerWorkloadUnitMax));
+        setSmallContractMaximumWeeks(Math.ceil(weeksPerWorkloadUnitMax));
 
       } catch (err: any) {
         console.error('Error loading weekly plan:', err);
@@ -356,6 +367,19 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       }
     });
   };
+
+  // Handle calendar month change
+  const handleMonthChange = (year: number, month: number) => {
+    setCurrentMonth(new Date(year, month, 1));
+  };
+
+  // Set initial month to the start of the selected weekly plan
+  useEffect(() => {
+    if (selectedWeeklyPlan?.weeks && selectedWeeklyPlan.weeks.length > 0) {
+      const firstWeekStart = new Date(selectedWeeklyPlan.weeks[0].startDate);
+      setCurrentMonth(new Date(firstWeekStart.getFullYear(), firstWeekStart.getMonth(), 1));
+    }
+  }, [selectedWeeklyPlan]);
 
   const getAvailabilityForShift = (shiftId: string): AvailabilityLevel => {
     const availability = availabilities.find(avail => avail.shiftId === shiftId);
@@ -601,7 +625,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         }}>
           Wochenpräferenzen
           <div style={{ fontSize: '14px', fontWeight: 'normal', marginTop: '5px' }}>
-            {selectedWeeklyPlan.weeks.length} Wochen • Klicken Sie auf eine Woche um die Präferenz zu ändern
+            {selectedWeeklyPlan.weeks.length} Wochen • Klicken Sie auf die Präferenzzeile um die Präferenz zu ändern
           </div>
         </div>
 
@@ -640,64 +664,18 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
           </span>
         </div>
 
+        {/* Calendar view for weekly preferences */}
         <div style={{ padding: '20px' }}>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-            gap: '15px'
-          }}>
-            {selectedWeeklyPlan.weeks.map(week => {
-              const pref = weeklyPreferencesMap[week.id];
-              const prefDisplay = getPreferenceDisplay(pref);
-
-              return (
-                <div
-                  key={week.id}
-                  onClick={() => canEdit && toggleWeeklyPreference(week.id)}
-                  style={{
-                    padding: '15px',
-                    borderRadius: '8px',
-                    border: `2px solid ${pref ? prefDisplay.color : '#e0e0e0'}`,
-                    backgroundColor: prefDisplay.bg,
-                    cursor: canEdit ? 'pointer' : 'default',
-                    transition: 'all 0.2s',
-                    opacity: canEdit ? 1 : 0.8
-                  }}
-                >
-                  <div style={{
-                    fontWeight: 'bold',
-                    color: '#2c3e50',
-                    marginBottom: '5px'
-                  }}>
-                    KW {getCalendarWeekNumber(new Date(week.startDate))}
-                  </div>
-                  <div style={{
-                    fontSize: '13px',
-                    color: '#666',
-                    marginBottom: '10px'
-                  }}>
-                    {formatWeekRange(week.startDate, week.endDate)}
-                  </div>
-                  <div style={{
-                    fontSize: '14px',
-                    fontWeight: 'bold',
-                    color: pref ? prefDisplay.color : '#999'
-                  }}>
-                    {pref ? `${pref}: ${prefDisplay.text}` : 'Keine Angabe'}
-                  </div>
-                  {canEdit && (
-                    <div style={{
-                      fontSize: '11px',
-                      color: '#999',
-                      marginTop: '5px'
-                    }}>
-                      Klicken zum Ändern
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+          <Calendar
+            year={currentMonth.getFullYear()}
+            month={currentMonth.getMonth()}
+            weeks={selectedWeeklyPlan.weeks}
+            onMonthChange={handleMonthChange}
+            mode="preferences"
+            weekPreferences={weeklyPreferencesMap}
+            onPreferenceChange={toggleWeeklyPreference}
+            disabled={!canEdit}
+          />
         </div>
 
         {/* Summary */}
@@ -1056,7 +1034,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                 <option value="">Bitte auswählen...</option>
                 {weeklyPlans.map(plan => (
                   <option key={plan.id} value={plan.id}>
-                    {plan.name} ({plan.weeks?.length || 0} Wochen)
+                    {plan.name} {plan.weeks && `(${plan.weeks.length} Wochen)`}
                   </option>
                 ))}
               </select>
@@ -1122,13 +1100,13 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         {planType === 'weekly' && (
           <>
             <div style={{ marginTop: '10px' }}>
-              Basierend auf aktueller Mitarbeiterverteilung werden für diesen Plan empfohlen:
+              Basierend auf aktueller Mitarbeiterverteilung werden für den Solver des Plans empfohlen:
             </div>
             <div style={{ marginTop: '5px' }}>
-              • <strong>Große Verträge:</strong> Mindestens {largeContractMinimumWeeks} Wochen
+              • <strong>Große Verträge:</strong> Mindestens {largeContractMinimumWeeks} Wochen, Maxmial {largeContractMaximumWeeks}
             </div>
             <div>
-              • <strong>Kleine Verträge:</strong> Mindestens {smallContractMinimumWeeks} Wochen
+              • <strong>Kleine Verträge:</strong> Mindestens {smallContractMinimumWeeks} Wochen, Maximal {smallContractMaximumWeeks}
             </div>
           </>
         )}

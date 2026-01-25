@@ -3,15 +3,15 @@ import { TimeSlot, Shift } from '../ShiftPlan.js';
 
 // Default time slots for ZEBRA (specific workplace)
 export const DEFAULT_ZEBRA_TIME_SLOTS: Omit<TimeSlot, 'id' | 'planId'>[] = [
-  { 
-    name: 'Vormittag', 
-    startTime: '08:00', 
+  {
+    name: 'Vormittag',
+    startTime: '08:00',
     endTime: '12:00',
     description: 'Vormittagsschicht'
   },
-  { 
-    name: 'Nachmittag', 
-    startTime: '11:30', 
+  {
+    name: 'Nachmittag',
+    startTime: '11:30',
     endTime: '15:30',
     description: 'Nachmittagsschicht'
   },
@@ -19,21 +19,21 @@ export const DEFAULT_ZEBRA_TIME_SLOTS: Omit<TimeSlot, 'id' | 'planId'>[] = [
 
 // Default time slots for general use
 export const DEFAULT_TIME_SLOTS: Omit<TimeSlot, 'id' | 'planId'>[] = [
-  { 
-    name: 'Vormittag', 
-    startTime: '08:00', 
+  {
+    name: 'Vormittag',
+    startTime: '08:00',
     endTime: '12:00',
     description: 'Vormittagsschicht'
   },
-  { 
-    name: 'Nachmittag', 
-    startTime: '11:30', 
+  {
+    name: 'Nachmittag',
+    startTime: '11:30',
     endTime: '15:30',
     description: 'Nachmittagsschicht'
   },
-  { 
-    name: 'Abend', 
-    startTime: '14:00', 
+  {
+    name: 'Abend',
+    startTime: '14:00',
     endTime: '18:00',
     description: 'Abendschicht'
   },
@@ -68,50 +68,19 @@ export const TEMPLATE_PRESETS = {
     timeSlots: DEFAULT_ZEBRA_TIME_SLOTS,
     shifts: DEFAULT_ZEBRA_SHIFTS
   },
-  /*ZEBRA_MINIMAL: {
-    name: 'ZEBRA Minimal',
-    description: 'ZEBRA mit minimaler Besetzung',
-    timeSlots: DEFAULT_ZEBRA_TIME_SLOTS,
-    shifts: [
-      ...Array.from({ length: 5 }, (_, i) => i + 1).flatMap(day => [
-        { timeSlotId: 'morning', dayOfWeek: day, requiredEmployees: 1, color: '#3498db' },
-        { timeSlotId: 'afternoon', dayOfWeek: day, requiredEmployees: 1, color: '#e74c3c' }
-      ])
-    ]
-  },
-  ZEBRA_FULL: {
-    name: 'ZEBRA Vollbesetzung',
-    description: 'ZEBRA mit voller Besetzung',
-    timeSlots: DEFAULT_ZEBRA_TIME_SLOTS,
-    shifts: [
-      ...Array.from({ length: 5 }, (_, i) => i + 1).flatMap(day => [
-        { timeSlotId: 'morning', dayOfWeek: day, requiredEmployees: 3, color: '#3498db' },
-        { timeSlotId: 'afternoon', dayOfWeek: day, requiredEmployees: 3, color: '#e74c3c' }
-      ])
-    ]
-  },*/
+
   GENERAL_STANDARD: {
     name: 'Standard Wochenplan',
     description: 'Standard Vorlage: Mo-Fr Vormittag+Nachmittag+Abend',
     timeSlots: DEFAULT_TIME_SLOTS,
     shifts: DEFAULT_SHIFTS
   },
-  /*ZEBRA_PART_TIME: {
-    name: 'ZEBRA Teilzeit',
-    description: 'ZEBRA Vorlage mit reduzierten Schichten',
-    timeSlots: DEFAULT_ZEBRA_TIME_SLOTS,
-    shifts: [
-      // Monday-Thursday: Morning only
-      ...Array.from({ length: 4 }, (_, i) => i + 1).map(day => ({
-        timeSlotId: 'morning', dayOfWeek: day, requiredEmployees: 1, color: '#3498db'
-      }))
-    ]
-  } */
+
 } as const;
 
 // Helper function to create plan from preset
 export function createPlanFromPreset(
-  presetName: keyof typeof TEMPLATE_PRESETS, 
+  presetName: keyof typeof TEMPLATE_PRESETS,
   isTemplate: boolean = true,
   startDate?: string,
   endDate?: string
@@ -127,15 +96,6 @@ export function createPlanFromPreset(
     shifts: preset.shifts
   };
 }
-
-// Color schemes for shifts
-export const SHIFT_COLORS = {
-  morning: '#3498db', // Blue
-  afternoon: '#e74c3c', // Red
-  evening: '#2ecc71', // Green
-  night: '#9b59b6', // Purple
-  default: '#95a5a6' // Gray
-} as const;
 
 // Status descriptions
 export const PLAN_STATUS_DESCRIPTIONS = {

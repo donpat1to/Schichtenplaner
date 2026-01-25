@@ -1,19 +1,12 @@
 // frontend/src/components/Calendar/Calendar.tsx
 import React from 'react';
-import { EmployeeWithPreferences } from '../../models/WeeklyPlan';
+import { EmployeeWithPreferences, PlanWeek } from '../../models/WeeklyPlan';
 import styles from './Calendar.module.css';
 
 export interface CalendarProps {
     year: number;
     month: number; // 0-11 (0 = January)
-    weeks: Array<{
-        id: string;
-        startDate: string;
-        endDate: string;
-        weekNumber: number;
-        minEmployees: number;
-        maxEmployees: number;
-    }>;
+    weeks: PlanWeek[];
     employees?: EmployeeWithPreferences[];
     onMonthChange: (year: number, month: number) => void;
     getDayInfo?: (date: Date) => {
@@ -23,6 +16,12 @@ export interface CalendarProps {
         preferenceLevel?: 1 | 2 | 3;
     };
     onDayClick?: (date: Date, weekId?: string) => void;
+
+    // Preference mode props
+    mode?: 'view' | 'preferences';
+    weekPreferences?: Record<string, 1 | 2 | 3>;
+    onPreferenceChange?: (weekId: string) => void;
+    disabled?: boolean;
 }
 
 const Calendar: React.FC<CalendarProps> = ({
@@ -33,6 +32,10 @@ const Calendar: React.FC<CalendarProps> = ({
     onMonthChange,
     getDayInfo,
     onDayClick,
+    mode = 'view',
+    weekPreferences = {},
+    onPreferenceChange,
+    disabled = false,
 }) => {
     const monthNames = [
         'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
@@ -139,7 +142,18 @@ const Calendar: React.FC<CalendarProps> = ({
         return employees.filter(emp => emp.assignedWeeks.includes(weekId));
     };
 
-    // Render employee boxes for a week
+    // Get preference display info
+    const getPreferenceDisplay = (level: 1 | 2 | 3 | undefined) => {
+        if (!level) return { text: 'Keine Angabe', color: '#999', bg: '#f8f8f8', borderColor: '#e0e0e0' };
+        const displays = {
+            1: { text: '1: Bevorzugt', color: '#22c55e', bg: '#dcfce7', borderColor: '#22c55e' },
+            2: { text: '2: Verfügbar', color: '#eab308', bg: '#fef9c3', borderColor: '#eab308' },
+            3: { text: '3: Nicht verfügbar', color: '#ef4444', bg: '#fee2e2', borderColor: '#ef4444' },
+        };
+        return displays[level];
+    };
+
+    // Render employee boxes for a week (view mode)
     const renderEmployeeBoxes = (weekId: string) => {
         const assignedEmployees = getAssignedEmployeesForWeek(weekId);
 
@@ -168,6 +182,29 @@ const Calendar: React.FC<CalendarProps> = ({
                 </div>
             );
         });
+    };
+
+    // Render preference toggle for a week (preferences mode)
+    const renderPreferenceToggle = (weekId: string) => {
+        const pref = weekPreferences[weekId];
+        const prefDisplay = getPreferenceDisplay(pref);
+
+        return (
+            <div
+                className={`${styles.preferenceToggle} ${disabled ? styles.disabled : ''}`}
+                style={{
+                    backgroundColor: prefDisplay.bg,
+                    borderColor: prefDisplay.borderColor,
+                    color: prefDisplay.color,
+                    cursor: disabled ? 'not-allowed' : 'pointer',
+                }}
+                onClick={() => !disabled && onPreferenceChange?.(weekId)}
+                title={disabled ? 'Bearbeitung nicht erlaubt' : 'Klicken zum Ändern'}
+            >
+                <span className={styles.preferenceText}>{prefDisplay.text}</span>
+                {!disabled && <span className={styles.preferenceHint}>Klicken zum Ändern</span>}
+            </div>
+        );
     };
 
     const calendarGrid = generateCalendarGrid();
@@ -207,9 +244,6 @@ const Calendar: React.FC<CalendarProps> = ({
                 {calendarGrid.map((week, weekIndex) => {
                     const weekNumber = getWeekNumber(week[0].date);
                     const planWeek = getPlanWeekForDate(week[0].date);
-                    const hasAssignedEmployees = planWeek
-                        ? getAssignedEmployeesForWeek(planWeek.id).length > 0
-                        : false;
 
                     return (
                         <div key={weekIndex} className={styles.weekContainer}>
@@ -218,7 +252,7 @@ const Calendar: React.FC<CalendarProps> = ({
                                 <span className={styles.weekNumberText}>{weekNumber}</span>
                             </div>
 
-                            {/* Content area with days and employees */}
+                            {/* Content area with days and employees/preferences */}
                             <div className={styles.weekContent}>
                                 {/* Upper row: Day cells */}
                                 <div className={styles.daysRow}>
@@ -281,12 +315,16 @@ const Calendar: React.FC<CalendarProps> = ({
                                     })}
                                 </div>
 
-                                {/* Lower row: Employee boxes */}
+                                {/* Lower row: Employee boxes (view mode) or Preference toggle (preferences mode) */}
                                 <div className={styles.employeesRow}>
                                     {planWeek && (
-                                        <div className={styles.employeeBoxContainer}>
-                                            {renderEmployeeBoxes(planWeek.id)}
-                                        </div>
+                                        mode === 'preferences' ? (
+                                            renderPreferenceToggle(planWeek.id)
+                                        ) : (
+                                            <div className={styles.employeeBoxContainer}>
+                                                {renderEmployeeBoxes(planWeek.id)}
+                                            </div>
+                                        )
                                     )}
                                 </div>
                             </div>
@@ -295,39 +333,48 @@ const Calendar: React.FC<CalendarProps> = ({
                 })}
             </div>
 
-            {/* Legend */}
+            {/* Legend - different based on mode */}
             <div className={styles.legend}>
-                <div className={styles.legendItem}>
-                    <div className={`${styles.legendColor} ${styles.pref1}`}></div>
-                    <span>1 = Bevorzugt</span>
-                </div>
-                <div className={styles.legendItem}>
-                    <div className={`${styles.legendColor} ${styles.pref2}`}></div>
-                    <span>2 = Verfügbar</span>
-                </div>
-                <div className={styles.legendItem}>
-                    <div className={`${styles.legendColor} ${styles.pref3}`}></div>
-                    <span>3 = Nicht verfügbar</span>
-                </div>
-                <div className={styles.legendItem}>
-                    <div className={`${styles.legendColor} ${styles.assigned}`}></div>
-                    <span>Zugewiesen</span>
-                </div>
+                {mode === 'preferences' ? (
+                    // Preferences mode legend
+                    <>
+                        <div className={styles.legendItem}>
+                            <div className={`${styles.legendColor} ${styles.pref1}`}></div>
+                            <span>1 = Bevorzugt</span>
+                        </div>
+                        <div className={styles.legendItem}>
+                            <div className={`${styles.legendColor} ${styles.pref2}`}></div>
+                            <span>2 = Verfügbar</span>
+                        </div>
+                        <div className={styles.legendItem}>
+                            <div className={`${styles.legendColor} ${styles.pref3}`}></div>
+                            <span>3 = Nicht verfügbar</span>
+                        </div>
+                        <div className={styles.legendItem}>
+                            <div className={`${styles.legendColor} ${styles.assigned}`}></div>
+                            <span>Zugewiesen</span>
+                        </div>
+                    </>
+                ) : (
+                    // View mode legend
+                    <>
+                        <div className={styles.legendItem}>
+                            <div className={styles.employeeBoxLegend} style={{ backgroundColor: '#642ab5' }}></div>
+                            <span>Mitarbeiter</span>
+                        </div>
+                        <div className={styles.legendItem}>
+                            <div className={styles.employeeBoxLegend} style={{ backgroundColor: '#cda8f0' }}></div>
+                            <span>Trainee</span>
+                        </div>
+                        <div className={styles.legendItem}>
+                            <div className={styles.employeeBoxLegend} style={{ backgroundColor: '#CC0000' }}></div>
+                            <span>Manager</span>
+                        </div>
+                    </>
+                )}
                 <div className={styles.legendItem}>
                     <div className={styles.adjacentMonthDay}>31</div>
                     <span>Außerhalb des Monats</span>
-                </div>
-                <div className={styles.legendItem}>
-                    <div className={styles.employeeBoxLegend} style={{ backgroundColor: '#642ab5' }}></div>
-                    <span>Mitarbeiter</span>
-                </div>
-                <div className={styles.legendItem}>
-                    <div className={styles.employeeBoxLegend} style={{ backgroundColor: '#cda8f0' }}></div>
-                    <span>Trainee</span>
-                </div>
-                <div className={styles.legendItem}>
-                    <div className={styles.employeeBoxLegend} style={{ backgroundColor: '#CC0000' }}></div>
-                    <span>Manager</span>
                 </div>
             </div>
         </div>

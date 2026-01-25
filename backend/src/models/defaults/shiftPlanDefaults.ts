@@ -58,8 +58,8 @@ export const DEFAULT_SHIFTS: Omit<Shift, 'id' | 'planId'>[] = [
   // Monday-Friday: Morning + Afternoon + Evening
   ...Array.from({ length: 5 }, (_, i) => i + 1).flatMap(day => [
     { timeSlotId: 'morning', dayOfWeek: day, requiredEmployees: 2, color: '#3498db' },
-    { timeSlotId: 'afternoon', dayOfWeek: day, requiredEmployees: 2, color: '#e74c3c' },
-    { timeSlotId: 'evening', dayOfWeek: day, requiredEmployees: 1, color: '#2ecc71' }
+    { timeSlotId: 'afternoon', dayOfWeek: day, requiredEmployees: 2, color: '#3498db' },
+    { timeSlotId: 'evening', dayOfWeek: day, requiredEmployees: 1, color: '#3498db' }
   ])
 ];
 
@@ -71,45 +71,14 @@ export const TEMPLATE_PRESETS = {
     timeSlots: DEFAULT_ZEBRA_TIME_SLOTS,
     shifts: DEFAULT_ZEBRA_SHIFTS
   },
-  /*ZEBRA_MINIMAL: {
-    name: 'ZEBRA Minimal',
-    description: 'ZEBRA mit minimaler Besetzung',
-    timeSlots: DEFAULT_ZEBRA_TIME_SLOTS,
-    shifts: [
-      ...Array.from({ length: 5 }, (_, i) => i + 1).flatMap(day => [
-        { timeSlotId: 'morning', dayOfWeek: day, requiredEmployees: 1, color: '#3498db' },
-        { timeSlotId: 'afternoon', dayOfWeek: day, requiredEmployees: 1, color: '#e74c3c' }
-      ])
-    ]
-  },
-  ZEBRA_FULL: {
-    name: 'ZEBRA Vollbesetzung',
-    description: 'ZEBRA mit voller Besetzung',
-    timeSlots: DEFAULT_ZEBRA_TIME_SLOTS,
-    shifts: [
-      ...Array.from({ length: 5 }, (_, i) => i + 1).flatMap(day => [
-        { timeSlotId: 'morning', dayOfWeek: day, requiredEmployees: 3, color: '#3498db' },
-        { timeSlotId: 'afternoon', dayOfWeek: day, requiredEmployees: 3, color: '#e74c3c' }
-      ])
-    ]
-  },*/
+
   GENERAL_STANDARD: {
     name: 'Standard Wochenplan',
     description: 'Standard Vorlage: Mo-Fr Vormittag+Nachmittag+Abend',
     timeSlots: DEFAULT_TIME_SLOTS,
     shifts: DEFAULT_SHIFTS
   },
-  /*ZEBRA_PART_TIME: {
-    name: 'ZEBRA Teilzeit',
-    description: 'ZEBRA Vorlage mit reduzierten Schichten',
-    timeSlots: DEFAULT_ZEBRA_TIME_SLOTS,
-    shifts: [
-      // Monday-Thursday: Morning only
-      ...Array.from({ length: 4 }, (_, i) => i + 1).map(day => ({
-        timeSlotId: 'morning', dayOfWeek: day, requiredEmployees: 1, color: '#3498db'
-      }))
-    ]
-  }*/
+
 } as const;
 
 // Helper function to create plan from preset
@@ -130,15 +99,6 @@ export function createPlanFromPreset(
     shifts: preset.shifts
   };
 }
-
-// Color schemes for shifts
-export const SHIFT_COLORS = {
-  morning: '#3498db', // Blue
-  afternoon: '#e74c3c', // Red
-  evening: '#2ecc71', // Green
-  night: '#9b59b6', // Purple
-  default: '#95a5a6' // Gray
-} as const;
 
 // Status descriptions
 export const PLAN_STATUS_DESCRIPTIONS = {

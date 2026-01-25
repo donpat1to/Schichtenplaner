@@ -16,10 +16,6 @@ export function validateRequiredEmployees(shift: Shift | ScheduledShift): string
   return errors;
 }
 
-/*export function isTemplate(plan: ShiftPlan): boolean {
-  return plan.isTemplate || plan.status === 'template';
-}*/
-
 export function hasDateRange(plan: ShiftPlan): boolean {
   return !!plan.startDate && !!plan.endDate;
 }

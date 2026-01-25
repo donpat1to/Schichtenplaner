@@ -12,6 +12,7 @@ import {
 import { ShiftPlan, Shift, TimeSlot } from '../../models/ShiftPlan';
 import { useNotification } from '../../contexts/NotificationContext';
 import { useBackendValidation } from '../../hooks/useBackendValidation';
+import { useAuth } from '../../contexts/AuthContext';
 import Calendar from '../../components/Calendar/Calendar';
 import Timetable from '../../components/Timetable/Timetable';
 import {
@@ -58,6 +59,8 @@ const PlanEdit: React.FC = () => {
     const navigate = useNavigate();
     const { showNotification, confirmDialog } = useNotification();
     const { executeWithValidation, isSubmitting } = useBackendValidation();
+    const { hasRole } = useAuth();
+    const isAdmin = hasRole(['admin', 'maintenance']);
 
     const [planType, setPlanType] = useState<PlanType>('weekly');
     const [weeklyPlan, setWeeklyPlan] = useState<WeeklyPlanWithDetails | null>(null);
@@ -425,6 +428,25 @@ const PlanEdit: React.FC = () => {
         });
     };
 
+    const updateWeekConstraints = async (weekId: string, minEmployees: number, maxEmployees: number) => {
+        if (!id || !isAdmin) return;
+
+        await executeWithValidation(async () => {
+            await weeklyPlanService.updateWeek(id, weekId, {
+                minEmployees,
+                maxEmployees,
+            });
+
+            showNotification({
+                type: 'success',
+                title: 'Erfolg',
+                message: 'Wocheneinstellungen wurden aktualisiert.'
+            });
+
+            await determinePlanType();
+        });
+    };
+
     if (loading) {
         return (
             <div style={{
@@ -786,18 +808,68 @@ const PlanEdit: React.FC = () => {
                                                         {formatWeekRange(week.startDate, week.endDate)}
                                                     </td>
                                                     <td style={{
-                                                        padding: '12px 16px',
+                                                        padding: '8px 12px',
                                                         border: '1px solid #dee2e6',
                                                         textAlign: 'center'
                                                     }}>
-                                                        {week.minEmployees}
+                                                        {isAdmin ? (
+                                                            <input
+                                                                type="number"
+                                                                min="1"
+                                                                max={week.maxEmployees}
+                                                                defaultValue={week.minEmployees}
+                                                                onKeyDown={(e) => e.preventDefault()}
+                                                                onChange={(e) => {
+                                                                    const newMin = parseInt(e.target.value) || 2;
+                                                                    if (newMin !== week.minEmployees) {
+                                                                        updateWeekConstraints(week.id, newMin, week.maxEmployees);
+                                                                    }
+                                                                }}
+                                                                disabled={isSubmitting}
+                                                                style={{
+                                                                    width: '60px',
+                                                                    padding: '6px 8px',
+                                                                    borderRadius: '4px',
+                                                                    border: '1px solid #ddd',
+                                                                    fontSize: '14px',
+                                                                    textAlign: 'center'
+                                                                }}
+                                                            />
+                                                        ) : (
+                                                            week.minEmployees
+                                                        )}
                                                     </td>
                                                     <td style={{
-                                                        padding: '12px 16px',
+                                                        padding: '8px 12px',
                                                         border: '1px solid #dee2e6',
                                                         textAlign: 'center',
                                                     }}>
-                                                        {week.maxEmployees}
+                                                        {isAdmin ? (
+                                                            <input
+                                                                type="number"
+                                                                min={week.minEmployees}
+                                                                max="10"
+                                                                value={week.maxEmployees}
+                                                                onKeyDown={(e) => e.preventDefault()}
+                                                                onChange={(e) => {
+                                                                    const newMax = parseInt(e.target.value) || week.minEmployees;
+                                                                    if (newMax >= week.minEmployees) {
+                                                                        updateWeekConstraints(week.id, week.minEmployees, newMax);
+                                                                    }
+                                                                }}
+                                                                disabled={isSubmitting}
+                                                                style={{
+                                                                    width: '60px',
+                                                                    padding: '6px 8px',
+                                                                    borderRadius: '4px',
+                                                                    border: '1px solid #ddd',
+                                                                    fontSize: '14px',
+                                                                    textAlign: 'center'
+                                                                }}
+                                                            />
+                                                        ) : (
+                                                            week.maxEmployees
+                                                        )}
                                                     </td>
                                                 </tr>
                                             );
