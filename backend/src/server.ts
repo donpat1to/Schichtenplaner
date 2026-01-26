@@ -5,6 +5,8 @@ import { fileURLToPath } from 'url';
 import { initializeDatabase } from './scripts/initializeDatabase.js';
 import fs from 'fs';
 import helmet from 'helmet';
+import session from 'express-session';
+import passport from 'passport';
 import type { ViteDevServer } from 'vite';
 
 // Route imports
@@ -21,6 +23,7 @@ import {
   expensiveEndpointLimiter
 } from './middleware/rateLimit.js';
 import { ipSecurityCheck as authIpCheck } from './middleware/auth.js';
+import { externalAuthRoutes, idpAdminRoutes, initializeExternalAuth } from './auth/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -146,11 +149,12 @@ app.use(helmet({
       scriptSrc: ["'self'", "'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'"],
+      connectSrc: ["'self'", "https:"], // Allow OIDC redirects
       fontSrc: ["'self'"],
       objectSrc: ["'none'"],
       mediaSrc: ["'self'"],
       frameSrc: ["'none'"],
+      formAction: ["'self'", "https:"], // Allow form submissions to external IdPs
       upgradeInsecureRequests: process.env.FORCE_HTTPS === 'true' ? [] : null
     },
   },
@@ -173,6 +177,23 @@ app.use((req, res, next) => {
 // Middleware
 app.use(express.json());
 
+// Session middleware (required for OIDC state management)
+app.use(session({
+  secret: process.env.SESSION_SECRET || process.env.JWT_SECRET || 'session-secret-change-me',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 10 * 60 * 1000, // 10 minutes (only used for OIDC flow)
+    sameSite: 'lax',
+  },
+  name: 'oidc.session',
+}));
+
+// Initialize Passport
+app.use(passport.initialize());
+
 // Rate limiting - weniger restriktiv in Development
 if (process.env.NODE_ENV === 'production') {
   console.log('🔒 Applying production rate limiting');
@@ -191,6 +212,12 @@ app.use('/api/shift-plans', shiftPlanRoutes);
 app.use('/api/weekly-plans', weeklyPlanRoutes);
 app.use('/api/scheduled-shifts', scheduledShifts);
 app.use('/api/scheduling', expensiveEndpointLimiter, schedulingRoutes);
+
+// External authentication routes (OIDC)
+app.use('/api/auth/external', authLimiter, externalAuthRoutes);
+
+// Identity Provider admin routes (requires admin role)
+app.use('/api/admin/identity-providers', idpAdminRoutes);
 
 // Health route
 app.get('/api/health', (req: express.Request, res: express.Response) => {
@@ -321,6 +348,15 @@ const initializeApp = async () => {
     await initializeDatabase();
     const { applyMigration } = await import('./scripts/applyMigration.js');
     await applyMigration();
+
+    // Initialize external authentication (OIDC)
+    try {
+      await initializeExternalAuth();
+      console.log('✅ External authentication initialized');
+    } catch (error) {
+      console.warn('⚠️ External authentication initialization failed:', error);
+      // Continue without external auth - local auth still works
+    }
 
     if (isDevelopment && process.env.SEED_TEST_DATA === 'true') {
       try {

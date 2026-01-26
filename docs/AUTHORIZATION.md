@@ -198,6 +198,207 @@ CREATE TABLE employee_roles (
 );
 ```
 
+## External Identity Provider (IDP) Integration
+
+The application supports Single Sign-On (SSO) via OpenID Connect (OIDC) identity providers such as Authentik, Azure AD, Keycloak, and others.
+
+### Architecture Overview
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│   Frontend      │────▶│   Backend        │────▶│   Identity      │
+│   (React)       │     │   (Express)      │     │   Provider      │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+                               │
+                               ▼
+                        ┌──────────────────┐
+                        │   SQLite DB      │
+                        │   (Users, IdPs)  │
+                        └──────────────────┘
+```
+
+### Authentication Flow
+
+1. **User initiates SSO login** - Clicks IdP button on login page
+2. **Backend generates PKCE state** - Creates secure state/nonce for CSRF protection
+3. **Redirect to IdP** - User redirected to IdP's authorization endpoint
+4. **User authenticates** - Logs in at IdP (Authentik, Azure AD, etc.)
+5. **IdP callback** - IdP redirects back with authorization code
+6. **Token exchange** - Backend exchanges code for ID/access tokens
+7. **User mapping** - Backend maps IdP claims to internal employee
+8. **JWT generation** - Backend issues application JWT tokens
+9. **Frontend receives tokens** - User is logged in
+
+### IDP Configuration
+
+Identity providers can be configured via:
+- **Database** - Managed through admin UI (Settings > Security)
+- **Environment variable** - `IDP_CONFIG` JSON array
+
+#### Database Schema
+
+```sql
+-- Identity Providers configuration
+CREATE TABLE identity_providers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  type TEXT CHECK(type IN ('oidc', 'saml')) DEFAULT 'oidc',
+  enabled BOOLEAN DEFAULT TRUE,
+  issuer TEXT NOT NULL,
+  authorization_url TEXT,
+  token_url TEXT,
+  userinfo_url TEXT,
+  client_id TEXT NOT NULL,
+  client_secret TEXT NOT NULL,
+  scope TEXT DEFAULT '["openid", "profile", "email"]',
+  claim_mapping TEXT DEFAULT '{"id": "sub", "email": "email", "firstName": "given_name", "lastName": "family_name"}',
+  allowed_domains TEXT,
+  default_role TEXT DEFAULT 'user',
+  pkce_enabled BOOLEAN DEFAULT TRUE,
+  created_at DATETIME,
+  updated_at DATETIME
+);
+
+-- Employee external identities (links employees to IdP accounts)
+CREATE TABLE employee_identities (
+  id TEXT PRIMARY KEY,
+  employee_id TEXT NOT NULL REFERENCES employees(id),
+  idp_id TEXT NOT NULL REFERENCES identity_providers(id),
+  idp_subject TEXT NOT NULL,  -- The 'sub' claim from the IdP
+  idp_email TEXT,
+  access_token TEXT,
+  refresh_token TEXT,
+  token_expires_at DATETIME,
+  created_at DATETIME,
+  last_login DATETIME,
+  UNIQUE(idp_id, idp_subject),
+  UNIQUE(employee_id, idp_id)
+);
+```
+
+### User Mapping Service
+
+When a user authenticates via an external IdP, the system:
+
+1. **Extracts claims** from the IdP response using configured claim mapping
+2. **Validates email domain** if `allowedDomains` is configured
+3. **Looks up existing identity** by IdP ID + subject
+4. **Links or creates employee**:
+   - If identity exists → Update last login
+   - If email exists → Link IdP to existing employee
+   - Otherwise → Create new employee with default role
+
+### API Endpoints
+
+#### Public External Auth (`/api/auth/external`)
+
+| Endpoint | Method | Auth Required | Description |
+|----------|--------|---------------|-------------|
+| `/providers` | GET | No | List available IdPs for login page |
+| `/:idpId/login` | GET | No | Initiate OIDC login flow |
+| `/:idpId/callback` | GET | No | OIDC callback handler |
+| `/refresh` | POST | No | Refresh access token |
+| `/status` | GET | No | Check external auth system status |
+
+#### Admin IDP Management (`/api/admin/identity-providers`)
+
+| Endpoint | Method | Auth Required | Roles | Description |
+|----------|--------|---------------|-------|-------------|
+| `/` | GET | Yes | admin, maintenance | List all IdPs |
+| `/:id` | GET | Yes | admin, maintenance | Get IdP details (includes secret) |
+| `/` | POST | Yes | admin, maintenance | Create new IdP |
+| `/:id` | PUT | Yes | admin, maintenance | Update IdP |
+| `/:id` | DELETE | Yes | admin, maintenance | Delete IdP |
+| `/:id/test` | POST | Yes | admin, maintenance | Test IdP connection |
+| `/:id/toggle` | POST | Yes | admin, maintenance | Enable/disable IdP |
+
+### Claim Mapping
+
+The system maps IdP claims to internal user fields:
+
+| Internal Field | Default Claim | Example |
+|----------------|---------------|---------|
+| User ID | `sub` | `abc123-def456...` |
+| Email | `email` | `user@example.com` |
+| First Name | `given_name` | `Max` |
+| Last Name | `family_name` | `Mustermann` |
+| Roles (optional) | `groups` or `roles` | `["admin", "users"]` |
+
+Custom claim paths support dot notation for nested claims (e.g., `user.profile.email`).
+
+### Role Mapping
+
+IdP roles/groups are mapped to internal roles:
+
+| IdP Role | Internal Role |
+|----------|---------------|
+| `admin`, `administrators`, `Admin` | `admin` |
+| `maintenance`, `Maintenance` | `maintenance` |
+| `user`, `users`, `User` | `user` |
+
+If no matching role is found, the IdP's configured `defaultRole` is used.
+
+### PKCE Security
+
+PKCE (Proof Key for Code Exchange) is enabled by default for all IdPs:
+
+- **State**: Cryptographically random, stored server-side with 10-minute TTL
+- **Code Verifier**: Random base64url string
+- **Code Challenge**: SHA-256 hash of verifier (S256 method)
+- **Nonce**: Random string to prevent replay attacks
+
+### Frontend Integration
+
+The Settings page (admin only) provides a UI for managing IdPs:
+
+```typescript
+// Settings > Security tab
+// - List configured IdPs
+// - Add/Edit/Delete IdPs
+// - Test connection (validates OIDC discovery)
+// - Toggle enable/disable
+```
+
+The login page displays available IdPs:
+
+```typescript
+// Get available providers for login buttons
+const providers = await identityProviderService.getAvailableProviders();
+// Returns: [{ id, name, type, loginUrl }]
+```
+
+### Environment Configuration
+
+```bash
+# Backend URL (required for callback URL generation)
+BACKEND_URL=https://schichtplaner.example.com
+
+# Frontend URL (for redirects after login)
+FRONTEND_URL=https://schichtplaner.example.com
+
+# Session secret (for OIDC state management)
+SESSION_SECRET=your-session-secret
+
+# Optional: Configure IdP via environment instead of database
+IDP_CONFIG='[{"id":"authentik","name":"Authentik","type":"oidc","enabled":true,"issuer":"https://auth.example.com/application/o/schichtplaner/","clientId":"client-id","clientSecret":"client-secret","scope":["openid","profile","email"],"claimMapping":{"id":"sub","email":"email","firstName":"given_name","lastName":"family_name"},"defaultRole":"user","pkce":true}]'
+```
+
+### Token Structure
+
+External auth tokens include an `idp` field indicating the authentication source:
+
+```typescript
+interface TokenPayload {
+  id: string;      // Employee ID
+  email: string;   // Employee email
+  role: string;    // Primary role (backward compatible)
+  roles?: string[]; // All roles
+  idp?: string;    // Identity provider ID (for external auth)
+  iat?: number;    // Issued at
+  exp?: number;    // Expiration
+}
+```
+
 ## Security Best Practices
 
 1. **Always validate on backend**: Never rely solely on frontend permission checks
@@ -206,3 +407,13 @@ CREATE TABLE employee_roles (
 4. **Audit sensitive actions**: Log admin actions for accountability
 5. **JWT expiration**: Tokens should have reasonable expiration times
 6. **HTTPS only**: In production, always use HTTPS
+
+### SSO-Specific Security
+
+7. **Keep client secrets secure**: Never expose in frontend code or version control
+8. **Enable PKCE**: Always use PKCE for OIDC flows (enabled by default)
+9. **Restrict allowed domains**: Configure `allowedDomains` to limit who can sign in
+10. **Use least privilege**: Set `defaultRole` to `user`, not `admin`
+11. **Validate state/nonce**: Prevents CSRF and replay attacks (handled automatically)
+12. **Review linked identities**: Periodically audit `employee_identities` table
+13. **Session security**: OIDC sessions are short-lived (10 min) and HTTP-only

@@ -208,6 +208,68 @@ CREATE TABLE IF NOT EXISTS weekly_assignments (
   UNIQUE(plan_id, week_id, employee_id)
 );
 
+-- =====================================================
+-- External Identity Providers (OIDC/OAuth)
+-- =====================================================
+
+-- Identity Providers configuration (stored in DB for hot-reload)
+CREATE TABLE IF NOT EXISTS identity_providers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  type TEXT CHECK(type IN ('oidc', 'saml')) DEFAULT 'oidc',
+  enabled BOOLEAN DEFAULT TRUE,
+
+  -- OIDC Configuration
+  issuer TEXT NOT NULL,
+  authorization_url TEXT,
+  token_url TEXT,
+  userinfo_url TEXT,
+  client_id TEXT NOT NULL,
+  client_secret TEXT NOT NULL,
+
+  -- Scopes (JSON array)
+  scope TEXT DEFAULT '["openid", "profile", "email"]',
+
+  -- Claim mapping (JSON object)
+  claim_mapping TEXT DEFAULT '{"id": "sub", "email": "email", "firstName": "given_name", "lastName": "family_name"}',
+
+  -- Restrictions
+  allowed_domains TEXT, -- JSON array of allowed email domains
+  default_role TEXT DEFAULT 'user',
+
+  -- Security
+  pkce_enabled BOOLEAN DEFAULT TRUE,
+
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Employee external identities (links employees to IdP accounts)
+CREATE TABLE IF NOT EXISTS employee_identities (
+  id TEXT PRIMARY KEY,
+  employee_id TEXT NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+  idp_id TEXT NOT NULL REFERENCES identity_providers(id) ON DELETE CASCADE,
+  idp_subject TEXT NOT NULL, -- The 'sub' claim from the IdP
+  idp_email TEXT, -- Email from IdP (for reference)
+
+  -- Token storage (optional, for refresh tokens)
+  access_token TEXT,
+  refresh_token TEXT,
+  token_expires_at DATETIME,
+
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  last_login DATETIME,
+
+  UNIQUE(idp_id, idp_subject), -- Same IdP user can't be linked twice
+  UNIQUE(employee_id, idp_id)  -- One employee can have one identity per IdP
+);
+
+-- Performance indexes
+CREATE INDEX IF NOT EXISTS idx_identity_providers_enabled ON identity_providers(enabled);
+CREATE INDEX IF NOT EXISTS idx_employee_identities_employee ON employee_identities(employee_id);
+CREATE INDEX IF NOT EXISTS idx_employee_identities_idp ON employee_identities(idp_id);
+CREATE INDEX IF NOT EXISTS idx_employee_identities_subject ON employee_identities(idp_id, idp_subject);
+
 -- Performance indexes
 CREATE INDEX IF NOT EXISTS idx_employees_email_active ON employees(email, is_active);
 CREATE INDEX IF NOT EXISTS idx_employees_type_active ON employees(employee_type, is_active);

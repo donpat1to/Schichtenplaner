@@ -1,0 +1,310 @@
+================================================================================
+SCHICHTPLANER + AUTHENTIK INTEGRATION GUIDE
+================================================================================
+
+This guide explains how to configure Authentik as an OpenID Connect (OIDC)
+identity provider for Schichtplaner, enabling Single Sign-On (SSO) for your users.
+
+================================================================================
+PREREQUISITES
+================================================================================
+
+- Authentik instance running and accessible (e.g., https://auth.example.com)
+- Schichtplaner instance running (e.g., https://schichtplaner.example.com)
+- Admin access to both Authentik and Schichtplaner
+- HTTPS configured for both applications (required for secure OIDC)
+
+================================================================================
+PART 1: AUTHENTIK CONFIGURATION
+================================================================================
+
+1. LOG INTO AUTHENTIK ADMIN INTERFACE
+   ------------------------------------
+   Navigate to: https://auth.example.com/if/admin/
+   Log in with your admin credentials.
+
+2. CREATE AN APPLICATION
+   -----------------------
+   a) Go to: Applications > Applications
+   b) Click "Create"
+   c) Fill in the form:
+      - Name: Schichtplaner
+      - Slug: schichtplaner
+      - Provider: (leave empty for now, we'll create it next)
+   d) Click "Create"
+
+3. CREATE AN OAUTH2/OIDC PROVIDER
+   --------------------------------
+   a) Go to: Applications > Providers
+   b) Click "Create"
+   c) Select "OAuth2/OpenID Provider"
+   d) Fill in the form:
+
+      BASIC SETTINGS:
+      - Name: Schichtplaner OIDC
+      - Authentication flow: default-authentication-flow
+      - Authorization flow: default-provider-authorization-implicit-consent
+        (or explicit-consent if you want users to approve access)
+
+      PROTOCOL SETTINGS:
+      - Client type: Confidential
+      - Client ID: schichtplaner-client
+        (or click the dice icon to generate a random ID)
+      - Client Secret: Click the dice icon to generate a secure secret
+        *** IMPORTANT: Copy and save this secret! You'll need it later ***
+
+      - Redirect URIs/Origins:
+        https://schichtplaner.example.com/api/auth/external/authentik/callback
+
+        (Replace "authentik" with the ID you'll use in Schichtplaner.
+         If running locally for testing, also add:
+         http://localhost:3002/api/auth/external/authentik/callback)
+
+      ADVANCED SETTINGS:
+      - Signing Key: authentik Self-signed Certificate
+      - Subject mode: Based on the User's ID
+      - Include claims in id_token: Yes (checked)
+
+      SCOPES:
+      Make sure these scopes are available:
+      - openid
+      - profile
+      - email
+
+   e) Click "Create"
+
+4. LINK PROVIDER TO APPLICATION
+   ------------------------------
+   a) Go to: Applications > Applications
+   b) Click on "Schichtplaner"
+   c) Edit the application
+   d) Set Provider: Schichtplaner OIDC
+   e) Click "Update"
+
+5. CONFIGURE USER ACCESS (OPTIONAL)
+   ----------------------------------
+   By default, all users can access the application. To restrict access:
+
+   a) Go to: Applications > Applications > Schichtplaner
+   b) Click "Policy / Group / User Bindings"
+   c) Add bindings to specific groups or users
+
+6. NOTE YOUR AUTHENTIK URLs
+   --------------------------
+   Your Authentik issuer URL is: https://auth.example.com/application/o/schichtplaner/
+
+   Discovery URL (for testing):
+   https://auth.example.com/application/o/schichtplaner/.well-known/openid-configuration
+
+================================================================================
+PART 2: SCHICHTPLANER CONFIGURATION
+================================================================================
+
+METHOD A: VIA WEB UI (RECOMMENDED)
+-----------------------------------
+
+1. Log into Schichtplaner as an admin user
+
+2. Navigate to: Settings > Security (Einstellungen > Sicherheit)
+
+3. Click "Neuer Provider" (New Provider)
+
+4. Fill in the form:
+
+   BASIC SETTINGS:
+   - Name: Authentik
+   - Issuer URL: https://auth.example.com/application/o/schichtplaner/
+   - Client ID: schichtplaner-client (the one you created in Authentik)
+   - Client Secret: (paste the secret from Authentik)
+
+   ADVANCED SETTINGS:
+   - Scopes: openid, profile, email
+   - Allowed Domains: (leave empty to allow all, or enter your domain)
+   - Default Role: user (or admin if you want)
+   - PKCE: Enabled (recommended)
+   - Provider enabled: Yes
+
+   CLAIM MAPPING (Authentik defaults):
+   - ID Claim: sub
+   - Email Claim: email
+   - First Name Claim: given_name
+   - Last Name Claim: family_name
+
+5. Click "Erstellen" (Create)
+
+6. Click "Verbindung testen" (Test Connection) to verify the setup
+
+
+METHOD B: VIA ENVIRONMENT VARIABLES
+------------------------------------
+
+If you prefer configuration via environment variables, add these to your
+backend .env file:
+
+# Identity Provider Configuration
+IDP_CONFIG=[{"id":"authentik","name":"Authentik","type":"oidc","enabled":true,"issuer":"https://auth.example.com/application/o/schichtplaner/","clientId":"schichtplaner-client","clientSecret":"your-client-secret-here","scope":["openid","profile","email"],"claimMapping":{"id":"sub","email":"email","firstName":"given_name","lastName":"family_name"},"defaultRole":"user","pkce":true}]
+
+# Backend URL (needed for callback URL generation)
+BACKEND_URL=https://schichtplaner.example.com
+
+Then restart the backend server.
+
+================================================================================
+PART 3: USER MAPPING
+================================================================================
+
+When users log in via Authentik, Schichtplaner will:
+
+1. EXISTING USERS (by email):
+   - If an employee with the same email exists, the Authentik identity
+     is linked to that employee
+   - The user can then log in via Authentik or local password
+
+2. NEW USERS:
+   - A new employee record is created automatically
+   - First name, last name, and email are pulled from Authentik claims
+   - The user is assigned the "default role" configured in the provider
+   - Employee type defaults to "vollzeit" (full-time)
+
+CLAIM MAPPING EXPLAINED:
+------------------------
+Authentik sends user information in "claims". The claim mapping tells
+Schichtplaner which Authentik claim maps to which user field:
+
+  Schichtplaner Field  |  Default Authentik Claim  |  Example Value
+  ---------------------|---------------------------|------------------
+  User ID              |  sub                      |  abc123-def456...
+  Email                |  email                    |  user@example.com
+  First Name           |  given_name               |  Max
+  Last Name            |  family_name              |  Mustermann
+
+If your Authentik uses different claim names, adjust the mapping accordingly.
+
+================================================================================
+PART 4: TESTING THE INTEGRATION
+================================================================================
+
+1. VERIFY DISCOVERY ENDPOINT
+   ---------------------------
+   Open in browser:
+   https://auth.example.com/application/o/schichtplaner/.well-known/openid-configuration
+
+   You should see a JSON response with authorization_endpoint, token_endpoint, etc.
+
+2. TEST CONNECTION IN SCHICHTPLANER
+   ----------------------------------
+   - Go to Settings > Security
+   - Click the edit button on your Authentik provider
+   - Click "Verbindung testen" (Test Connection)
+   - You should see a green success message with the discovered endpoints
+
+3. TEST LOGIN FLOW
+   -----------------
+   a) Log out of Schichtplaner
+   b) On the login page, you should see an "Authentik" button (or similar)
+   c) Click it to start the SSO flow
+   d) You'll be redirected to Authentik to log in
+   e) After successful authentication, you'll be redirected back to Schichtplaner
+   f) You should now be logged in
+
+================================================================================
+PART 5: TROUBLESHOOTING
+================================================================================
+
+PROBLEM: "redirect_uri mismatch" error
+SOLUTION:
+- Check that the redirect URI in Authentik exactly matches:
+  https://schichtplaner.example.com/api/auth/external/{provider-id}/callback
+- The {provider-id} is the ID you configured in Schichtplaner (e.g., "authentik")
+- Make sure there are no trailing slashes
+
+PROBLEM: "invalid_client" error
+SOLUTION:
+- Verify the Client ID and Client Secret are correct
+- Make sure there are no extra spaces when copying
+- Check that the provider in Authentik is set to "Confidential"
+
+PROBLEM: User claims not mapped correctly
+SOLUTION:
+- Check Authentik's "Preview" feature to see what claims are sent
+- Adjust the claim mapping in Schichtplaner accordingly
+- Make sure the scopes "profile" and "email" are requested
+
+PROBLEM: PKCE errors
+SOLUTION:
+- Try disabling PKCE in Schichtplaner settings
+- Or ensure Authentik supports PKCE (it does by default)
+
+PROBLEM: "Discovery endpoint returned 404"
+SOLUTION:
+- Verify the issuer URL ends with the application slug
+- Correct: https://auth.example.com/application/o/schichtplaner/
+- Wrong: https://auth.example.com/
+
+PROBLEM: SSL/Certificate errors
+SOLUTION:
+- Ensure both applications use valid HTTPS certificates
+- For development, you may need to set NODE_TLS_REJECT_UNAUTHORIZED=0
+  (NOT recommended for production!)
+
+================================================================================
+PART 6: SECURITY CONSIDERATIONS
+================================================================================
+
+1. ALWAYS USE HTTPS
+   Both Authentik and Schichtplaner should use HTTPS in production.
+
+2. KEEP CLIENT SECRET SECURE
+   - Never commit the client secret to version control
+   - Use environment variables or secure secret management
+
+3. ENABLE PKCE
+   PKCE (Proof Key for Code Exchange) adds an extra layer of security.
+   Keep it enabled unless you encounter compatibility issues.
+
+4. RESTRICT ALLOWED DOMAINS
+   If your organization uses a specific email domain, configure
+   "Allowed Domains" to prevent unauthorized signups.
+
+5. REVIEW DEFAULT ROLE
+   New users get the "default role". Set this to "user" (not "admin")
+   to follow the principle of least privilege.
+
+6. AUDIT LINKED IDENTITIES
+   Periodically review which external identities are linked to employees
+   in the employee_identities database table.
+
+================================================================================
+EXAMPLE CONFIGURATION SUMMARY
+================================================================================
+
+AUTHENTIK SIDE:
+- Application Slug: schichtplaner
+- Provider Type: OAuth2/OpenID
+- Client Type: Confidential
+- Client ID: schichtplaner-client
+- Redirect URI: https://schichtplaner.example.com/api/auth/external/authentik/callback
+
+SCHICHTPLANER SIDE:
+- Provider ID: authentik (auto-generated or custom)
+- Name: Authentik
+- Issuer: https://auth.example.com/application/o/schichtplaner/
+- Client ID: schichtplaner-client
+- Scopes: openid, profile, email
+- PKCE: Enabled
+- Claim Mapping: sub, email, given_name, family_name
+
+================================================================================
+SUPPORT & FURTHER READING
+================================================================================
+
+Authentik Documentation:
+https://goauthentik.io/docs/
+
+OpenID Connect Specification:
+https://openid.net/connect/
+
+For issues with Schichtplaner, check:
+https://github.com/anthropics/claude-code/issues
+
+================================================================================
