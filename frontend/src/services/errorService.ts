@@ -13,15 +13,30 @@ export interface ApiError {
 
 export class ErrorService {
   static extractValidationErrors(error: any): ValidationError[] {
-    if (error?.details && Array.isArray(error.details)) {
+    if (!error) {
+      return [{ field: 'general', message: 'An unknown error occurred' }];
+    }
+
+    // Backend format: { validationErrors: [{ field, message }] }
+    if (error.validationErrors && Array.isArray(error.validationErrors)) {
+      return error.validationErrors;
+    }
+
+    // Alternative format: { details: [...] }
+    if (error.details && Array.isArray(error.details)) {
       return error.details;
     }
-    
+
+    // Backend error message: { error: "message" }
+    if (error.error && typeof error.error === 'string') {
+      return [{ field: 'general', message: error.error }];
+    }
+
     // Fallback for different error formats
     if (error.message && typeof error.message === 'string') {
       return [{ field: 'general', message: error.message }];
     }
-    
+
     return [{ field: 'general', message: 'An unknown error occurred' }];
   }
 

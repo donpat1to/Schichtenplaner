@@ -29,6 +29,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     const providers = rows.map((row) => ({
       id: row.id,
+      slug: row.slug,
       name: row.name,
       type: row.type,
       enabled: Boolean(row.enabled),
@@ -40,6 +41,7 @@ router.get('/', async (req: Request, res: Response) => {
       allowedDomains: row.allowed_domains ? JSON.parse(row.allowed_domains) : null,
       defaultRole: row.default_role,
       pkce: Boolean(row.pkce_enabled),
+      registrationMode: row.registration_mode || 'whitelist',
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
@@ -70,6 +72,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
     const provider = {
       id: row.id,
+      slug: row.slug,
       name: row.name,
       type: row.type,
       enabled: Boolean(row.enabled),
@@ -84,6 +87,7 @@ router.get('/:id', async (req: Request, res: Response) => {
       allowedDomains: row.allowed_domains ? JSON.parse(row.allowed_domains) : null,
       defaultRole: row.default_role,
       pkce: Boolean(row.pkce_enabled),
+      registrationMode: row.registration_mode || 'whitelist',
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -135,12 +139,13 @@ router.post('/', async (req: Request, res: Response) => {
     const row = idpConfigToDbRow(config);
     await db.run(
       `INSERT INTO identity_providers
-       (id, name, type, enabled, issuer, authorization_url, token_url, userinfo_url,
+       (id, slug, name, type, enabled, issuer, authorization_url, token_url, userinfo_url,
         client_id, client_secret, scope, claim_mapping, allowed_domains, default_role,
-        pkce_enabled, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+        pkce_enabled, registration_mode, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
       [
         row.id,
+        row.slug,
         row.name,
         row.type,
         row.enabled,
@@ -155,6 +160,7 @@ router.post('/', async (req: Request, res: Response) => {
         row.allowed_domains,
         row.default_role,
         row.pkce_enabled,
+        row.registration_mode,
       ]
     );
 
@@ -215,13 +221,14 @@ router.put('/:id', async (req: Request, res: Response) => {
     // Update in database
     await db.run(
       `UPDATE identity_providers SET
-        name = ?, type = ?, enabled = ?, issuer = ?,
+        slug = ?, name = ?, type = ?, enabled = ?, issuer = ?,
         authorization_url = ?, token_url = ?, userinfo_url = ?,
         client_id = ?, client_secret = ?, scope = ?, claim_mapping = ?,
         allowed_domains = ?, default_role = ?, pkce_enabled = ?,
-        updated_at = datetime('now')
+        registration_mode = ?, updated_at = datetime('now')
        WHERE id = ?`,
       [
+        row.slug,
         row.name,
         row.type,
         row.enabled,
@@ -236,6 +243,7 @@ router.put('/:id', async (req: Request, res: Response) => {
         row.allowed_domains,
         row.default_role,
         row.pkce_enabled,
+        row.registration_mode,
         id,
       ]
     );

@@ -215,6 +215,7 @@ CREATE TABLE IF NOT EXISTS weekly_assignments (
 -- Identity Providers configuration (stored in DB for hot-reload)
 CREATE TABLE IF NOT EXISTS identity_providers (
   id TEXT PRIMARY KEY,
+  slug TEXT NOT NULL UNIQUE, -- URL-friendly identifier (e.g., 'authentik', 'azure-ad')
   name TEXT NOT NULL,
   type TEXT CHECK(type IN ('oidc', 'saml')) DEFAULT 'oidc',
   enabled BOOLEAN DEFAULT TRUE,
@@ -240,6 +241,9 @@ CREATE TABLE IF NOT EXISTS identity_providers (
   -- Security
   pkce_enabled BOOLEAN DEFAULT TRUE,
 
+  -- Registration mode: 'open' = auto-create accounts, 'whitelist' = require pre-approval
+  registration_mode TEXT DEFAULT 'whitelist' CHECK(registration_mode IN ('open', 'whitelist')),
+
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -264,8 +268,24 @@ CREATE TABLE IF NOT EXISTS employee_identities (
   UNIQUE(employee_id, idp_id)  -- One employee can have one identity per IdP
 );
 
+-- IDP User Whitelist (pre-approved users for whitelist registration mode)
+CREATE TABLE IF NOT EXISTS idp_user_whitelist (
+  id TEXT PRIMARY KEY,
+  idp_id TEXT NOT NULL REFERENCES identity_providers(id) ON DELETE CASCADE,
+  identifier_type TEXT NOT NULL CHECK(identifier_type IN ('email', 'subject')),
+  identifier_value TEXT NOT NULL,
+  default_role TEXT DEFAULT 'user',
+  notes TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  created_by TEXT REFERENCES employees(id),
+  UNIQUE(idp_id, identifier_type, identifier_value)
+);
+
+CREATE INDEX IF NOT EXISTS idx_idp_whitelist_lookup ON idp_user_whitelist(idp_id, identifier_type, identifier_value);
+
 -- Performance indexes
 CREATE INDEX IF NOT EXISTS idx_identity_providers_enabled ON identity_providers(enabled);
+CREATE INDEX IF NOT EXISTS idx_identity_providers_slug ON identity_providers(slug);
 CREATE INDEX IF NOT EXISTS idx_employee_identities_employee ON employee_identities(employee_id);
 CREATE INDEX IF NOT EXISTS idx_employee_identities_idp ON employee_identities(idp_id);
 CREATE INDEX IF NOT EXISTS idx_employee_identities_subject ON employee_identities(idp_id, idp_subject);

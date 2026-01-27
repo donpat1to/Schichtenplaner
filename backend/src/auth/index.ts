@@ -6,14 +6,15 @@
 
 // Configuration
 export { idpConfigManager } from './config/idp.config.js';
-export { IdpConfig, IdpConfigSchema, IdpConfigArraySchema } from './config/idp.schema.js';
+export { type IdpConfig, IdpConfigSchema, IdpConfigArraySchema } from './config/idp.schema.js';
 
 // Strategies
 export { strategyFactory } from './strategies/strategy.factory.js';
 
 // Services
-export { tokenService, TokenPayload, TokenPair } from './services/token.service.js';
-export { userMappingService, InternalUser, MappingInput } from './services/user-mapping.service.js';
+export { tokenService, type TokenPayload, type TokenPair } from './services/token.service.js';
+export { userMappingService, type InternalUser, type MappingInput } from './services/user-mapping.service.js';
+export { whitelistService, type WhitelistEntry, type WhitelistCheckResult } from './services/whitelist.service.js';
 
 // Middleware
 export {
@@ -26,6 +27,7 @@ export {
 // Routes
 export { default as externalAuthRoutes } from './routes/external-auth.routes.js';
 export { default as idpAdminRoutes } from './routes/idp-admin.routes.js';
+export { default as whitelistAdminRoutes } from './routes/whitelist-admin.routes.js';
 
 // Initialize function
 import passport from 'passport';

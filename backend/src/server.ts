@@ -23,7 +23,7 @@ import {
   expensiveEndpointLimiter
 } from './middleware/rateLimit.js';
 import { ipSecurityCheck as authIpCheck } from './middleware/auth.js';
-import { externalAuthRoutes, idpAdminRoutes, initializeExternalAuth } from './auth/index.js';
+import { externalAuthRoutes, idpAdminRoutes, whitelistAdminRoutes, initializeExternalAuth } from './auth/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -218,6 +218,9 @@ app.use('/api/auth/external', authLimiter, externalAuthRoutes);
 
 // Identity Provider admin routes (requires admin role)
 app.use('/api/admin/identity-providers', idpAdminRoutes);
+
+// IDP User Whitelist admin routes (requires admin role)
+app.use('/api/admin/identity-providers', whitelistAdminRoutes);
 
 // Health route
 app.get('/api/health', (req: express.Request, res: express.Response) => {

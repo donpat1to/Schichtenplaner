@@ -6,6 +6,7 @@ import { apiClient } from './apiClient';
  */
 export interface IdentityProvider {
   id: string;
+  slug: string;
   name: string;
   type: 'oidc' | 'saml';
   enabled: boolean;
@@ -26,6 +27,7 @@ export interface IdentityProvider {
   allowedDomains?: string[];
   defaultRole: string;
   pkce: boolean;
+  registrationMode: 'open' | 'whitelist';
   createdAt?: string;
   updatedAt?: string;
 }
@@ -35,6 +37,7 @@ export interface IdentityProvider {
  */
 export interface IdentityProviderRequest {
   id?: string;
+  slug: string;
   name: string;
   type?: 'oidc' | 'saml';
   enabled?: boolean;
@@ -55,6 +58,7 @@ export interface IdentityProviderRequest {
   allowedDomains?: string[];
   defaultRole?: string;
   pkce?: boolean;
+  registrationMode?: 'open' | 'whitelist';
 }
 
 /**
@@ -69,6 +73,40 @@ export interface TestConnectionResult {
     token?: string;
     userinfo?: string;
   };
+}
+
+/**
+ * Whitelist entry for IDP user pre-approval
+ */
+export interface WhitelistEntry {
+  id: string;
+  idpId: string;
+  identifierType: 'email' | 'subject';
+  identifierValue: string;
+  defaultRole: string;
+  notes: string | null;
+  createdAt: string;
+  createdBy: string | null;
+}
+
+/**
+ * Create whitelist entry request
+ */
+export interface CreateWhitelistEntryRequest {
+  identifierType: 'email' | 'subject';
+  identifierValue: string;
+  defaultRole?: string;
+  notes?: string;
+}
+
+/**
+ * Update whitelist entry request
+ */
+export interface UpdateWhitelistEntryRequest {
+  identifierType?: 'email' | 'subject';
+  identifierValue?: string;
+  defaultRole?: string;
+  notes?: string;
 }
 
 /**
@@ -144,5 +182,46 @@ export const identityProviderService = {
       '/auth/external/providers'
     );
     return response.providers;
+  },
+
+  // ========== Whitelist Management ==========
+
+  /**
+   * Get all whitelist entries for an IDP
+   */
+  async getWhitelistEntries(idpId: string): Promise<WhitelistEntry[]> {
+    const response = await apiClient.get<{ entries: WhitelistEntry[] }>(
+      `/admin/identity-providers/${idpId}/whitelist`
+    );
+    return response.entries;
+  },
+
+  /**
+   * Add a new whitelist entry
+   */
+  async addWhitelistEntry(idpId: string, data: CreateWhitelistEntryRequest): Promise<WhitelistEntry> {
+    const response = await apiClient.post<{ entry: WhitelistEntry }>(
+      `/admin/identity-providers/${idpId}/whitelist`,
+      data
+    );
+    return response.entry;
+  },
+
+  /**
+   * Update a whitelist entry
+   */
+  async updateWhitelistEntry(idpId: string, entryId: string, data: UpdateWhitelistEntryRequest): Promise<WhitelistEntry> {
+    const response = await apiClient.put<{ entry: WhitelistEntry }>(
+      `/admin/identity-providers/${idpId}/whitelist/${entryId}`,
+      data
+    );
+    return response.entry;
+  },
+
+  /**
+   * Delete a whitelist entry
+   */
+  async deleteWhitelistEntry(idpId: string, entryId: string): Promise<void> {
+    await apiClient.delete(`/admin/identity-providers/${idpId}/whitelist/${entryId}`);
   },
 };

@@ -98,6 +98,13 @@ class IdpConfigManager {
   }
 
   /**
+   * Get a specific IdP configuration by slug
+   */
+  getBySlug(slug: string): IdpConfig | undefined {
+    return Array.from(this.configs.values()).find((c) => c.slug === slug);
+  }
+
+  /**
    * Check if an IdP exists and is enabled
    */
   exists(id: string): boolean {
@@ -127,12 +134,13 @@ class IdpConfigManager {
 
     await db.run(
       `INSERT OR REPLACE INTO identity_providers
-       (id, name, type, enabled, issuer, authorization_url, token_url, userinfo_url,
+       (id, slug, name, type, enabled, issuer, authorization_url, token_url, userinfo_url,
         client_id, client_secret, scope, claim_mapping, allowed_domains, default_role,
         pkce_enabled, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
       [
         row.id,
+        row.slug,
         row.name,
         row.type,
         row.enabled,
@@ -174,9 +182,10 @@ class IdpConfigManager {
   /**
    * Get provider info for public display (without secrets)
    */
-  getPublicInfo(): Array<{ id: string; name: string; type: string }> {
+  getPublicInfo(): Array<{ id: string; slug: string; name: string; type: string }> {
     return this.getAll().map((idp) => ({
       id: idp.id,
+      slug: idp.slug,
       name: idp.name,
       type: idp.type,
     }));

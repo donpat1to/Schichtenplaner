@@ -7,6 +7,7 @@ import { z } from 'zod';
  */
 export const IdpConfigSchema = z.object({
   id: z.string().min(1),
+  slug: z.string().min(1).regex(/^[a-z0-9-]+$/, 'Slug must be lowercase letters, numbers, and hyphens only'),
   name: z.string().min(1),
   type: z.enum(['oidc', 'saml']).default('oidc'),
   enabled: z.boolean().default(true),
@@ -44,6 +45,9 @@ export const IdpConfigSchema = z.object({
 
   // Security settings
   pkce: z.boolean().default(true),
+
+  // Registration mode: 'open' = auto-create accounts, 'whitelist' = require pre-approval
+  registrationMode: z.enum(['open', 'whitelist']).default('whitelist'),
 });
 
 export type IdpConfig = z.infer<typeof IdpConfigSchema>;
@@ -55,6 +59,7 @@ export const IdpConfigArraySchema = z.array(IdpConfigSchema);
  */
 export interface IdpDatabaseRow {
   id: string;
+  slug: string;
   name: string;
   type: 'oidc' | 'saml';
   enabled: number; // SQLite boolean
@@ -69,6 +74,7 @@ export interface IdpDatabaseRow {
   allowed_domains: string | null; // JSON array
   default_role: string;
   pkce_enabled: number; // SQLite boolean
+  registration_mode: 'open' | 'whitelist';
   created_at: string;
   updated_at: string;
 }
@@ -79,6 +85,7 @@ export interface IdpDatabaseRow {
 export function dbRowToIdpConfig(row: IdpDatabaseRow): IdpConfig {
   return {
     id: row.id,
+    slug: row.slug,
     name: row.name,
     type: row.type,
     enabled: Boolean(row.enabled),
@@ -93,6 +100,7 @@ export function dbRowToIdpConfig(row: IdpDatabaseRow): IdpConfig {
     allowedDomains: row.allowed_domains ? JSON.parse(row.allowed_domains) : undefined,
     defaultRole: row.default_role || 'user',
     pkce: Boolean(row.pkce_enabled),
+    registrationMode: row.registration_mode || 'whitelist',
   };
 }
 
@@ -102,6 +110,7 @@ export function dbRowToIdpConfig(row: IdpDatabaseRow): IdpConfig {
 export function idpConfigToDbRow(config: IdpConfig): Omit<IdpDatabaseRow, 'created_at' | 'updated_at'> {
   return {
     id: config.id,
+    slug: config.slug,
     name: config.name,
     type: config.type,
     enabled: config.enabled ? 1 : 0,
@@ -116,5 +125,6 @@ export function idpConfigToDbRow(config: IdpConfig): Omit<IdpDatabaseRow, 'creat
     allowed_domains: config.allowedDomains ? JSON.stringify(config.allowedDomains) : null,
     default_role: config.defaultRole,
     pkce_enabled: config.pkce ? 1 : 0,
+    registration_mode: config.registrationMode || 'whitelist',
   };
 }

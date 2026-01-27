@@ -11,8 +11,25 @@ import {
   identityProviderService,
   IdentityProvider,
   IdentityProviderRequest,
-  TestConnectionResult
+  TestConnectionResult,
+  WhitelistEntry,
+  CreateWhitelistEntryRequest
 } from '../../services/identityProviderService';
+
+// Convert name to URL-friendly slug
+const slugify = (text: string): string => {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Remove diacritics
+    .replace(/[äÄ]/g, 'ae')
+    .replace(/[öÖ]/g, 'oe')
+    .replace(/[üÜ]/g, 'ue')
+    .replace(/[ß]/g, 'ss')
+    .replace(/[^a-z0-9-]/g, '-') // Replace non-alphanumeric with hyphens
+    .replace(/-+/g, '-') // Replace multiple hyphens with single
+    .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
+};
 
 const Settings: React.FC = () => {
   const { user: currentUser, updateUser, hasRole } = useAuth();
@@ -30,21 +47,38 @@ const Settings: React.FC = () => {
   const [editingIdp, setEditingIdp] = useState<IdentityProvider | null>(null);
   const [testResult, setTestResult] = useState<TestConnectionResult | null>(null);
   const [testingConnection, setTestingConnection] = useState(false);
+  const [slugTouched, setSlugTouched] = useState(false); // Track if user manually edited slug
   const [idpForm, setIdpForm] = useState<IdentityProviderRequest>({
+    slug: '',
     name: '',
+    type: 'oidc',
     issuer: '',
+    authorizationURL: '',
+    tokenURL: '',
+    userInfoURL: '',
     clientId: '',
     clientSecret: '',
     scope: ['openid', 'profile', 'email'],
     pkce: true,
     enabled: true,
     defaultRole: 'user',
+    registrationMode: 'whitelist',
     claimMapping: {
       id: 'sub',
       email: 'email',
       firstName: 'given_name',
       lastName: 'family_name',
     },
+  });
+
+  // Whitelist management state
+  const [whitelistEntries, setWhitelistEntries] = useState<WhitelistEntry[]>([]);
+  const [loadingWhitelist, setLoadingWhitelist] = useState(false);
+  const [whitelistForm, setWhitelistForm] = useState<CreateWhitelistEntryRequest>({
+    identifierType: 'email',
+    identifierValue: '',
+    defaultRole: 'user',
+    notes: '',
   });
 
   // Profile form state
@@ -315,7 +349,9 @@ const Settings: React.FC = () => {
   // Reset IDP form
   const resetIdpForm = () => {
     setIdpForm({
+      slug: '',
       name: '',
+      type: 'oidc',
       issuer: '',
       clientId: '',
       clientSecret: '',
@@ -323,6 +359,7 @@ const Settings: React.FC = () => {
       pkce: true,
       enabled: true,
       defaultRole: 'user',
+      registrationMode: 'whitelist',
       claimMapping: {
         id: 'sub',
         email: 'email',
@@ -332,6 +369,14 @@ const Settings: React.FC = () => {
     });
     setEditingIdp(null);
     setTestResult(null);
+    setSlugTouched(false);
+    setWhitelistEntries([]);
+    setWhitelistForm({
+      identifierType: 'email',
+      identifierValue: '',
+      defaultRole: 'user',
+      notes: '',
+    });
   };
 
   // Open modal to add new IDP
@@ -340,27 +385,54 @@ const Settings: React.FC = () => {
     setShowIdpModal(true);
   };
 
+  // Load whitelist entries for an IDP
+  const loadWhitelistEntries = async (idpId: string) => {
+    setLoadingWhitelist(true);
+    try {
+      const entries = await identityProviderService.getWhitelistEntries(idpId);
+      setWhitelistEntries(entries);
+    } catch (error) {
+      console.error('Failed to load whitelist entries:', error);
+    } finally {
+      setLoadingWhitelist(false);
+    }
+  };
+
   // Open modal to edit existing IDP
   const handleEditIdp = async (idp: IdentityProvider) => {
     try {
       const fullIdp = await identityProviderService.getById(idp.id);
       setEditingIdp(fullIdp);
       setIdpForm({
+        slug: fullIdp.slug,
         name: fullIdp.name,
+        type: fullIdp.type || 'oidc',
         issuer: fullIdp.issuer,
-        authorizationURL: fullIdp.authorizationURL,
-        tokenURL: fullIdp.tokenURL,
-        userInfoURL: fullIdp.userInfoURL,
+        authorizationURL: fullIdp.authorizationURL || undefined,
+        tokenURL: fullIdp.tokenURL || undefined,
+        userInfoURL: fullIdp.userInfoURL || undefined,
         clientId: fullIdp.clientId,
         clientSecret: fullIdp.clientSecret || '',
-        scope: fullIdp.scope,
-        pkce: fullIdp.pkce,
-        enabled: fullIdp.enabled,
-        defaultRole: fullIdp.defaultRole,
-        allowedDomains: fullIdp.allowedDomains,
-        claimMapping: fullIdp.claimMapping,
+        scope: fullIdp.scope || ['openid', 'profile', 'email'],
+        pkce: fullIdp.pkce ?? true,
+        enabled: fullIdp.enabled ?? true,
+        defaultRole: fullIdp.defaultRole || 'user',
+        registrationMode: fullIdp.registrationMode || 'whitelist',
+        allowedDomains: fullIdp.allowedDomains || undefined,
+        claimMapping: fullIdp.claimMapping || {
+          id: 'sub',
+          email: 'email',
+          firstName: 'given_name',
+          lastName: 'family_name',
+        },
       });
+      setSlugTouched(true); // Don't auto-update slug when editing existing IDP
       setShowIdpModal(true);
+
+      // Load whitelist entries if in whitelist mode
+      if (fullIdp.registrationMode === 'whitelist') {
+        loadWhitelistEntries(fullIdp.id);
+      }
     } catch (error) {
       showNotification({
         type: 'error',
@@ -374,7 +446,7 @@ const Settings: React.FC = () => {
   const handleSaveIdp = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!idpForm.name || !idpForm.issuer || !idpForm.clientId || !idpForm.clientSecret) {
+    if (!idpForm.slug || !idpForm.name || !idpForm.issuer || !idpForm.clientId || !idpForm.clientSecret) {
       showNotification({
         type: 'error',
         title: 'Fehler',
@@ -383,16 +455,41 @@ const Settings: React.FC = () => {
       return;
     }
 
+    // Validate slug format
+    if (!/^[a-z0-9-]+$/.test(idpForm.slug)) {
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: 'Slug darf nur Kleinbuchstaben, Zahlen und Bindestriche enthalten'
+      });
+      return;
+    }
+
     try {
+      // Clean form data: convert null/empty strings to undefined for optional fields
+      const cleanedForm = {
+        ...idpForm,
+        authorizationURL: idpForm.authorizationURL || undefined,
+        tokenURL: idpForm.tokenURL || undefined,
+        userInfoURL: idpForm.userInfoURL || undefined,
+        allowedDomains: idpForm.allowedDomains?.length ? idpForm.allowedDomains : undefined,
+        // Deduplicate and trim scopes
+        scope: [...new Set(idpForm.scope?.map(s => s.trim()).filter(s => s))],
+        // Trim client credentials
+        clientId: idpForm.clientId.trim(),
+        clientSecret: idpForm.clientSecret.trim(),
+        registrationMode: idpForm.registrationMode || 'whitelist',
+      };
+
       if (editingIdp) {
-        await identityProviderService.update(editingIdp.id, idpForm);
+        await identityProviderService.update(editingIdp.id, cleanedForm);
         showNotification({
           type: 'success',
           title: 'Erfolg',
           message: 'Identity Provider wurde aktualisiert'
         });
       } else {
-        await identityProviderService.create(idpForm);
+        await identityProviderService.create(cleanedForm);
         showNotification({
           type: 'success',
           title: 'Erfolg',
@@ -402,11 +499,20 @@ const Settings: React.FC = () => {
       setShowIdpModal(false);
       resetIdpForm();
       loadIdentityProviders();
-    } catch (error) {
+    } catch (error: any) {
+      console.error('IDP save error:', error);
+      let errorMessage = editingIdp ? 'Aktualisierung fehlgeschlagen' : 'Erstellung fehlgeschlagen';
+
+      if (error?.validationErrors?.length > 0) {
+        errorMessage = error.validationErrors.map((e: any) => `${e.field}: ${e.message}`).join(', ');
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+
       showNotification({
         type: 'error',
         title: 'Fehler',
-        message: editingIdp ? 'Aktualisierung fehlgeschlagen' : 'Erstellung fehlgeschlagen'
+        message: errorMessage
       });
     }
   };
@@ -473,6 +579,78 @@ const Settings: React.FC = () => {
     }
   };
 
+  // Add whitelist entry
+  const handleAddWhitelistEntry = async () => {
+    if (!editingIdp || !whitelistForm.identifierValue.trim()) {
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: 'Bitte geben Sie einen Wert ein'
+      });
+      return;
+    }
+
+    try {
+      await identityProviderService.addWhitelistEntry(editingIdp.id, {
+        identifierType: whitelistForm.identifierType,
+        identifierValue: whitelistForm.identifierValue.trim(),
+        defaultRole: whitelistForm.defaultRole || 'user',
+        notes: whitelistForm.notes?.trim() || undefined,
+      });
+
+      showNotification({
+        type: 'success',
+        title: 'Erfolg',
+        message: 'Eintrag zur Whitelist hinzugefügt'
+      });
+
+      // Reload whitelist entries
+      loadWhitelistEntries(editingIdp.id);
+
+      // Reset form
+      setWhitelistForm({
+        identifierType: 'email',
+        identifierValue: '',
+        defaultRole: 'user',
+        notes: '',
+      });
+    } catch (error: any) {
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: error.message || 'Eintrag konnte nicht hinzugefügt werden'
+      });
+    }
+  };
+
+  // Delete whitelist entry
+  const handleDeleteWhitelistEntry = async (entry: WhitelistEntry) => {
+    if (!editingIdp) return;
+
+    if (!confirm(`Möchten Sie den Eintrag "${entry.identifierValue}" wirklich löschen?`)) {
+      return;
+    }
+
+    try {
+      await identityProviderService.deleteWhitelistEntry(editingIdp.id, entry.id);
+
+      showNotification({
+        type: 'success',
+        title: 'Erfolg',
+        message: 'Eintrag wurde gelöscht'
+      });
+
+      // Reload whitelist entries
+      loadWhitelistEntries(editingIdp.id);
+    } catch (error: any) {
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: error.message || 'Eintrag konnte nicht gelöscht werden'
+      });
+    }
+  };
+
   // Handle IDP form changes
   const handleIdpFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -493,6 +671,12 @@ const Settings: React.FC = () => {
         ...prev,
         allowedDomains: value ? value.split(',').map(s => s.trim()) : undefined
       }));
+    } else if (name === 'registrationMode') {
+      setIdpForm(prev => ({ ...prev, registrationMode: value as 'open' | 'whitelist' }));
+      // Load whitelist entries when switching to whitelist mode
+      if (value === 'whitelist' && editingIdp) {
+        loadWhitelistEntries(editingIdp.id);
+      }
     } else {
       setIdpForm(prev => ({ ...prev, [name]: value }));
     }
@@ -1124,6 +1308,17 @@ const Settings: React.FC = () => {
                       <div style={styles.providerDetails}>
                         <h4 style={styles.providerName}>{idp.name}</h4>
                         <p style={styles.providerIssuer}>{idp.issuer}</p>
+                        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+                          <span style={{
+                            fontSize: '0.7rem',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            background: idp.registrationMode === 'whitelist' ? '#fff3e0' : '#e8f5e9',
+                            color: idp.registrationMode === 'whitelist' ? '#e65100' : '#2e7d32',
+                          }}>
+                            {idp.registrationMode === 'whitelist' ? '🔒 Whitelist' : '🌐 Offen'}
+                          </span>
+                        </div>
                       </div>
                       <div style={{
                         ...styles.providerStatus,
@@ -1206,17 +1401,46 @@ const Settings: React.FC = () => {
                       {/* Basic Information */}
                       <h4 style={styles.sectionSubtitle}>Grundeinstellungen</h4>
                       <div style={{ display: 'grid', gap: '1rem', marginBottom: '1rem' }}>
-                        <div style={styles.field}>
-                          <label style={styles.fieldLabel}>Name *</label>
-                          <input
-                            type="text"
-                            name="name"
-                            value={idpForm.name}
-                            onChange={handleIdpFormChange}
-                            placeholder="z.B. Azure AD, Authentik, Keycloak"
-                            style={styles.fieldInput}
-                            required
-                          />
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                          <div style={styles.field}>
+                            <label style={styles.fieldLabel}>Name *</label>
+                            <input
+                              type="text"
+                              name="name"
+                              value={idpForm.name}
+                              onChange={(e) => {
+                                const newName = e.target.value;
+                                setIdpForm(f => ({
+                                  ...f,
+                                  name: newName,
+                                  // Auto-generate slug from name if user hasn't manually edited it
+                                  ...(slugTouched ? {} : { slug: slugify(newName) })
+                                }));
+                              }}
+                              placeholder="z.B. Azure AD, Authentik"
+                              style={styles.fieldInput}
+                              required
+                            />
+                          </div>
+                          <div style={styles.field}>
+                            <label style={styles.fieldLabel}>Slug *</label>
+                            <input
+                              type="text"
+                              name="slug"
+                              value={idpForm.slug}
+                              onChange={(e) => {
+                                setSlugTouched(true);
+                                setIdpForm(f => ({ ...f, slug: slugify(e.target.value) }));
+                              }}
+                              placeholder="z.B. azure-ad, authentik"
+                              style={styles.fieldInput}
+                              pattern="[a-z0-9-]+"
+                              required
+                            />
+                            <div style={styles.fieldHint}>
+                              URL-freundlicher Bezeichner (nur Kleinbuchstaben, Zahlen, Bindestriche)
+                            </div>
+                          </div>
                         </div>
 
                         <div style={styles.field}>
@@ -1234,6 +1458,30 @@ const Settings: React.FC = () => {
                             Die Basis-URL des Identity Providers (ohne /.well-known/openid-configuration)
                           </div>
                         </div>
+
+                        {/* Callback URL Display */}
+                        {idpForm.slug && (
+                          <div style={styles.field}>
+                            <label style={styles.fieldLabel}>Callback URL (Redirect URI)</label>
+                            <input
+                              type="text"
+                              value={`${window.location.protocol}//${window.location.hostname}:3002/api/auth/external/${idpForm.slug}/callback`}
+                              readOnly
+                              style={{
+                                ...styles.fieldInputDisabled,
+                                fontFamily: 'monospace',
+                                fontSize: '0.85rem'
+                              }}
+                              onClick={(e) => {
+                                (e.target as HTMLInputElement).select();
+                                navigator.clipboard.writeText((e.target as HTMLInputElement).value);
+                              }}
+                            />
+                            <div style={styles.fieldHint}>
+                              Diese URL muss im Identity Provider als erlaubte Redirect URI konfiguriert werden. Klicken zum Kopieren.
+                            </div>
+                          </div>
+                        )}
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                           <div style={styles.field}>
@@ -1258,6 +1506,52 @@ const Settings: React.FC = () => {
                               placeholder="••••••••"
                               style={styles.fieldInput}
                               required
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={styles.divider} />
+
+                      {/* Endpoint URLs (Optional) */}
+                      <h4 style={styles.sectionSubtitle}>Endpoint URLs (Optional)</h4>
+                      <div style={{ display: 'grid', gap: '1rem', marginBottom: '1rem' }}>
+                        <div style={styles.field}>
+                          <label style={styles.fieldLabel}>Authorization URL</label>
+                          <input
+                            type="url"
+                            name="authorizationURL"
+                            value={idpForm.authorizationURL || ''}
+                            onChange={handleIdpFormChange}
+                            placeholder="Automatisch aus Issuer abgeleitet"
+                            style={styles.fieldInput}
+                          />
+                          <div style={styles.fieldHint}>
+                            Leer lassen für automatische Ableitung aus Issuer URL
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                          <div style={styles.field}>
+                            <label style={styles.fieldLabel}>Token URL</label>
+                            <input
+                              type="url"
+                              name="tokenURL"
+                              value={idpForm.tokenURL || ''}
+                              onChange={handleIdpFormChange}
+                              placeholder="Automatisch aus Issuer"
+                              style={styles.fieldInput}
+                            />
+                          </div>
+                          <div style={styles.field}>
+                            <label style={styles.fieldLabel}>UserInfo URL</label>
+                            <input
+                              type="url"
+                              name="userInfoURL"
+                              value={idpForm.userInfoURL || ''}
+                              onChange={handleIdpFormChange}
+                              placeholder="Automatisch aus Issuer"
+                              style={styles.fieldInput}
                             />
                           </div>
                         </div>
@@ -1313,31 +1607,189 @@ const Settings: React.FC = () => {
                             </select>
                           </div>
                           <div style={styles.field}>
-                            <label style={styles.fieldLabel}>&nbsp;</label>
-                            <label style={styles.checkbox}>
-                              <input
-                                type="checkbox"
-                                name="pkce"
-                                checked={idpForm.pkce !== false}
-                                onChange={handleIdpFormChange}
-                                style={styles.checkboxInput}
-                              />
-                              <span style={styles.checkboxLabel}>PKCE aktivieren</span>
-                            </label>
+                            <label style={styles.fieldLabel}>Registrierungsmodus</label>
+                            <select
+                              name="registrationMode"
+                              value={idpForm.registrationMode || 'whitelist'}
+                              onChange={handleIdpFormChange}
+                              style={styles.fieldSelect}
+                            >
+                              <option value="whitelist">Whitelist (Vorfreigabe erforderlich)</option>
+                              <option value="open">Offen (automatische Kontoerstellung)</option>
+                            </select>
                           </div>
                         </div>
 
-                        <label style={styles.checkbox}>
-                          <input
-                            type="checkbox"
-                            name="enabled"
-                            checked={idpForm.enabled !== false}
-                            onChange={handleIdpFormChange}
-                            style={styles.checkboxInput}
-                          />
-                          <span style={styles.checkboxLabel}>Provider aktivieren</span>
-                        </label>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                          <label style={styles.checkbox}>
+                            <input
+                              type="checkbox"
+                              name="pkce"
+                              checked={idpForm.pkce !== false}
+                              onChange={handleIdpFormChange}
+                              style={styles.checkboxInput}
+                            />
+                            <span style={styles.checkboxLabel}>PKCE aktivieren</span>
+                          </label>
+                          <label style={styles.checkbox}>
+                            <input
+                              type="checkbox"
+                              name="enabled"
+                              checked={idpForm.enabled !== false}
+                              onChange={handleIdpFormChange}
+                              style={styles.checkboxInput}
+                            />
+                            <span style={styles.checkboxLabel}>Provider aktivieren</span>
+                          </label>
+                        </div>
                       </div>
+
+                      {/* Whitelist Management - Only shown when editing and mode is whitelist */}
+                      {editingIdp && idpForm.registrationMode === 'whitelist' && (
+                        <>
+                          <div style={styles.divider} />
+                          <h4 style={styles.sectionSubtitle}>Whitelist-Verwaltung</h4>
+                          <p style={{ color: '#666', fontSize: '0.85rem', marginBottom: '1rem' }}>
+                            Nur vorfreigegebene Benutzer können sich über diesen Provider registrieren.
+                          </p>
+
+                          {/* Add Entry Form */}
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: '120px 1fr 100px auto',
+                            gap: '0.5rem',
+                            marginBottom: '1rem',
+                            alignItems: 'end'
+                          }}>
+                            <div style={styles.field}>
+                              <label style={{ ...styles.fieldLabel, fontSize: '0.8rem' }}>Typ</label>
+                              <select
+                                value={whitelistForm.identifierType}
+                                onChange={(e) => setWhitelistForm(prev => ({
+                                  ...prev,
+                                  identifierType: e.target.value as 'email' | 'subject'
+                                }))}
+                                style={{ ...styles.fieldSelect, padding: '0.5rem' }}
+                              >
+                                <option value="email">E-Mail</option>
+                                <option value="subject">Subject ID</option>
+                              </select>
+                            </div>
+                            <div style={styles.field}>
+                              <label style={{ ...styles.fieldLabel, fontSize: '0.8rem' }}>Wert</label>
+                              <input
+                                type="text"
+                                value={whitelistForm.identifierValue}
+                                onChange={(e) => setWhitelistForm(prev => ({
+                                  ...prev,
+                                  identifierValue: e.target.value
+                                }))}
+                                placeholder={whitelistForm.identifierType === 'email' ? 'user@example.com' : 'subject-id-123'}
+                                style={{ ...styles.fieldInput, padding: '0.5rem' }}
+                              />
+                            </div>
+                            <div style={styles.field}>
+                              <label style={{ ...styles.fieldLabel, fontSize: '0.8rem' }}>Rolle</label>
+                              <select
+                                value={whitelistForm.defaultRole || 'user'}
+                                onChange={(e) => setWhitelistForm(prev => ({
+                                  ...prev,
+                                  defaultRole: e.target.value
+                                }))}
+                                style={{ ...styles.fieldSelect, padding: '0.5rem' }}
+                              >
+                                <option value="user">Benutzer</option>
+                                <option value="admin">Admin</option>
+                                <option value="maintenance">Wartung</option>
+                              </select>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handleAddWhitelistEntry}
+                              style={{
+                                ...styles.button,
+                                ...styles.buttonPrimary,
+                                padding: '0.5rem 1rem',
+                                fontSize: '0.85rem'
+                              }}
+                            >
+                              + Hinzufügen
+                            </button>
+                          </div>
+
+                          {/* Whitelist Entries Table */}
+                          {loadingWhitelist ? (
+                            <div style={{ textAlign: 'center', padding: '1rem', color: '#666' }}>
+                              Lade Whitelist...
+                            </div>
+                          ) : whitelistEntries.length === 0 ? (
+                            <div style={{
+                              textAlign: 'center',
+                              padding: '1.5rem',
+                              background: '#f8f8f8',
+                              borderRadius: '8px',
+                              color: '#666'
+                            }}>
+                              Noch keine Einträge vorhanden.
+                            </div>
+                          ) : (
+                            <div style={{
+                              border: '1px solid #e8e8e8',
+                              borderRadius: '8px',
+                              overflow: 'hidden',
+                              maxHeight: '200px',
+                              overflowY: 'auto'
+                            }}>
+                              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                <thead>
+                                  <tr style={{ background: '#f5f5f5' }}>
+                                    <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>Typ</th>
+                                    <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>Wert</th>
+                                    <th style={{ padding: '0.5rem', textAlign: 'left', borderBottom: '1px solid #e8e8e8' }}>Rolle</th>
+                                    <th style={{ padding: '0.5rem', textAlign: 'center', borderBottom: '1px solid #e8e8e8', width: '60px' }}></th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {whitelistEntries.map((entry) => (
+                                    <tr key={entry.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                                      <td style={{ padding: '0.5rem' }}>
+                                        <span style={{
+                                          background: entry.identifierType === 'email' ? '#e3f2fd' : '#f3e5f5',
+                                          color: entry.identifierType === 'email' ? '#1565c0' : '#7b1fa2',
+                                          padding: '2px 8px',
+                                          borderRadius: '4px',
+                                          fontSize: '0.75rem',
+                                          fontWeight: 500
+                                        }}>
+                                          {entry.identifierType === 'email' ? 'E-Mail' : 'Subject'}
+                                        </span>
+                                      </td>
+                                      <td style={{ padding: '0.5rem', fontFamily: 'monospace' }}>{entry.identifierValue}</td>
+                                      <td style={{ padding: '0.5rem' }}>{entry.defaultRole}</td>
+                                      <td style={{ padding: '0.5rem', textAlign: 'center' }}>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteWhitelistEntry(entry)}
+                                          style={{
+                                            background: 'transparent',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            color: '#d32f2f',
+                                            fontSize: '1rem'
+                                          }}
+                                          title="Löschen"
+                                        >
+                                          🗑️
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </>
+                      )}
 
                       <div style={styles.divider} />
 
@@ -1387,6 +1839,20 @@ const Settings: React.FC = () => {
                             placeholder="family_name"
                             style={styles.fieldInput}
                           />
+                        </div>
+                        <div style={styles.field}>
+                          <label style={styles.fieldLabel}>Rollen Claim (optional)</label>
+                          <input
+                            type="text"
+                            name="claimMapping.roles"
+                            value={idpForm.claimMapping?.roles || ''}
+                            onChange={handleIdpFormChange}
+                            placeholder="groups oder roles"
+                            style={styles.fieldInput}
+                          />
+                          <div style={styles.fieldHint}>
+                            Claim für Gruppenrollen (z.B. 'groups' oder 'roles')
+                          </div>
                         </div>
                       </div>
 

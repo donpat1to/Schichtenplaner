@@ -1,33 +1,20 @@
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig, loadEnv, UserConfig, PluginOption } from 'vite'
 import react from '@vitejs/plugin-react'
 import { resolve } from 'path'
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode }): UserConfig => {
   const isProduction = mode === 'production'
   const env = loadEnv(mode, process.cwd(), '')
 
-  return {
-    plugins: [react()],
-
-    // Development proxy
-    server: isProduction ? undefined : {
-      port: 3003,
-      host: true,
-      proxy: {
-        '/api': {
-          target: 'http://localhost:3002',
-          changeOrigin: true,
-          secure: false,
-        }
-      }
-    },
+  const config: UserConfig = {
+    plugins: [react() as unknown as PluginOption],
 
     // Production build optimized for Express serving
     build: {
       outDir: 'dist',
       sourcemap: false, // Disable in production
       minify: 'terser',
-      
+
       // Bundle optimization
       rollupOptions: {
         output: {
@@ -42,7 +29,7 @@ export default defineConfig(({ mode }) => {
           assetFileNames: 'assets/[name]-[hash].[ext]',
         }
       },
-      
+
       // Performance optimizations
       terserOptions: {
         compress: {
@@ -51,7 +38,7 @@ export default defineConfig(({ mode }) => {
           pure_funcs: ['console.log', 'console.debug']
         }
       },
-      
+
       // Reduce chunking overhead
       chunkSizeWarningLimit: 800
     },
@@ -72,8 +59,27 @@ export default defineConfig(({ mode }) => {
     // Environment variables
     define: {
       'import.meta.env.VITE_API_URL': JSON.stringify(isProduction ? '/api' : '/api'),
+      // For OAuth redirects: in dev, direct to backend; in production, same origin
+      'import.meta.env.VITE_BACKEND_URL': JSON.stringify(isProduction ? '' : 'http://localhost:3002'),
       'import.meta.env.ENABLE_PRO': JSON.stringify(env.ENABLE_PRO || 'false'),
       'import.meta.env.NODE_ENV': JSON.stringify(mode)
     }
   }
+
+  // Development server config (only in dev mode)
+  if (!isProduction) {
+    config.server = {
+      port: 3003,
+      host: true,
+      proxy: {
+        '/api': {
+          target: 'http://localhost:3002',
+          changeOrigin: true,
+          secure: false,
+        }
+      }
+    }
+  }
+
+  return config
 })

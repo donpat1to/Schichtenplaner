@@ -1,20 +1,94 @@
 // frontend/src/pages/Auth/Login.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
+
+interface IdpProvider {
+  id: string;
+  name: string;
+  type: string;
+  loginUrl: string;
+}
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+// For redirects (OAuth flow), we need the actual backend URL, not the proxy path
+// In production (same origin), this is empty; in dev, it points to the backend directly
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { login, user } = useAuth();
+  const [idpProviders, setIdpProviders] = useState<IdpProvider[]>([]);
+  const [showIdpList, setShowIdpList] = useState(false);
+  const [idpLoading, setIdpLoading] = useState(true);
+  const { login, user, refreshUser } = useAuth();
   const { showNotification } = useNotification();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const holdTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
+
+  // Handle IDP callback - check for tokens in URL
+  useEffect(() => {
+    const token = searchParams.get('token');
+    const error = searchParams.get('error');
+    const errorDescription = searchParams.get('error_description');
+    const errorMessage = searchParams.get('message'); // Auth error message
+    const provider = searchParams.get('provider');
+
+    if (error) {
+      showNotification({
+        type: 'error',
+        title: 'Anmeldung fehlgeschlagen',
+        message: errorDescription || errorMessage || `Fehler: ${error}`
+      });
+      // Clear URL params
+      setSearchParams({});
+      return;
+    }
+
+    if (token) {
+      console.log(`✅ Received token from IDP: ${provider}`);
+      // Store token and refresh user
+      localStorage.setItem('token', token);
+      const refreshToken = searchParams.get('refresh_token');
+      if (refreshToken) {
+        localStorage.setItem('refresh_token', refreshToken);
+      }
+      // Clear URL params
+      setSearchParams({});
+      // Refresh user data and navigate
+      refreshUser();
+      showNotification({
+        type: 'success',
+        title: 'Erfolgreich angemeldet',
+        message: `Willkommen! (via ${provider})`
+      });
+      navigate('/');
+    }
+  }, [searchParams, setSearchParams, refreshUser, showNotification, navigate]);
+
+  // Fetch available IDP providers
+  useEffect(() => {
+    const fetchIdpProviders = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/auth/external/providers`);
+        if (response.ok) {
+          const data = await response.json();
+          setIdpProviders(data.providers || []);
+        }
+      } catch (error) {
+        console.log('No external auth providers available');
+      } finally {
+        setIdpLoading(false);
+      }
+    };
+    fetchIdpProviders();
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -91,6 +165,12 @@ const Login: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleIdpLogin = (provider: IdpProvider) => {
+    const returnUrl = window.location.origin;
+    // Use BACKEND_URL for redirects (OAuth flow needs direct backend access, not proxy)
+    window.location.href = `${BACKEND_URL}/api${provider.loginUrl}?returnUrl=${encodeURIComponent(returnUrl)}`;
   };
 
   if (user) {
@@ -227,6 +307,131 @@ const Login: React.FC = () => {
         >
           {loading ? '⏳ Wird angemeldet...' : 'Anmelden'}
         </button>
+
+        {/* IDP Login Section */}
+        {!idpLoading && idpProviders.length > 0 && (
+          <>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              margin: '24px 0',
+              gap: '12px'
+            }}>
+              <div style={{ flex: 1, height: '1px', backgroundColor: '#e0e0e0' }} />
+              <span style={{ color: '#888', fontSize: '14px' }}>oder</span>
+              <div style={{ flex: 1, height: '1px', backgroundColor: '#e0e0e0' }} />
+            </div>
+
+            {idpProviders.length === 1 ? (
+              // Single provider - direct button
+              <button
+                type="button"
+                onClick={() => handleIdpLogin(idpProviders[0])}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  backgroundColor: '#fff',
+                  color: '#333',
+                  border: '1.5px solid #e0e0e0',
+                  borderRadius: '4px',
+                  fontSize: '16px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.backgroundColor = '#f5f5f5';
+                  e.currentTarget.style.borderColor = '#ccc';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.backgroundColor = '#fff';
+                  e.currentTarget.style.borderColor = '#e0e0e0';
+                }}
+              >
+                Anmelden via {idpProviders[0].name}
+              </button>
+            ) : (
+              // Multiple providers - expandable list
+              <div style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowIdpList(!showIdpList)}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    backgroundColor: '#fff',
+                    color: '#333',
+                    border: '1.5px solid #e0e0e0',
+                    borderRadius: '4px',
+                    fontSize: '16px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.backgroundColor = '#f5f5f5';
+                    e.currentTarget.style.borderColor = '#ccc';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.backgroundColor = '#fff';
+                    e.currentTarget.style.borderColor = '#e0e0e0';
+                  }}
+                >
+                  Anmelden via IdP
+                  <span style={{
+                    transform: showIdpList ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.2s ease'
+                  }}>
+                    ▼
+                  </span>
+                </button>
+
+                {showIdpList && (
+                  <div style={{
+                    marginTop: '8px',
+                    border: '1.5px solid #e0e0e0',
+                    borderRadius: '4px',
+                    overflow: 'hidden'
+                  }}>
+                    {idpProviders.map((provider, index) => (
+                      <button
+                        key={provider.id}
+                        type="button"
+                        onClick={() => handleIdpLogin(provider)}
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          backgroundColor: '#fff',
+                          color: '#333',
+                          border: 'none',
+                          borderTop: index > 0 ? '1px solid #e0e0e0' : 'none',
+                          fontSize: '14px',
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          transition: 'background-color 0.2s ease'
+                        }}
+                        onMouseOver={(e) => {
+                          e.currentTarget.style.backgroundColor = '#f5f5f5';
+                        }}
+                        onMouseOut={(e) => {
+                          e.currentTarget.style.backgroundColor = '#fff';
+                        }}
+                      >
+                        {provider.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
       </form>
     </div>
   );

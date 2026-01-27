@@ -4,7 +4,6 @@ import passport from 'passport';
 import { idpConfigManager } from '../config/idp.config.js';
 import { strategyFactory } from '../strategies/strategy.factory.js';
 import { tokenService } from '../services/token.service.js';
-import { generatePkceState, validateAndConsumePkceState } from '../middleware/pkce.middleware.js';
 import { InternalUser } from '../services/user-mapping.service.js';
 
 const router = Router();
@@ -17,9 +16,10 @@ router.get('/providers', (req: Request, res: Response) => {
   try {
     const providers = idpConfigManager.getPublicInfo().map((idp) => ({
       id: idp.id,
+      slug: idp.slug,
       name: idp.name,
       type: idp.type,
-      loginUrl: `/api/auth/external/${idp.id}/login`,
+      loginUrl: `/auth/external/${idp.slug}/login`,
     }));
 
     res.json({ providers });
@@ -30,116 +30,106 @@ router.get('/providers', (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/auth/external/:idpId/login
+ * GET /api/auth/external/:slug/login
  * Initiate OIDC login flow for a specific IdP
  */
-router.get('/:idpId/login', async (req: Request, res: Response, next: NextFunction) => {
-  const { idpId } = req.params;
+router.get('/:slug/login', async (req: Request, res: Response, next: NextFunction) => {
+  const { slug } = req.params;
   const returnUrl = (req.query.returnUrl as string) || process.env.FRONTEND_URL || 'http://localhost:3003';
 
   try {
-    // Verify IdP exists and is enabled
-    const idp = idpConfigManager.get(idpId);
+    // Verify IdP exists and is enabled (lookup by slug)
+    const idp = idpConfigManager.getBySlug(slug);
     if (!idp || !idp.enabled) {
       return res.status(404).json({
-        error: `Identity provider '${idpId}' not found or disabled`,
+        error: `Identity provider '${slug}' not found or disabled`,
       });
     }
 
-    // Ensure strategy is registered
-    if (!strategyFactory.isRegistered(idpId)) {
-      await strategyFactory.registerStrategy(idpId);
+    // Ensure strategy is registered (using internal id)
+    if (!strategyFactory.isRegistered(idp.id)) {
+      await strategyFactory.registerStrategy(idp.id);
     }
 
-    // Generate PKCE state
-    const pkce = generatePkceState(idpId, returnUrl);
-
-    // Store PKCE data in session for passport-openidconnect
+    // Store returnUrl in session for retrieval after callback
     if (req.session) {
       (req.session as any).pkce = {
-        codeVerifier: pkce.codeVerifier,
-        state: pkce.state,
-        nonce: pkce.nonce,
+        returnUrl: returnUrl,
       };
+      console.log(`[ExternalAuth] Stored returnUrl in session - sessionId: ${req.sessionID}`);
+    } else {
+      console.warn(`[ExternalAuth] No session available to store returnUrl!`);
     }
 
-    console.log(`[ExternalAuth] Starting login for IdP: ${idpId}`);
+    console.log(`[ExternalAuth] Starting login for IdP: ${idp.name} (${slug})`);
 
-    // Initiate Passport authentication with OIDC-specific options
-    const authOptions = {
-      scope: idp.scope,
-      state: pkce.state,
-      nonce: pkce.nonce,
-    };
-    (passport.authenticate(strategyFactory.getStrategyName(idpId), authOptions as Record<string, unknown>) as ReturnType<typeof passport.authenticate>)(req, res, next);
+    // Initiate Passport authentication - passport-openidconnect handles state internally
+    (passport.authenticate(strategyFactory.getStrategyName(idp.id)) as ReturnType<typeof passport.authenticate>)(req, res, next);
   } catch (error) {
-    console.error(`[ExternalAuth] Login error for ${idpId}:`, error);
+    console.error(`[ExternalAuth] Login error for ${slug}:`, error);
     res.status(500).json({ error: 'Failed to initiate login' });
   }
 });
 
 /**
- * GET /api/auth/external/:idpId/callback
+ * GET /api/auth/external/:slug/callback
  * OIDC callback handler
+ * Note: passport-openidconnect handles state validation internally
  */
-router.get('/:idpId/callback', (req: Request, res: Response, next: NextFunction) => {
-  const { idpId } = req.params;
-  const { state, error, error_description } = req.query;
+router.get('/:slug/callback', (req: Request, res: Response, next: NextFunction) => {
+  const { slug } = req.params;
+  const { error, error_description } = req.query;
 
   // Handle IdP errors
   if (error) {
-    console.error(`[ExternalAuth] IdP error for ${idpId}: ${error} - ${error_description}`);
+    console.error(`[ExternalAuth] IdP error for ${slug}: ${error} - ${error_description}`);
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3003';
     return res.redirect(
       `${frontendUrl}/login?error=${encodeURIComponent(error as string)}&error_description=${encodeURIComponent((error_description as string) || '')}`
     );
   }
 
-  // Validate state parameter
-  if (!state) {
-    console.error(`[ExternalAuth] Missing state parameter for ${idpId}`);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3003';
-    return res.redirect(`${frontendUrl}/login?error=missing_state`);
-  }
-
-  const storedState = validateAndConsumePkceState(state as string);
-  if (!storedState) {
-    console.error(`[ExternalAuth] Invalid or expired state for ${idpId}`);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3003';
-    return res.redirect(`${frontendUrl}/login?error=invalid_state`);
-  }
-
-  if (storedState.idpId !== idpId) {
-    console.error(`[ExternalAuth] State IdP mismatch: expected ${storedState.idpId}, got ${idpId}`);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3003';
-    return res.redirect(`${frontendUrl}/login?error=idp_mismatch`);
-  }
-
-  // Verify IdP is still valid
-  const idp = idpConfigManager.get(idpId);
+  // Verify IdP is still valid (lookup by slug)
+  const idp = idpConfigManager.getBySlug(slug);
   if (!idp || !idp.enabled) {
-    console.error(`[ExternalAuth] IdP ${idpId} no longer available`);
+    console.error(`[ExternalAuth] IdP ${slug} no longer available`);
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3003';
     return res.redirect(`${frontendUrl}/login?error=provider_unavailable`);
   }
 
-  // Process authentication callback
+  // Get returnUrl from session (stored during login initiation)
+  const sessionData = (req.session as any)?.pkce;
+  const returnUrl = sessionData?.returnUrl || process.env.FRONTEND_URL || 'http://localhost:3003';
+
+  console.log(`[ExternalAuth] Processing callback for ${slug}, returnUrl: ${returnUrl}`);
+  console.log(`[ExternalAuth] Query params:`, req.query);
+
+  // Process authentication callback - passport handles state validation internally
+  const strategyName = strategyFactory.getStrategyName(idp.id);
+  console.log(`[ExternalAuth] Using strategy: ${strategyName}`);
+
   passport.authenticate(
-    strategyFactory.getStrategyName(idpId),
+    strategyName,
     {
       failureRedirect: `${process.env.FRONTEND_URL || 'http://localhost:3003'}/login?error=auth_failed`,
       session: false, // We use JWT, not sessions
-    },
-    (err: Error | null, user: InternalUser | false) => {
+    } as passport.AuthenticateOptions,
+    (err: Error | null, user: InternalUser | false, info: unknown) => {
+      console.log(`[ExternalAuth] Passport callback - err: ${err}, user: ${!!user}, info:`, info);
+      // Clear session PKCE data after use
+      if (req.session && (req.session as any).pkce) {
+        delete (req.session as any).pkce;
+      }
+
       if (err) {
-        console.error(`[ExternalAuth] Callback error for ${idpId}:`, err);
+        console.error(`[ExternalAuth] Callback error for ${slug}:`, err);
         return res.redirect(
           `${process.env.FRONTEND_URL || 'http://localhost:3003'}/login?error=auth_error&message=${encodeURIComponent(err.message)}`
         );
       }
 
       if (!user) {
-        console.error(`[ExternalAuth] No user returned for ${idpId}`);
+        console.error(`[ExternalAuth] No user returned for ${slug}`);
         return res.redirect(
           `${process.env.FRONTEND_URL || 'http://localhost:3003'}/login?error=no_user`
         );
@@ -148,15 +138,14 @@ router.get('/:idpId/callback', (req: Request, res: Response, next: NextFunction)
       // Generate JWT tokens
       const tokens = tokenService.generateTokenPair(user);
 
-      console.log(`[ExternalAuth] Login successful for ${user.email} via ${idpId}`);
+      console.log(`[ExternalAuth] Login successful for ${user.email} via ${slug}`);
 
       // Redirect to frontend with tokens
-      // Option 1: URL parameters (for SPA)
-      const redirectUrl = new URL(storedState.returnUrl);
+      const redirectUrl = new URL(returnUrl);
       redirectUrl.searchParams.set('token', tokens.accessToken);
       redirectUrl.searchParams.set('refresh_token', tokens.refreshToken);
       redirectUrl.searchParams.set('expires_in', tokens.expiresIn.toString());
-      redirectUrl.searchParams.set('provider', idpId);
+      redirectUrl.searchParams.set('provider', slug);
 
       res.redirect(redirectUrl.toString());
     }

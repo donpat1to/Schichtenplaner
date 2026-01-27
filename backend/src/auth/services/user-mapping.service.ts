@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { db } from '../../services/databaseService.js';
 import { IdpConfig } from '../config/idp.schema.js';
 import { OidcProfile } from '../strategies/oidc.strategy.js';
+import { whitelistService } from './whitelist.service.js';
 
 /**
  * Input for user mapping from IdP
@@ -16,6 +17,9 @@ export interface MappingInput {
   claims: Record<string, unknown>;
   config: IdpConfig;
 }
+
+// Re-export OidcProfile for convenience
+export type { OidcProfile };
 
 /**
  * Internal user representation after mapping
@@ -66,14 +70,41 @@ class UserMappingService {
    * Map an IdP user to an internal employee, creating if necessary
    */
   async mapAndUpsert(input: MappingInput): Promise<InternalUser> {
-    const { claims, config, idpId, accessToken, refreshToken } = input;
+    const { claims, config, idpId, accessToken, refreshToken, profile } = input;
     const mapping = config.claimMapping;
 
-    // Extract claims using the configured mapping
-    const idpSubject = this.extractClaim(claims, mapping.id) as string;
-    const email = this.extractClaim(claims, mapping.email) as string;
-    const firstName = this.extractClaim(claims, mapping.firstName) as string || 'Unknown';
-    const lastName = this.extractClaim(claims, mapping.lastName) as string || 'User';
+    // Extract claims using the configured mapping, with fallbacks for passport profile format
+    let idpSubject = this.extractClaim(claims, mapping.id) as string;
+    let email = this.extractClaim(claims, mapping.email) as string;
+    let firstName = this.extractClaim(claims, mapping.firstName) as string;
+    let lastName = this.extractClaim(claims, mapping.lastName) as string;
+
+    // Fallback to passport profile format if claims don't have the expected fields
+    if (!idpSubject && profile) {
+      idpSubject = profile.id || (claims.id as string) || (claims.sub as string);
+    }
+    if (!email && profile?.emails?.[0]?.value) {
+      email = profile.emails[0].value;
+    }
+    if (!email && claims.emails && Array.isArray(claims.emails)) {
+      email = (claims.emails[0] as { value: string })?.value;
+    }
+    if (!firstName && profile) {
+      firstName = (profile as any).name?.givenName ||
+                  (profile as any).displayName?.split(' ')[0] ||
+                  (claims.name as any)?.givenName ||
+                  (claims.given_name as string);
+    }
+    if (!lastName && profile) {
+      lastName = (profile as any).name?.familyName ||
+                 (profile as any).displayName?.split(' ').slice(1).join(' ') ||
+                 (claims.name as any)?.familyName ||
+                 (claims.family_name as string);
+    }
+
+    // Final defaults
+    firstName = firstName || 'Unknown';
+    lastName = lastName || 'User';
 
     if (!idpSubject) {
       throw new Error('Missing subject claim from IdP');
@@ -115,6 +146,24 @@ class UserMappingService {
         await this.createIdentityLink(employee.id, idpId, idpSubject, email, accessToken, refreshToken);
         console.log(`[UserMapping] Linked existing employee ${employee.id} to IdP ${idpId}`);
       } else {
+        // New user - check registration mode
+        if (config.registrationMode === 'whitelist') {
+          // Check whitelist before allowing account creation
+          const whitelistCheck = await whitelistService.isAllowed(idpId, email, idpSubject);
+
+          if (!whitelistCheck.allowed) {
+            console.log(`[UserMapping] User ${email} not on whitelist for IdP ${idpId}`);
+            throw new Error('Your account is not pre-approved for registration. Please contact an administrator.');
+          }
+
+          console.log(`[UserMapping] User ${email} found on whitelist for IdP ${idpId}`);
+
+          // Use role from whitelist entry if specified
+          if (whitelistCheck.entry?.defaultRole) {
+            roles = [whitelistCheck.entry.defaultRole];
+          }
+        }
+
         // Create new employee
         employee = await this.createEmployee({
           email,
