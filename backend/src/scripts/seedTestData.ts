@@ -211,6 +211,7 @@ export async function seedTestData(): Promise<void> {
                 employeeMap[name] = employeeId;
 
                 const [firstname, lastname = ''] = name.split(' ');
+                const username = firstname.toLowerCase();
                 const email = generateEmail(firstname, lastname || 'Test');
                 const passwordHash = await bcrypt.hash('ZebraAux123!', 10);
 
@@ -223,16 +224,17 @@ export async function seedTestData(): Promise<void> {
                 // Insert employee
                 await db.run(
                     `INSERT INTO employees (
-                        id, email, password, firstname, lastname, 
-                        employee_type, contract_type, can_work_alone, 
+                        id, username, email, password, firstname, lastname,
+                        employee_type, contract_type, can_work_alone,
                         is_trainee, is_active
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                     [
                         employeeId,
+                        username,
                         email,
                         passwordHash,
                         firstname,
-                        lastname || 'Test',
+                        lastname || null,
                         employeeType,
                         contractType,
                         canWorkAlone ? 1 : 0,
@@ -247,7 +249,7 @@ export async function seedTestData(): Promise<void> {
                     [employeeId, role]
                 );
 
-                console.log(`✅ Created employee: ${name} (${email})`);
+                console.log(`✅ Created employee: ${name} (@${username}, ${email})`);
             }
 
             // 2. Create shift plan

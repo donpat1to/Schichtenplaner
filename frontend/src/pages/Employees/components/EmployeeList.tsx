@@ -39,9 +39,10 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
     
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      const fullName = `${employee.firstname} ${employee.lastname}`.toLowerCase();
+      const fullName = `${employee.firstname || ''} ${employee.lastname || ''}`.toLowerCase();
       return (
         fullName.includes(term) ||
+        employee.username.toLowerCase().includes(term) ||
         employee.email.toLowerCase().includes(term) ||
         employee.employeeType.toLowerCase().includes(term) ||
         (employee.roles && employee.roles.some(role => role.toLowerCase().includes(term)))
@@ -65,8 +66,8 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
 
     switch (sortField) {
       case 'name':
-        aValue = `${a.firstname} ${a.lastname}`.toLowerCase();
-        bValue = `${b.firstname} ${b.lastname}`.toLowerCase();
+        aValue = `${a.firstname || ''} ${a.lastname || ''} ${a.username}`.toLowerCase();
+        bValue = `${b.firstname || ''} ${b.lastname || ''} ${b.username}`.toLowerCase();
         break;
       case 'employeeType':
         aValue = a.employeeType;
@@ -180,9 +181,12 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
   };
 
   const handleDeleteClick = async (employee: Employee) => {
+    const displayName = (employee.firstname && employee.lastname)
+      ? `${employee.firstname} ${employee.lastname}`
+      : `@${employee.username}`;
     const confirmed = await confirmDialog({
       title: 'Mitarbeiter löschen',
-      message: `Sind Sie sicher, dass Sie ${employee.firstname} ${employee.lastname} löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.`,
+      message: `Sind Sie sicher, dass Sie ${displayName} löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.`,
       confirmText: 'Löschen',
       cancelText: 'Abbrechen',
       type: 'warning'
@@ -194,7 +198,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
         showNotification({
           type: 'success',
           title: 'Erfolg',
-          message: `${employee.firstname} ${employee.lastname} wurde erfolgreich gelöscht.`
+          message: `${displayName} wurde erfolgreich gelöscht.`
         });
       } catch (error: any) {
         // Error will be handled by parent component through useBackendValidation
@@ -254,7 +258,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
           <label style={{ fontWeight: 'bold', color: '#2c3e50' }}>Suchen:</label>
           <input
             type="text"
-            placeholder="Nach Name, E-Mail oder Typ suchen..."
+            placeholder="Nach Name, Benutzername, E-Mail oder Typ suchen..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{
@@ -350,9 +354,22 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
               {/* Name & E-Mail */}
               <div>
                 <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
-                  {employee.firstname} {employee.lastname}
+                  {(employee.firstname || employee.lastname)
+                    ? `${employee.firstname || ''} ${employee.lastname || ''}`.trim()
+                    : `@${employee.username}`
+                  }
+                  {(employee.firstname || employee.lastname) && (
+                    <span style={{
+                      marginLeft: '6px',
+                      fontSize: '12px',
+                      color: '#888',
+                      fontWeight: 'normal'
+                    }}>
+                      @{employee.username}
+                    </span>
+                  )}
                   {employee.id === currentUser?.id && (
-                    <span style={{ 
+                    <span style={{
                       marginLeft: '8px',
                       fontSize: '12px',
                       color: '#3498db',

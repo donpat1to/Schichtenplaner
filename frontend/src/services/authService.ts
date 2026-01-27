@@ -2,7 +2,7 @@ import { Employee } from '../models/Employee';
 import { apiClient } from './apiClient';
 
 export interface LoginRequest {
-  email: string;
+  identifier: string;
   password: string;
 }
 
@@ -33,7 +33,7 @@ class AuthService {
   async register(userData: RegisterRequest): Promise<AuthResponse> {
     await apiClient.post('/employees', userData);
     return this.login({
-      email: userData.email,
+      identifier: userData.email,
       password: userData.password
     });
   }

@@ -27,9 +27,10 @@ export type { OidcProfile };
  */
 export interface InternalUser {
   id: string;
+  username: string;
   email: string;
-  firstname: string;
-  lastname: string;
+  firstname?: string;
+  lastname?: string;
   roles: string[];
   employeeType: string;
   isActive: boolean;
@@ -45,9 +46,10 @@ export interface InternalUser {
  */
 interface EmployeeRow {
   id: string;
+  username: string;
   email: string;
-  firstname: string;
-  lastname: string;
+  firstname?: string | null;
+  lastname?: string | null;
   employee_type: string;
   is_active: number;
 }
@@ -76,8 +78,9 @@ class UserMappingService {
     // Extract claims using the configured mapping, with fallbacks for passport profile format
     let idpSubject = this.extractClaim(claims, mapping.id) as string;
     let email = this.extractClaim(claims, mapping.email) as string;
-    let firstName = this.extractClaim(claims, mapping.firstName) as string;
-    let lastName = this.extractClaim(claims, mapping.lastName) as string;
+    let username = mapping.username ? this.extractClaim(claims, mapping.username) as string | undefined : undefined;
+    let firstName = this.extractClaim(claims, mapping.firstName) as string | null;
+    let lastName = this.extractClaim(claims, mapping.lastName) as string | null;
 
     // Fallback to passport profile format if claims don't have the expected fields
     if (!idpSubject && profile) {
@@ -89,22 +92,28 @@ class UserMappingService {
     if (!email && claims.emails && Array.isArray(claims.emails)) {
       email = (claims.emails[0] as { value: string })?.value;
     }
+    if (!username && profile) {
+      username = (profile as any).username ||
+        (profile as any).preferred_username ||
+        (claims.preferred_username as string);
+    }
     if (!firstName && profile) {
       firstName = (profile as any).name?.givenName ||
-                  (profile as any).displayName?.split(' ')[0] ||
-                  (claims.name as any)?.givenName ||
-                  (claims.given_name as string);
+        (profile as any).displayName?.split(' ')[0] ||
+        (claims.name as any)?.givenName ||
+        (claims.given_name as string) || null;
     }
     if (!lastName && profile) {
       lastName = (profile as any).name?.familyName ||
-                 (profile as any).displayName?.split(' ').slice(1).join(' ') ||
-                 (claims.name as any)?.familyName ||
-                 (claims.family_name as string);
+        (profile as any).displayName?.split(' ').slice(1).join(' ') ||
+        (claims.name as any)?.familyName ||
+        (claims.family_name as string) || null;
     }
 
-    // Final defaults
-    firstName = firstName || 'Unknown';
-    lastName = lastName || 'User';
+    // Username fallback: use email prefix if no username found
+    if (!username) {
+      username = email ? email.split('@')[0] : idpSubject;
+    }
 
     if (!idpSubject) {
       throw new Error('Missing subject claim from IdP');
@@ -167,6 +176,7 @@ class UserMappingService {
         // Create new employee
         employee = await this.createEmployee({
           email,
+          username: username!,
           firstName,
           lastName,
           roles,
@@ -188,9 +198,10 @@ class UserMappingService {
     const finalRoles = currentRoles.length > 0 ? currentRoles : roles;
     return {
       id: employee.id,
+      username: employee.username,
       email: employee.email,
-      firstname: employee.firstname,
-      lastname: employee.lastname,
+      firstname: employee.firstname || undefined,
+      lastname: employee.lastname || undefined,
       roles: finalRoles,
       employeeType: employee.employee_type,
       isActive: Boolean(employee.is_active),
@@ -279,8 +290,9 @@ class UserMappingService {
    */
   private async createEmployee(data: {
     email: string;
-    firstName: string;
-    lastName: string;
+    username: string;
+    firstName: string | null;
+    lastName: string | null;
     roles: string[];
     employeeType: string;
   }): Promise<EmployeeRow> {
@@ -288,9 +300,9 @@ class UserMappingService {
     const placeholderPassword = `EXTERNAL_AUTH_${uuidv4()}`; // Not used for login
 
     await db.run(
-      `INSERT INTO employees (id, email, password, firstname, lastname, employee_type, is_active, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, 1, datetime('now'))`,
-      [id, data.email.toLowerCase(), placeholderPassword, data.firstName, data.lastName, data.employeeType]
+      `INSERT INTO employees (id, username, email, password, firstname, lastname, employee_type, is_active, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1, datetime('now'))`,
+      [id, data.username, data.email.toLowerCase(), placeholderPassword, data.firstName || null, data.lastName || null, data.employeeType]
     );
 
     // Assign roles
@@ -303,6 +315,7 @@ class UserMappingService {
 
     return {
       id,
+      username: data.username,
       email: data.email.toLowerCase(),
       firstname: data.firstName,
       lastname: data.lastName,

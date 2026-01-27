@@ -1,9 +1,10 @@
 // backend/src/models/Employee.ts
 export interface Employee {
   id: string;
+  username: string;
   email: string;
-  firstname: string;
-  lastname: string;
+  firstname?: string | null;
+  lastname?: string | null;
   employeeType: 'manager' | 'personell' | 'apprentice' | 'guest';
   contractType?: 'small' | 'large' | 'flexible';
   canWorkAlone: boolean;
@@ -15,9 +16,10 @@ export interface Employee {
 }
 
 export interface CreateEmployeeRequest {
+  username: string;
   password: string;
-  firstname: string;
-  lastname: string;
+  firstname?: string;
+  lastname?: string;
   roles?: string[];
   employeeType: 'manager' | 'personell' | 'apprentice' | 'guest';
   contractType?: 'small' | 'large' | 'flexible';
@@ -26,6 +28,7 @@ export interface CreateEmployeeRequest {
 }
 
 export interface UpdateEmployeeRequest {
+  username?: string;
   firstname?: string;
   lastname?: string;
   roles?: string[];

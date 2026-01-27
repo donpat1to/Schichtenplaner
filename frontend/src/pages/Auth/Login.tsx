@@ -17,7 +17,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
 
 const Login: React.FC = () => {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -143,8 +143,8 @@ const Login: React.FC = () => {
     setLoading(true);
 
     try {
-      console.log('🔐 Attempting login for:', email);
-      await login({ email, password });
+      console.log('🔐 Attempting login for:', identifier);
+      await login({ identifier, password });
 
       console.log('✅ Login successful, redirecting to dashboard');
       showNotification({
@@ -201,12 +201,12 @@ const Login: React.FC = () => {
 
         <div style={{ marginBottom: '20px', width: '100%' }}>
           <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-            E-Mail
+            Benutzername oder E-Mail
           </label>
           <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            type="text"
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
             required
             style={{
               padding: '0.875rem 1rem',
@@ -220,7 +220,7 @@ const Login: React.FC = () => {
               paddingRight: '40px',
               boxSizing: 'border-box' as const,
             }}
-            placeholder="ihre-email@example.com"
+            placeholder="benutzername oder email@example.com"
           />
         </div>
 

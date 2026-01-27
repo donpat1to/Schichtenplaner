@@ -31,10 +31,11 @@ CREATE TABLE IF NOT EXISTS roles (
 -- Employees table
 CREATE TABLE IF NOT EXISTS employees (
   id TEXT PRIMARY KEY,
+  username TEXT UNIQUE NOT NULL,
   email TEXT UNIQUE NOT NULL,
   password TEXT NOT NULL,
-  firstname TEXT NOT NULL,
-  lastname TEXT NOT NULL,
+  firstname TEXT,
+  lastname TEXT,
   employee_type TEXT NOT NULL REFERENCES employee_types(type),
   contract_type TEXT CHECK(contract_type IN ('small', 'large', 'flexible')),
   can_work_alone BOOLEAN DEFAULT FALSE,
@@ -291,6 +292,7 @@ CREATE INDEX IF NOT EXISTS idx_employee_identities_idp ON employee_identities(id
 CREATE INDEX IF NOT EXISTS idx_employee_identities_subject ON employee_identities(idp_id, idp_subject);
 
 -- Performance indexes
+CREATE INDEX IF NOT EXISTS idx_employees_username ON employees(username);
 CREATE INDEX IF NOT EXISTS idx_employees_email_active ON employees(email, is_active);
 CREATE INDEX IF NOT EXISTS idx_employees_type_active ON employees(employee_type, is_active);
 CREATE INDEX IF NOT EXISTS idx_employee_roles_employee ON employee_roles(employee_id);

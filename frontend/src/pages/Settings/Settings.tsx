@@ -66,6 +66,7 @@ const Settings: React.FC = () => {
     claimMapping: {
       id: 'sub',
       email: 'email',
+      username: '',
       firstName: 'given_name',
       lastName: 'family_name',
     },
@@ -83,6 +84,7 @@ const Settings: React.FC = () => {
 
   // Profile form state
   const [profileForm, setProfileForm] = useState({
+    username: currentUser?.username || '',
     firstname: currentUser?.firstname || '',
     lastname: currentUser?.lastname || ''
   });
@@ -107,6 +109,7 @@ const Settings: React.FC = () => {
   useEffect(() => {
     if (currentUser) {
       setProfileForm({
+        username: currentUser.username || '',
         firstname: currentUser.firstname || '',
         lastname: currentUser.lastname || ''
       });
@@ -203,20 +206,11 @@ const Settings: React.FC = () => {
     if (!currentUser) return;
 
     // BASIC FRONTEND VALIDATION: Only check required fields
-    if (!profileForm.firstname.trim()) {
+    if (!profileForm.username.trim()) {
       showNotification({
         type: 'error',
         title: 'Fehler',
-        message: 'Vorname ist erforderlich'
-      });
-      return;
-    }
-
-    if (!profileForm.lastname.trim()) {
-      showNotification({
-        type: 'error',
-        title: 'Fehler',
-        message: 'Nachname ist erforderlich'
+        message: 'Benutzername ist erforderlich'
       });
       return;
     }
@@ -225,8 +219,9 @@ const Settings: React.FC = () => {
       // Use executeWithValidation to handle backend validation
       await executeWithValidation(async () => {
         const updatedEmployee = await employeeService.updateEmployee(currentUser.id, {
-          firstname: profileForm.firstname.trim(),
-          lastname: profileForm.lastname.trim()
+          username: profileForm.username.trim(),
+          firstname: profileForm.firstname.trim() || undefined,
+          lastname: profileForm.lastname.trim() || undefined
         });
 
         // Update the auth context with new user data
@@ -422,6 +417,7 @@ const Settings: React.FC = () => {
         claimMapping: fullIdp.claimMapping || {
           id: 'sub',
           email: 'email',
+          username: '',
           firstName: 'given_name',
           lastName: 'family_name',
         },
@@ -859,6 +855,17 @@ const Settings: React.FC = () => {
                   <div style={styles.infoGrid}>
                     <div style={styles.field}>
                       <label style={styles.fieldLabel}>
+                        Benutzername
+                      </label>
+                      <input
+                        type="text"
+                        value={currentUser.username}
+                        disabled
+                        style={styles.fieldInputDisabled}
+                      />
+                    </div>
+                    <div style={styles.field}>
+                      <label style={styles.fieldLabel}>
                         E-Mail
                       </label>
                       <input
@@ -868,7 +875,7 @@ const Settings: React.FC = () => {
                         style={styles.fieldInputDisabled}
                       />
                       <div style={styles.fieldHint}>
-                        E-Mail wird automatisch aus Vor- und Nachname generiert
+                        E-Mail wird automatisch generiert
                       </div>
                     </div>
                     <div style={styles.field}>
@@ -908,18 +915,44 @@ const Settings: React.FC = () => {
                 </div>
                 <div style={styles.infoCard}>
                   <h4 style={styles.infoCardTitle}>Persönliche Informationen</h4>
-                  {/* Editable name fields */}
+                  {/* Editable fields */}
+                  <div style={styles.field}>
+                    <label style={styles.fieldLabel}>
+                      Benutzername {isAdmin && '*'}
+                    </label>
+                    <input
+                      type="text"
+                      name="username"
+                      value={profileForm.username}
+                      onChange={handleProfileChange}
+                      required={isAdmin}
+                      disabled={!isAdmin}
+                      style={isAdmin ? styles.fieldInput : styles.fieldInputDisabled}
+                      placeholder="Ihr Benutzername"
+                      onFocus={(e) => {
+                        if (isAdmin) {
+                          e.target.style.borderColor = '#1a1325';
+                          e.target.style.boxShadow = '0 0 0 3px rgba(26, 19, 37, 0.1)';
+                        }
+                      }}
+                      onBlur={(e) => {
+                        if (isAdmin) {
+                          e.target.style.borderColor = '#e8e8e8';
+                          e.target.style.boxShadow = 'none';
+                        }
+                      }}
+                    />
+                  </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                     <div style={styles.field}>
                       <label style={styles.fieldLabel}>
-                        Vorname {isAdmin && '*'}
+                        Vorname
                       </label>
                       <input
                         type="text"
                         name="firstname"
                         value={profileForm.firstname}
                         onChange={handleProfileChange}
-                        required={isAdmin}
                         disabled={!isAdmin}
                         style={isAdmin ? styles.fieldInput : styles.fieldInputDisabled}
                         placeholder="Ihr Vorname"
@@ -939,14 +972,13 @@ const Settings: React.FC = () => {
                     </div>
                     <div style={styles.field}>
                       <label style={styles.fieldLabel}>
-                        Nachname {isAdmin && '*'}
+                        Nachname
                       </label>
                       <input
                         type="text"
                         name="lastname"
                         value={profileForm.lastname}
                         onChange={handleProfileChange}
-                        required={isAdmin}
                         disabled={!isAdmin}
                         style={isAdmin ? styles.fieldInput : styles.fieldInputDisabled}
                         placeholder="Ihr Nachname"
@@ -971,21 +1003,21 @@ const Settings: React.FC = () => {
                 <div style={styles.actions}>
                   <button
                     type="submit"
-                    disabled={isSubmitting || !profileForm.firstname.trim() || !profileForm.lastname.trim()}
+                    disabled={isSubmitting || !profileForm.username.trim()}
                     style={{
                       ...styles.button,
                       ...styles.buttonPrimary,
-                      ...((isSubmitting || !profileForm.firstname.trim() || !profileForm.lastname.trim()) ? styles.buttonDisabled : {})
+                      ...((isSubmitting || !profileForm.username.trim()) ? styles.buttonDisabled : {})
                     }}
                     onMouseEnter={(e) => {
-                      if (!isSubmitting && profileForm.firstname.trim() && profileForm.lastname.trim()) {
+                      if (!isSubmitting && profileForm.username.trim()) {
                         e.currentTarget.style.background = styles.buttonPrimaryHover.background;
                         e.currentTarget.style.transform = styles.buttonPrimaryHover.transform;
                         e.currentTarget.style.boxShadow = styles.buttonPrimaryHover.boxShadow;
                       }
                     }}
                     onMouseLeave={(e) => {
-                      if (!isSubmitting && profileForm.firstname.trim() && profileForm.lastname.trim()) {
+                      if (!isSubmitting && profileForm.username.trim()) {
                         e.currentTarget.style.background = styles.buttonPrimary.background;
                         e.currentTarget.style.transform = 'none';
                         e.currentTarget.style.boxShadow = styles.buttonPrimary.boxShadow;
@@ -1437,9 +1469,6 @@ const Settings: React.FC = () => {
                               pattern="[a-z0-9-]+"
                               required
                             />
-                            <div style={styles.fieldHint}>
-                              URL-freundlicher Bezeichner (nur Kleinbuchstaben, Zahlen, Bindestriche)
-                            </div>
                           </div>
                         </div>
 
@@ -1514,135 +1543,145 @@ const Settings: React.FC = () => {
                       <div style={styles.divider} />
 
                       {/* Endpoint URLs (Optional) */}
-                      <h4 style={styles.sectionSubtitle}>Endpoint URLs (Optional)</h4>
-                      <div style={{ display: 'grid', gap: '1rem', marginBottom: '1rem' }}>
-                        <div style={styles.field}>
-                          <label style={styles.fieldLabel}>Authorization URL</label>
-                          <input
-                            type="url"
-                            name="authorizationURL"
-                            value={idpForm.authorizationURL || ''}
-                            onChange={handleIdpFormChange}
-                            placeholder="Automatisch aus Issuer abgeleitet"
-                            style={styles.fieldInput}
-                          />
-                          <div style={styles.fieldHint}>
-                            Leer lassen für automatische Ableitung aus Issuer URL
+                      <details>
+                        <summary style={styles.sectionSubtitle}>
+                          Endpoint URLs (Optional)
+                        </summary>
+                        <div style={{ display: 'grid', gap: '1rem', marginBottom: '1rem' }}>
+                          <div style={styles.field}>
+                            <label style={styles.fieldLabel}>Authorization URL</label>
+                            <input
+                              type="url"
+                              name="authorizationURL"
+                              value={idpForm.authorizationURL || ''}
+                              onChange={handleIdpFormChange}
+                              placeholder="Automatisch aus Issuer abgeleitet"
+                              style={styles.fieldInput}
+                            />
+                            <div style={styles.fieldHint}>
+                              Leer lassen für automatische Ableitung aus Issuer URL
+                            </div>
                           </div>
-                        </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                          <div style={styles.field}>
-                            <label style={styles.fieldLabel}>Token URL</label>
-                            <input
-                              type="url"
-                              name="tokenURL"
-                              value={idpForm.tokenURL || ''}
-                              onChange={handleIdpFormChange}
-                              placeholder="Automatisch aus Issuer"
-                              style={styles.fieldInput}
-                            />
+                          <div style={{ display: 'grid', gap: '1rem', marginBottom: '1rem' }}>
+                            <div style={styles.field}>
+                              <label style={styles.fieldLabel}>Token URL</label>
+                              <input
+                                type="url"
+                                name="tokenURL"
+                                value={idpForm.tokenURL || ''}
+                                onChange={handleIdpFormChange}
+                                placeholder="Automatisch aus Issuer"
+                                style={styles.fieldInput}
+                              />
+                            </div>
                           </div>
-                          <div style={styles.field}>
-                            <label style={styles.fieldLabel}>UserInfo URL</label>
-                            <input
-                              type="url"
-                              name="userInfoURL"
-                              value={idpForm.userInfoURL || ''}
-                              onChange={handleIdpFormChange}
-                              placeholder="Automatisch aus Issuer"
-                              style={styles.fieldInput}
-                            />
+                          <div style={{ display: 'grid', gap: '1rem', marginBottom: '1rem' }}>
+                            <div style={styles.field}>
+                              <label style={styles.fieldLabel}>UserInfo URL</label>
+                              <input
+                                type="url"
+                                name="userInfoURL"
+                                value={idpForm.userInfoURL || ''}
+                                onChange={handleIdpFormChange}
+                                placeholder="Automatisch aus Issuer"
+                                style={styles.fieldInput}
+                              />
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      </details>
 
                       <div style={styles.divider} />
 
                       {/* Advanced Settings */}
-                      <h4 style={styles.sectionSubtitle}>Erweiterte Einstellungen</h4>
-                      <div style={{ display: 'grid', gap: '1rem', marginBottom: '1rem' }}>
-                        <div style={styles.field}>
-                          <label style={styles.fieldLabel}>Scopes</label>
-                          <input
-                            type="text"
-                            name="scope"
-                            value={idpForm.scope?.join(', ') || ''}
-                            onChange={handleIdpFormChange}
-                            placeholder="openid, profile, email"
-                            style={styles.fieldInput}
-                          />
-                          <div style={styles.fieldHint}>
-                            Komma-getrennte Liste der Scopes (Standard: openid, profile, email)
-                          </div>
-                        </div>
-
-                        <div style={styles.field}>
-                          <label style={styles.fieldLabel}>Erlaubte Domains</label>
-                          <input
-                            type="text"
-                            name="allowedDomains"
-                            value={idpForm.allowedDomains?.join(', ') || ''}
-                            onChange={handleIdpFormChange}
-                            placeholder="example.com, company.de"
-                            style={styles.fieldInput}
-                          />
-                          <div style={styles.fieldHint}>
-                            Komma-getrennte Liste der erlaubten E-Mail-Domains (leer = alle erlaubt)
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                      <details>
+                        <summary style={styles.sectionSubtitle}>
+                          Erweiterte Einstellungen
+                        </summary>
+                        <div style={{ display: 'grid', gap: '1rem', marginBottom: '1rem' }}>
                           <div style={styles.field}>
-                            <label style={styles.fieldLabel}>Standard-Rolle</label>
-                            <select
-                              name="defaultRole"
-                              value={idpForm.defaultRole || 'user'}
+                            <label style={styles.fieldLabel}>Scopes</label>
+                            <input
+                              type="text"
+                              name="scope"
+                              value={idpForm.scope?.join(', ') || ''}
                               onChange={handleIdpFormChange}
-                              style={styles.fieldSelect}
-                            >
-                              <option value="user">Benutzer</option>
-                              <option value="admin">Administrator</option>
-                              <option value="maintenance">Wartung</option>
-                            </select>
+                              placeholder="openid, profile, email"
+                              style={styles.fieldInput}
+                            />
+                            <div style={styles.fieldHint}>
+                              Komma-getrennte Liste der Scopes (Standard: openid, profile, email)
+                            </div>
                           </div>
-                          <div style={styles.field}>
-                            <label style={styles.fieldLabel}>Registrierungsmodus</label>
-                            <select
-                              name="registrationMode"
-                              value={idpForm.registrationMode || 'whitelist'}
-                              onChange={handleIdpFormChange}
-                              style={styles.fieldSelect}
-                            >
-                              <option value="whitelist">Whitelist (Vorfreigabe erforderlich)</option>
-                              <option value="open">Offen (automatische Kontoerstellung)</option>
-                            </select>
-                          </div>
-                        </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                          <label style={styles.checkbox}>
+                          <div style={styles.field}>
+                            <label style={styles.fieldLabel}>Erlaubte Domains</label>
                             <input
-                              type="checkbox"
-                              name="pkce"
-                              checked={idpForm.pkce !== false}
+                              type="text"
+                              name="allowedDomains"
+                              value={idpForm.allowedDomains?.join(', ') || ''}
                               onChange={handleIdpFormChange}
-                              style={styles.checkboxInput}
+                              placeholder="example.com, company.de"
+                              style={styles.fieldInput}
                             />
-                            <span style={styles.checkboxLabel}>PKCE aktivieren</span>
-                          </label>
-                          <label style={styles.checkbox}>
-                            <input
-                              type="checkbox"
-                              name="enabled"
-                              checked={idpForm.enabled !== false}
-                              onChange={handleIdpFormChange}
-                              style={styles.checkboxInput}
-                            />
-                            <span style={styles.checkboxLabel}>Provider aktivieren</span>
-                          </label>
+                            <div style={styles.fieldHint}>
+                              Komma-getrennte Liste der erlaubten E-Mail-Domains (leer = alle erlaubt)
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                            <div style={styles.field}>
+                              <label style={styles.fieldLabel}>Standard-Rolle</label>
+                              <select
+                                name="defaultRole"
+                                value={idpForm.defaultRole || 'user'}
+                                onChange={handleIdpFormChange}
+                                style={styles.fieldSelect}
+                              >
+                                <option value="user">Benutzer</option>
+                                <option value="admin">Administrator</option>
+                                <option value="maintenance">Wartung</option>
+                              </select>
+                            </div>
+                            <div style={styles.field}>
+                              <label style={styles.fieldLabel}>Registrierungsmodus</label>
+                              <select
+                                name="registrationMode"
+                                value={idpForm.registrationMode || 'whitelist'}
+                                onChange={handleIdpFormChange}
+                                style={styles.fieldSelect}
+                              >
+                                <option value="whitelist">Whitelist (Vorfreigabe erforderlich)</option>
+                                <option value="open">Offen (automatische Kontoerstellung)</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                            <label style={styles.checkbox}>
+                              <input
+                                type="checkbox"
+                                name="pkce"
+                                checked={idpForm.pkce !== false}
+                                onChange={handleIdpFormChange}
+                                style={styles.checkboxInput}
+                              />
+                              <span style={styles.checkboxLabel}>PKCE aktivieren</span>
+                            </label>
+                            <label style={styles.checkbox}>
+                              <input
+                                type="checkbox"
+                                name="enabled"
+                                checked={idpForm.enabled !== false}
+                                onChange={handleIdpFormChange}
+                                style={styles.checkboxInput}
+                              />
+                              <span style={styles.checkboxLabel}>Provider aktivieren</span>
+                            </label>
+                          </div>
                         </div>
-                      </div>
+                      </details>
 
                       {/* Whitelist Management - Only shown when editing and mode is whitelist */}
                       {editingIdp && idpForm.registrationMode === 'whitelist' && (
@@ -1794,67 +1833,85 @@ const Settings: React.FC = () => {
                       <div style={styles.divider} />
 
                       {/* Claim Mapping */}
-                      <h4 style={styles.sectionSubtitle}>Claim Mapping</h4>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                        <div style={styles.field}>
-                          <label style={styles.fieldLabel}>ID Claim</label>
-                          <input
-                            type="text"
-                            name="claimMapping.id"
-                            value={idpForm.claimMapping?.id || 'sub'}
-                            onChange={handleIdpFormChange}
-                            placeholder="sub"
-                            style={styles.fieldInput}
-                          />
-                        </div>
-                        <div style={styles.field}>
-                          <label style={styles.fieldLabel}>Email Claim</label>
-                          <input
-                            type="text"
-                            name="claimMapping.email"
-                            value={idpForm.claimMapping?.email || 'email'}
-                            onChange={handleIdpFormChange}
-                            placeholder="email"
-                            style={styles.fieldInput}
-                          />
-                        </div>
-                        <div style={styles.field}>
-                          <label style={styles.fieldLabel}>Vorname Claim</label>
-                          <input
-                            type="text"
-                            name="claimMapping.firstName"
-                            value={idpForm.claimMapping?.firstName || 'given_name'}
-                            onChange={handleIdpFormChange}
-                            placeholder="given_name"
-                            style={styles.fieldInput}
-                          />
-                        </div>
-                        <div style={styles.field}>
-                          <label style={styles.fieldLabel}>Nachname Claim</label>
-                          <input
-                            type="text"
-                            name="claimMapping.lastName"
-                            value={idpForm.claimMapping?.lastName || 'family_name'}
-                            onChange={handleIdpFormChange}
-                            placeholder="family_name"
-                            style={styles.fieldInput}
-                          />
-                        </div>
-                        <div style={styles.field}>
-                          <label style={styles.fieldLabel}>Rollen Claim (optional)</label>
-                          <input
-                            type="text"
-                            name="claimMapping.roles"
-                            value={idpForm.claimMapping?.roles || ''}
-                            onChange={handleIdpFormChange}
-                            placeholder="groups oder roles"
-                            style={styles.fieldInput}
-                          />
-                          <div style={styles.fieldHint}>
-                            Claim für Gruppenrollen (z.B. 'groups' oder 'roles')
+                      <details>
+                        <summary style={styles.sectionSubtitle}>
+                          Claim Mapping
+                        </summary>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                          <div style={styles.field}>
+                            <label style={styles.fieldLabel}>ID Claim</label>
+                            <input
+                              type="text"
+                              name="claimMapping.id"
+                              value={idpForm.claimMapping?.id || 'sub'}
+                              onChange={handleIdpFormChange}
+                              placeholder="sub"
+                              style={styles.fieldInput}
+                            />
+                          </div>
+                          <div style={styles.field}>
+                            <label style={styles.fieldLabel}>Email Claim</label>
+                            <input
+                              type="text"
+                              name="claimMapping.email"
+                              value={idpForm.claimMapping?.email || 'email'}
+                              onChange={handleIdpFormChange}
+                              placeholder="email"
+                              style={styles.fieldInput}
+                            />
+                          </div>
+                          <div style={styles.field}>
+                            <label style={styles.fieldLabel}>Username Claim</label>
+                            <input
+                              type="text"
+                              name="claimMapping.username"
+                              value={idpForm.claimMapping?.username || ''}
+                              onChange={handleIdpFormChange}
+                              placeholder="preferred_username"
+                              style={styles.fieldInput}
+                            />
+                            <div style={styles.fieldHint}>
+                              Claim für Benutzername (z.B. 'preferred_username')
+                            </div>
+                          </div>
+                          <div style={styles.field}>
+                            <label style={styles.fieldLabel}>Vorname Claim</label>
+                            <input
+                              type="text"
+                              name="claimMapping.firstName"
+                              value={idpForm.claimMapping?.firstName || 'given_name'}
+                              onChange={handleIdpFormChange}
+                              placeholder="given_name"
+                              style={styles.fieldInput}
+                            />
+                          </div>
+                          <div style={styles.field}>
+                            <label style={styles.fieldLabel}>Nachname Claim</label>
+                            <input
+                              type="text"
+                              name="claimMapping.lastName"
+                              value={idpForm.claimMapping?.lastName || 'family_name'}
+                              onChange={handleIdpFormChange}
+                              placeholder="family_name"
+                              style={styles.fieldInput}
+                            />
+                          </div>
+                          <div style={styles.field}>
+                            <label style={styles.fieldLabel}>Rollen Claim (optional)</label>
+                            <input
+                              type="text"
+                              name="claimMapping.roles"
+                              value={idpForm.claimMapping?.roles || ''}
+                              onChange={handleIdpFormChange}
+                              placeholder="groups oder roles"
+                              style={styles.fieldInput}
+                            />
+                            <div style={styles.fieldHint}>
+                              Claim für Gruppenrollen (z.B. 'groups' oder 'roles')
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      </details>
 
                       {/* Test Connection (only for editing) */}
                       {editingIdp && (

@@ -18,7 +18,9 @@ const Navigation: React.FC = () => {
 
   const navigationItems = [
     { path: '/plans', label: 'Pläne', roles: ['admin', 'maintenance', 'user'] },
+    { path: '/my-availability', label: 'Verfügbarkeit', roles: ['admin', 'maintenance', 'user'] },
     { path: '/employees', label: 'Mitarbeiter', roles: ['admin', 'maintenance'] },
+    { path: '/help', label: 'Hilfe', roles: ['admin', 'maintenance', 'user'] },
   ];
 
   const filteredNavigation = navigationItems.filter(item =>

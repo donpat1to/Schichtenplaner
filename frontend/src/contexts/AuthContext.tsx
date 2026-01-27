@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { Employee } from '../models/Employee';
 
 interface LoginRequest {
-  email: string;
+  identifier: string;
   password: string;
 }
 
@@ -111,7 +111,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = async (credentials: LoginRequest): Promise<void> => {
     try {
-      console.log('🔐 Attempting login for:', credentials.email);
+      console.log('🔐 Attempting login for:', credentials.identifier);
 
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',

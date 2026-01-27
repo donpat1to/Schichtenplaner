@@ -14,6 +14,7 @@ declare global {
 
       // Properties used by OIDC/Passport auth
       id?: string;
+      username?: string;
       firstname?: string;
       lastname?: string;
       roles?: string[];

@@ -19,6 +19,7 @@ type ContractType = 'small' | 'large' | 'flexible';
 // ===== TYP-DEFINITIONEN =====
 interface EmployeeFormData {
   // Step 1: Grundinformationen
+  username: string;
   firstname: string;
   lastname: string;
   email: string;
@@ -53,6 +54,7 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
 
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState<EmployeeFormData>({
+    username: '',
     firstname: '',
     lastname: '',
     email: '',
@@ -126,8 +128,9 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
   useEffect(() => {
     if (mode === 'edit' && employee) {
       setFormData({
-        firstname: employee.firstname,
-        lastname: employee.lastname,
+        username: employee.username || '',
+        firstname: employee.firstname || '',
+        lastname: employee.lastname || '',
         email: employee.email,
         password: '',
         employeeType: employee.employeeType,
@@ -143,12 +146,8 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
   // ===== SIMPLE FRONTEND VALIDATION (ONLY FOR REQUIRED FIELDS) =====
   const validateStep1 = (): boolean => {
     // Only check for empty required fields - let backend handle everything else
-    if (!formData.firstname.trim()) {
-      setError('Bitte geben Sie einen Vornamen ein.');
-      return false;
-    }
-    if (!formData.lastname.trim()) {
-      setError('Bitte geben Sie einen Nachnamen ein.');
+    if (!formData.username.trim()) {
+      setError('Bitte geben Sie einen Benutzernamen ein.');
       return false;
     }
     return true;
@@ -302,8 +301,9 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
     try {
       if (mode === 'create') {
         const createData: CreateEmployeeRequest = {
-          firstname: formData.firstname.trim(),
-          lastname: formData.lastname.trim(),
+          username: formData.username.trim(),
+          firstname: formData.firstname.trim() || undefined,
+          lastname: formData.lastname.trim() || undefined,
           password: formData.password,
           roles: formData.roles,
           employeeType: formData.employeeType,
@@ -318,8 +318,9 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
         );
       } else if (employee) {
         const updateData: UpdateEmployeeRequest = {
-          firstname: formData.firstname.trim(),
-          lastname: formData.lastname.trim(),
+          username: formData.username.trim(),
+          firstname: formData.firstname.trim() || undefined,
+          lastname: formData.lastname.trim() || undefined,
           roles: formData.roles,
           employeeType: formData.employeeType,
           contractType: formData.employeeType !== 'guest' ? formData.contractType : undefined,
@@ -365,8 +366,7 @@ const useEmployeeForm = (mode: 'create' | 'edit', employee?: Employee) => {
   const isStepCompleted = (stepIndex: number): boolean => {
     switch (stepIndex) {
       case 0:
-        return !!formData.firstname.trim() &&
-          !!formData.lastname.trim();
+        return !!formData.username.trim();
       // REMOVE: (mode === 'edit' || formData.password.length >= 6)
       case 1:
         return !!formData.employeeType;
@@ -438,6 +438,32 @@ const Step1Content: React.FC<StepContentProps> = ({
   mode
 }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    <div>
+      <label style={{
+        display: 'block',
+        marginBottom: '0.5rem',
+        fontWeight: '600',
+        color: '#495057'
+      }}>
+        Benutzername *
+      </label>
+      <input
+        type="text"
+        name="username"
+        value={formData.username}
+        onChange={onInputChange}
+        required
+        style={{
+          width: '100%',
+          padding: '0.75rem',
+          border: '1px solid #ced4da',
+          borderRadius: '6px',
+          fontSize: '1rem'
+        }}
+        placeholder="mmustermann"
+      />
+    </div>
+
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
       <div>
         <label style={{
@@ -446,14 +472,13 @@ const Step1Content: React.FC<StepContentProps> = ({
           fontWeight: '600',
           color: '#495057'
         }}>
-          Vorname *
+          Vorname
         </label>
         <input
           type="text"
           name="firstname"
           value={formData.firstname}
           onChange={onInputChange}
-          required
           style={{
             width: '100%',
             padding: '0.75rem',
@@ -472,14 +497,13 @@ const Step1Content: React.FC<StepContentProps> = ({
           fontWeight: '600',
           color: '#495057'
         }}>
-          Nachname *
+          Nachname
         </label>
         <input
           type="text"
           name="lastname"
           value={formData.lastname}
           onChange={onInputChange}
-          required
           style={{
             width: '100%',
             padding: '0.75rem',
@@ -511,7 +535,7 @@ const Step1Content: React.FC<StepContentProps> = ({
         fontWeight: '500',
         fontFamily: 'monospace'
       }}>
-        {emailPreview || 'max.mustermann@sp.de'}
+        {(formData.firstname?.trim() && formData.lastname?.trim()) ? emailPreview : (formData.username ? `${formData.username.toLowerCase()}@sp.de` : 'benutzername@sp.de')}
       </div>
       <div style={{
         fontSize: '0.875rem',

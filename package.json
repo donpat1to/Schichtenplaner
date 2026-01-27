@@ -15,7 +15,10 @@
     "dev:backend": "cd backend && npm run dev:all"
   },
   "devDependencies": {
-    "typescript": "^5.3.3",
-    "concurrently": "9.2.1"
+    "concurrently": "9.2.1",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "sqlite3": "^5.1.7"
   }
 }

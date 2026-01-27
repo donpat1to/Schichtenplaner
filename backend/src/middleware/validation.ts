@@ -3,33 +3,35 @@ import { Request, Response, NextFunction } from 'express';
 
 // ===== AUTH VALIDATION =====
 export const validateLogin = [
-  body('email')
-    .isEmail()
-    .withMessage('Must be a valid email')
-    .normalizeEmail(),
+  body('identifier')
+    .notEmpty()
+    .withMessage('Benutzername oder E-Mail ist erforderlich')
+    .trim(),
 
   body('password')
-    .optional()
-    .isLength({ min: 8 })
-    .withMessage('Password must be at least 8 characters')
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?])/)
-    .withMessage('Password must contain uppercase, lowercase, number and special character'),
+    .notEmpty()
+    .withMessage('Passwort ist erforderlich'),
 ];
 
 export const validateRegister = [
-  body('firstname')
-    .isLength({ min: 1, max: 100 })
-    .withMessage('First name must be between 1-100 characters')
+  body('username')
     .notEmpty()
-    .withMessage('First name must not be empty')
+    .withMessage('Username is required')
+    .isLength({ min: 1, max: 100 })
+    .withMessage('Username must be between 1-100 characters')
+    .trim(),
+
+  body('firstname')
+    .optional()
+    .isLength({ max: 100 })
+    .withMessage('First name must be at most 100 characters')
     .trim()
     .escape(),
 
   body('lastname')
-    .isLength({ min: 1, max: 100 })
-    .withMessage('Last name must be between 1-100 characters')
-    .notEmpty()
-    .withMessage('Last name must not be empty')
+    .optional()
+    .isLength({ max: 100 })
+    .withMessage('Last name must be at most 100 characters')
     .trim()
     .escape(),
 
@@ -43,19 +45,24 @@ export const validateRegister = [
 
 // ===== EMPLOYEE VALIDATION =====
 export const validateEmployee = [
-  body('firstname')
-    .isLength({ min: 1, max: 100 })
-    .withMessage('First name must be between 1-100 characters')
+  body('username')
     .notEmpty()
-    .withMessage('First name must not be empty')
+    .withMessage('Username is required')
+    .isLength({ min: 1, max: 100 })
+    .withMessage('Username must be between 1-100 characters')
+    .trim(),
+
+  body('firstname')
+    .optional()
+    .isLength({ max: 100 })
+    .withMessage('First name must be at most 100 characters')
     .trim()
     .escape(),
 
   body('lastname')
-    .isLength({ min: 1, max: 100 })
-    .withMessage('Last name must be between 1-100 characters')
-    .notEmpty()
-    .withMessage('Last name must not be empty')
+    .optional()
+    .isLength({ max: 100 })
+    .withMessage('Last name must be at most 100 characters')
     .trim()
     .escape(),
 

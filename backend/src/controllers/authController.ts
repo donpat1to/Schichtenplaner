@@ -19,7 +19,7 @@ export interface UserWithPassword extends User {
 }
 
 export interface LoginRequest {
-  email: string;
+  identifier: string;
   password: string;
 }
 
@@ -32,9 +32,10 @@ export interface JWTPayload {
 }
 
 export interface RegisterRequest {
+  username: string;
   password: string;
-  firstname: string;
-  lastname: string;
+  firstname?: string;
+  lastname?: string;
   roles?: string[];
 }
 
@@ -55,33 +56,33 @@ function generateEmail(firstname: string, lastname: string): string {
 
 export const login = async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body as LoginRequest;
+    const { identifier, password } = req.body as LoginRequest;
 
-    console.log('🔐 Login attempt for email:', email);
+    console.log('🔐 Login attempt for identifier:', identifier);
 
-    if (!email || !password) {
-      console.log('❌ Missing email or password');
-      return res.status(400).json({ error: 'E-Mail und Passwort sind erforderlich' });
+    if (!identifier || !password) {
+      console.log('❌ Missing identifier or password');
+      return res.status(400).json({ error: 'Benutzername/E-Mail und Passwort sind erforderlich' });
     }
 
     // Get user from database with role from employee_roles table
     const user = await db.get<any>(
-      `SELECT 
-        e.id, e.email, e.password, e.firstname, e.lastname, 
-        e.employee_type, e.contract_type, 
+      `SELECT
+        e.id, e.username, e.email, e.password, e.firstname, e.lastname,
+        e.employee_type, e.contract_type,
         e.can_work_alone, e.is_active, e.is_trainee,
         er.role
        FROM employees e
        LEFT JOIN employee_roles er ON e.id = er.employee_id
-       WHERE e.email = ? AND e.is_active = 1
+       WHERE (LOWER(e.email) = LOWER(?) OR LOWER(e.username) = LOWER(?)) AND e.is_active = 1
        LIMIT 1`,
-      [email]
+      [identifier, identifier]
     );
 
     console.log('🔍 User found:', user ? 'Yes' : 'No');
 
     if (!user) {
-      console.log('❌ No user found with email:', email);
+      console.log('❌ No user found with identifier:', identifier);
       return res.status(401).json({ error: 'Ungültige Anmeldedaten' });
     }
 
@@ -99,7 +100,7 @@ export const login = async (req: Request, res: Response) => {
     console.log('🔑 Password valid:', validPassword);
 
     if (!validPassword) {
-      console.log('❌ Invalid password for user:', email);
+      console.log('❌ Invalid password for user:', identifier);
       return res.status(401).json({ error: 'Ungültige Anmeldedaten' });
     }
 
@@ -123,6 +124,7 @@ export const login = async (req: Request, res: Response) => {
     const { password: _, ...userWithoutPassword } = user;
     const userResponse = {
       ...userWithoutPassword,
+      username: user.username,
       employeeType: user.employee_type,
       contractType: user.contract_type,
       canWorkAlone: user.can_work_alone === 1,
@@ -131,7 +133,7 @@ export const login = async (req: Request, res: Response) => {
       roles: user.role ? [user.role] : ['user']
     };
 
-    console.log('✅ Login successful for:', user.email);
+    console.log('✅ Login successful for:', user.username || user.email);
 
     res.json({
       user: userResponse,
@@ -157,9 +159,9 @@ export const getCurrentUser = async (req: Request, res: Response) => {
 
     // Get user with role from employee_roles table
     const user = await db.get<any>(
-      `SELECT 
-        e.id, e.email, e.firstname, e.lastname,
-        e.employee_type, e.contract_type, 
+      `SELECT
+        e.id, e.username, e.email, e.firstname, e.lastname,
+        e.employee_type, e.contract_type,
         e.can_work_alone, e.is_active, e.is_trainee,
         er.role
        FROM employees e
@@ -179,6 +181,7 @@ export const getCurrentUser = async (req: Request, res: Response) => {
     // Format user response with roles array
     const userResponse = {
       ...user,
+      username: user.username,
       employeeType: user.employee_type,
       contractType: user.contract_type,
       canWorkAlone: user.can_work_alone === 1,
@@ -187,7 +190,7 @@ export const getCurrentUser = async (req: Request, res: Response) => {
       roles: user.role ? [user.role] : ['user']
     };
 
-    console.log('✅ Returning user:', user.email);
+    console.log('✅ Returning user:', user.username || user.email);
     res.json({ user: userResponse });
   } catch (error) {
     console.error('Get current user error:', error);
@@ -222,17 +225,29 @@ export const validateToken = async (req: Request, res: Response) => {
 
 export const register = async (req: Request, res: Response) => {
   try {
-    const { password, firstname, lastname, roles = ['user'] } = req.body as RegisterRequest;
+    const { username, password, firstname, lastname, roles = ['user'] } = req.body as RegisterRequest;
 
     // Validate required fields
-    if (!password || !firstname || !lastname) {
-      return res.status(400).json({ 
-        error: 'Password, firstname und lastname sind erforderlich' 
+    if (!password || !username) {
+      return res.status(400).json({
+        error: 'Username und Password sind erforderlich'
       });
     }
 
-    // Generate email automatically
-    const email = generateEmail(firstname, lastname);
+    // Generate email automatically if names provided, otherwise use username-based email
+    const email = (firstname && lastname) ? generateEmail(firstname, lastname) : `${username.toLowerCase()}@sp.de`;
+
+    // Check if username already exists
+    const existingUsername = await db.get<Employee>(
+      'SELECT id FROM employees WHERE username = ?',
+      [username]
+    );
+
+    if (existingUsername) {
+      return res.status(400).json({
+        error: `Ein Benutzer mit dem Benutzernamen ${username} existiert bereits`
+      });
+    }
 
     // Check if generated email already exists
     const existingUser = await db.get<Employee>(
@@ -241,8 +256,8 @@ export const register = async (req: Request, res: Response) => {
     );
 
     if (existingUser) {
-      return res.status(400).json({ 
-        error: `Ein Benutzer mit der E-Mail ${email} existiert bereits` 
+      return res.status(400).json({
+        error: `Ein Benutzer mit der E-Mail ${email} existiert bereits`
       });
     }
 
@@ -254,11 +269,10 @@ export const register = async (req: Request, res: Response) => {
     await db.run('BEGIN TRANSACTION');
 
     try {
-      // ✅ CORRECTED: Use valid 'personell' type with proper contract type
       const result = await db.run(
-        `INSERT INTO employees (id, email, password, firstname, lastname, employee_type, contract_type, can_work_alone, is_active, is_trainee) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [employeeId, email, hashedPassword, firstname, lastname, 'personell', 'small', false, 1, false]
+        `INSERT INTO employees (id, username, email, password, firstname, lastname, employee_type, contract_type, can_work_alone, is_active, is_trainee)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [employeeId, username, email, hashedPassword, firstname || null, lastname || null, 'personell', 'small', false, 1, false]
       );
 
       if (!result.lastID) {
@@ -277,8 +291,8 @@ export const register = async (req: Request, res: Response) => {
 
       // Get created user with role
       const newUser = await db.get<any>(
-        `SELECT 
-          e.id, e.email, e.firstname, e.lastname,
+        `SELECT
+          e.id, e.username, e.email, e.firstname, e.lastname,
           e.employee_type, e.contract_type, e.can_work_alone, e.is_active, e.is_trainee,
           er.role
          FROM employees e
@@ -291,6 +305,7 @@ export const register = async (req: Request, res: Response) => {
       // Format response with roles array
       const userResponse = {
         ...newUser,
+        username: newUser.username,
         employeeType: newUser.employee_type,
         contractType: newUser.contract_type,
         canWorkAlone: newUser.can_work_alone === 1,

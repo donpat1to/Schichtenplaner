@@ -20,6 +20,7 @@ export interface IdentityProvider {
   claimMapping: {
     id: string;
     email: string;
+    username?: string;
     firstName: string;
     lastName: string;
     roles?: string;
@@ -51,6 +52,7 @@ export interface IdentityProviderRequest {
   claimMapping?: {
     id?: string;
     email?: string;
+    username?: string;
     firstName?: string;
     lastName?: string;
     roles?: string;

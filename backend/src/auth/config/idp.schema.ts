@@ -29,6 +29,7 @@ export const IdpConfigSchema = z.object({
   claimMapping: z.object({
     id: z.string().default('sub'),
     email: z.string().default('email'),
+    username: z.string().optional(),
     firstName: z.string().default('given_name'),
     lastName: z.string().default('family_name'),
     roles: z.string().optional(), // e.g., 'groups' or 'roles'

@@ -30,14 +30,14 @@ export const getEmployees = async (req: AuthRequest, res: Response): Promise<voi
     const includeInactiveFlag = includeInactive === 'true';
 
     let query = `
-      SELECT 
-        e.id, e.email, e.firstname, e.lastname, 
-        e.is_active, 
-        e.employee_type, 
+      SELECT
+        e.id, e.username, e.email, e.firstname, e.lastname,
+        e.is_active,
+        e.employee_type,
         e.contract_type,
         e.can_work_alone,
         e.is_trainee,
-        e.created_at, 
+        e.created_at,
         e.last_login,
         er.role
       FROM employees e
@@ -48,13 +48,14 @@ export const getEmployees = async (req: AuthRequest, res: Response): Promise<voi
       query += ' WHERE e.is_active = 1';
     }
 
-    query += ' ORDER BY e.firstname, e.lastname';
+    query += ' ORDER BY e.username, e.firstname, e.lastname';
 
     const employees = await db.all<any>(query);
 
     // Format employees with proper field names and roles array
     const employeesWithRoles = employees.map(emp => ({
       id: emp.id,
+      username: emp.username,
       email: emp.email,
       firstname: emp.firstname,
       lastname: emp.lastname,
@@ -81,14 +82,14 @@ export const getEmployee = async (req: AuthRequest, res: Response): Promise<void
     const { id } = req.params;
 
     const employee = await db.get<any>(`
-      SELECT 
-        e.id, e.email, e.firstname, e.lastname, 
-        e.is_active, 
-        e.employee_type, 
+      SELECT
+        e.id, e.username, e.email, e.firstname, e.lastname,
+        e.is_active,
+        e.employee_type,
         e.contract_type,
         e.can_work_alone,
         e.is_trainee,
-        e.created_at, 
+        e.created_at,
         e.last_login,
         er.role
       FROM employees e
@@ -105,6 +106,7 @@ export const getEmployee = async (req: AuthRequest, res: Response): Promise<void
     // Format employee with proper field names
     const employeeWithRoles = {
       id: employee.id,
+      username: employee.username,
       email: employee.email,
       firstname: employee.firstname,
       lastname: employee.lastname,
@@ -133,6 +135,7 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
     });
 
     const {
+      username,
       password,
       firstname,
       lastname,
@@ -144,10 +147,10 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
     } = req.body as CreateEmployeeRequest;
 
     // Validation
-    if (!password || !firstname || !lastname || !employeeType) {
+    if (!username || !password || !employeeType) {
       console.log('❌ Validation failed: Missing required fields');
       res.status(400).json({
-        error: 'Password, firstname, lastname und employeeType sind erforderlich'
+        error: 'Username, Password und employeeType sind erforderlich'
       });
       return;
     }
@@ -198,8 +201,18 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
+    // Check if username already exists
+    const existingUsername = await db.get<any>('SELECT id FROM employees WHERE username = ?', [username]);
+    if (existingUsername) {
+      console.log('❌ Username already exists:', username);
+      res.status(409).json({
+        error: `Ein Benutzer mit dem Benutzernamen ${username} existiert bereits.`
+      });
+      return;
+    }
+
     // Generate email automatically
-    const email = generateEmail(firstname, lastname);
+    const email = (firstname && lastname) ? generateEmail(firstname, lastname) : `${username.toLowerCase()}@sp.de`;
     console.log('📧 Generated email:', email);
 
     // Check if generated email already exists
@@ -208,7 +221,7 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
     if (existingUser) {
       console.log('❌ Generated email already exists:', email);
       res.status(409).json({
-        error: `Employee with email ${email} already exists. Please use different firstname/lastname.`
+        error: `Employee with email ${email} already exists.`
       });
       return;
     }
@@ -224,15 +237,16 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
       // Insert employee with proper contract type handling
       await db.run(
         `INSERT INTO employees (
-          id, email, password, firstname, lastname, employee_type, contract_type, can_work_alone, 
+          id, username, email, password, firstname, lastname, employee_type, contract_type, can_work_alone,
           is_active, is_trainee
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           employeeId,
+          username,
           email,
           hashedPassword,
-          firstname,
-          lastname,
+          firstname || null,
+          lastname || null,
           employeeType,
           contractType, // Will be NULL for external types
           canWorkAlone ? 1 : 0,
@@ -253,14 +267,14 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
 
       // Return created employee
       const newEmployee = await db.get<any>(`
-        SELECT 
-          e.id, e.email, e.firstname, e.lastname, 
+        SELECT
+          e.id, e.username, e.email, e.firstname, e.lastname,
           e.is_active,
-          e.employee_type, 
+          e.employee_type,
           e.contract_type,
           e.can_work_alone,
           e.is_trainee,
-          e.created_at, 
+          e.created_at,
           e.last_login,
           er.role
         FROM employees e
@@ -272,6 +286,7 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
       // Format response with proper field names
       const employeeWithRoles = {
         id: newEmployee.id,
+        username: newEmployee.username,
         email: newEmployee.email,
         firstname: newEmployee.firstname,
         lastname: newEmployee.lastname,
@@ -300,12 +315,26 @@ export const createEmployee = async (req: AuthRequest, res: Response): Promise<v
 export const updateEmployee = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { firstname, lastname, roles, isActive, employeeType, contractType, canWorkAlone, isTrainee } = req.body;
+    const { username, firstname, lastname, roles, isActive, employeeType, contractType, canWorkAlone, isTrainee } = req.body;
 
     console.log('📝 Update Employee Request:', {
-      id, firstname, lastname, roles, isActive,
+      id, username, firstname, lastname, roles, isActive,
       employeeType, contractType, canWorkAlone, isTrainee
     });
+
+    // Check username uniqueness if being updated
+    if (username) {
+      const existingUsername = await db.get<any>(
+        'SELECT id FROM employees WHERE username = ? AND id != ?',
+        [username, id]
+      );
+      if (existingUsername) {
+        res.status(409).json({
+          error: `Ein Benutzer mit dem Benutzernamen ${username} existiert bereits.`
+        });
+        return;
+      }
+    }
 
     // Check if employee exists and get current data
     const existingEmployee = await db.get<any>('SELECT * FROM employees WHERE id = ?', [id]);
@@ -381,10 +410,14 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
 
     // Generate new email if firstname or lastname changed
     let email = existingEmployee.email;
-    if (firstname || lastname) {
-      const newFirstname = firstname || existingEmployee.firstname;
-      const newLastname = lastname || existingEmployee.lastname;
-      email = generateEmail(newFirstname, newLastname);
+    if (firstname !== undefined || lastname !== undefined) {
+      const newFirstname = firstname !== undefined ? firstname : existingEmployee.firstname;
+      const newLastname = lastname !== undefined ? lastname : existingEmployee.lastname;
+      if (newFirstname && newLastname) {
+        email = generateEmail(newFirstname, newLastname);
+      } else if (username || existingEmployee.username) {
+        email = `${(username || existingEmployee.username).toLowerCase()}@sp.de`;
+      }
 
       // Check if new email already exists (for another employee)
       const emailExists = await db.get<any>(
@@ -406,8 +439,9 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
     try {
       // Update employee with new schema
       await db.run(
-        `UPDATE employees 
-         SET firstname = COALESCE(?, firstname),
+        `UPDATE employees
+         SET username = COALESCE(?, username),
+             firstname = COALESCE(?, firstname),
              lastname = COALESCE(?, lastname),
              email = ?,
              is_active = COALESCE(?, is_active),
@@ -416,7 +450,7 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
              can_work_alone = COALESCE(?, can_work_alone),
              is_trainee = COALESCE(?, is_trainee)
          WHERE id = ?`,
-        [firstname, lastname, email, isActive, employeeType, contractType, canWorkAlone, isTrainee, id]
+        [username, firstname, lastname, email, isActive, employeeType, contractType, canWorkAlone, isTrainee, id]
       );
 
       // Update roles if provided
@@ -439,14 +473,14 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
 
       // Return updated employee
       const updatedEmployee = await db.get<any>(`
-        SELECT 
-          e.id, e.email, e.firstname, e.lastname, 
-          e.is_active, 
-          e.employee_type, 
+        SELECT
+          e.id, e.username, e.email, e.firstname, e.lastname,
+          e.is_active,
+          e.employee_type,
           e.contract_type,
           e.can_work_alone,
           e.is_trainee,
-          e.created_at, 
+          e.created_at,
           e.last_login,
           er.role
         FROM employees e
@@ -458,6 +492,7 @@ export const updateEmployee = async (req: AuthRequest, res: Response): Promise<v
       // Format response with proper field names
       const employeeWithRoles = {
         id: updatedEmployee.id,
+        username: updatedEmployee.username,
         email: updatedEmployee.email,
         firstname: updatedEmployee.firstname,
         lastname: updatedEmployee.lastname,

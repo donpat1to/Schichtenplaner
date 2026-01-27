@@ -46,7 +46,7 @@ export function createOidcStrategy(idp: IdpConfig): OpenIDConnectStrategy {
   // Create verify function that handles the OIDC response
   // passport-openidconnect 0.1.x uses this signature with passReqToCallback: true
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const verifyFunction = function(...args: any[]): void {
+  const verifyFunction = function (...args: any[]): void {
     console.log(`[OIDC] Verify function called for ${idp.id}`);
     console.log(`[OIDC] Number of arguments: ${args.length}`);
 
@@ -99,7 +99,7 @@ export function createOidcStrategy(idp: IdpConfig): OpenIDConnectStrategy {
           config: idp,
         });
 
-        console.log(`[OIDC] User mapped successfully:`, user.email);
+        console.log(`[OIDC] User mapped successfully:`, user.username, user.email);
         done(null, user);
       } catch (error) {
         console.error(`[OIDC] Strategy error for ${idp.id}:`, error);
