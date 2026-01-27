@@ -97,17 +97,12 @@ class UserMappingService {
         (profile as any).preferred_username ||
         (claims.preferred_username as string);
     }
-    if (!firstName && profile) {
+    if (!firstName && !lastName && profile) {
       firstName = (profile as any).name?.givenName ||
         (profile as any).displayName?.split(' ')[0] ||
         (claims.name as any)?.givenName ||
         (claims.given_name as string) || null;
-    }
-    if (!lastName && profile) {
-      lastName = (profile as any).name?.familyName ||
-        (profile as any).displayName?.split(' ').slice(1).join(' ') ||
-        (claims.name as any)?.familyName ||
-        (claims.family_name as string) || null;
+      lastName = null;
     }
 
     // Username fallback: use email prefix if no username found
