@@ -1,4 +1,4 @@
-// backend/src/auth/strategies/strategy.factory.ts
+// backend/src/oidc/strategies/strategy.factory.ts
 import passport from 'passport';
 import { idpConfigManager } from '../config/idp.config.js';
 import { createOidcStrategy } from './oidc.strategy.js';

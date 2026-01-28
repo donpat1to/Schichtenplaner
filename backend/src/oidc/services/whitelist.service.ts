@@ -1,4 +1,4 @@
-// backend/src/auth/services/whitelist.service.ts
+// backend/src/oidc/services/whitelist.service.ts
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../../services/databaseService.js';
 

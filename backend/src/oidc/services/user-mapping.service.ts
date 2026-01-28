@@ -1,4 +1,4 @@
-// backend/src/auth/services/user-mapping.service.ts
+// backend/src/oidc/services/user-mapping.service.ts
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../../services/databaseService.js';
 import { IdpConfig } from '../config/idp.schema.js';

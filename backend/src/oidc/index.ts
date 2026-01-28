@@ -1,4 +1,4 @@
-// backend/src/auth/index.ts
+// backend/src/oidc/index.ts
 /**
  * External Authentication Module
  * Provides OIDC-based authentication with configurable Identity Providers

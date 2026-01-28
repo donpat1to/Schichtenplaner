@@ -1,4 +1,4 @@
-// backend/src/auth/strategies/oidc.strategy.ts
+// backend/src/oidc/strategies/oidc.strategy.ts
 import { Strategy as OpenIDConnectStrategy, VerifyCallback } from 'passport-openidconnect';
 import type { Request } from 'express';
 import { IdpConfig } from '../config/idp.schema.js';

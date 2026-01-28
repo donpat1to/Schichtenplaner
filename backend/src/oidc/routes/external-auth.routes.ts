@@ -1,4 +1,4 @@
-// backend/src/auth/routes/external-auth.routes.ts
+// backend/src/oidc/routes/external-auth.routes.ts
 import { Router, Request, Response, NextFunction } from 'express';
 import passport from 'passport';
 import { idpConfigManager } from '../config/idp.config.js';
