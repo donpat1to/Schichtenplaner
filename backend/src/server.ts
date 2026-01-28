@@ -6,7 +6,6 @@ import { initializeDatabase } from './scripts/initializeDatabase.js';
 import fs from 'fs';
 import helmet from 'helmet';
 import session from 'express-session';
-import passport from 'passport';
 import type { ViteDevServer } from 'vite';
 
 // Route imports
@@ -190,9 +189,6 @@ app.use(session({
   },
   name: 'oidc.session',
 }));
-
-// Initialize Passport
-app.use(passport.initialize());
 
 // Rate limiting - weniger restriktiv in Development
 if (process.env.NODE_ENV === 'production') {

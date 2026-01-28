@@ -14,7 +14,6 @@ interface PkceStateEntry {
 
 /**
  * In-memory store for PKCE state
- * In production, consider using Redis for distributed deployments
  */
 const stateStore = new Map<string, PkceStateEntry>();
 
@@ -28,17 +27,17 @@ const CLEANUP_INTERVAL = 5 * 60 * 1000;
 setInterval(() => {
   const now = Date.now();
   let cleaned = 0;
+  const sizeBefore = stateStore.size;
 
   for (const [key, value] of stateStore) {
     if (now - value.createdAt > STATE_TTL) {
+      console.log(`[PKCE] Cleanup: removing expired state ${key.substring(0, 8)}... for IDP "${value.idpId}" (age: ${Math.round((now - value.createdAt) / 1000)}s)`);
       stateStore.delete(key);
       cleaned++;
     }
   }
 
-  if (cleaned > 0) {
-    console.log(`[PKCE] Cleaned ${cleaned} expired state(s)`);
-  }
+  console.log(`[PKCE] Cleanup cycle complete (removed: ${cleaned}, before: ${sizeBefore}, after: ${stateStore.size})`);
 }, CLEANUP_INTERVAL);
 
 /**
@@ -73,6 +72,8 @@ export function generatePkceState(
     createdAt: Date.now(),
   });
 
+  console.log(`[PKCE] Generated state for IDP "${idpId}" (state: ${state.substring(0, 8)}..., returnUrl: ${returnUrl}, storeSize: ${stateStore.size})`);
+
   return { state, codeVerifier, codeChallenge, nonce };
 }
 
@@ -82,22 +83,28 @@ export function generatePkceState(
 export function validateAndConsumePkceState(
   state: string
 ): PkceStateEntry | null {
+  console.log(`[PKCE] Validating state: ${state.substring(0, 8)}... (storeSize: ${stateStore.size})`);
+
   const entry = stateStore.get(state);
 
   if (!entry) {
-    console.log('[PKCE] State not found:', state.substring(0, 8) + '...');
+    console.log(`[PKCE] State not found: ${state.substring(0, 8)}... (available keys: ${[...stateStore.keys()].map(k => k.substring(0, 8)).join(', ')})`);
     return null;
   }
 
+  const ageMs = Date.now() - entry.createdAt;
+
   // Check expiration
-  if (Date.now() - entry.createdAt > STATE_TTL) {
+  if (ageMs > STATE_TTL) {
     stateStore.delete(state);
-    console.log('[PKCE] State expired:', state.substring(0, 8) + '...');
+    console.log(`[PKCE] State expired: ${state.substring(0, 8)}... (age: ${Math.round(ageMs / 1000)}s, TTL: ${STATE_TTL / 1000}s)`);
     return null;
   }
 
   // Delete after validation (one-time use)
   stateStore.delete(state);
+
+  console.log(`[PKCE] State validated successfully for IDP "${entry.idpId}" (state: ${state.substring(0, 8)}..., age: ${Math.round(ageMs / 1000)}s, remainingStates: ${stateStore.size})`);
 
   return entry;
 }

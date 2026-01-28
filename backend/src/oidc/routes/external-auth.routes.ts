@@ -1,10 +1,9 @@
 // backend/src/oidc/routes/external-auth.routes.ts
-import { Router, Request, Response, NextFunction } from 'express';
-import passport from 'passport';
+import { Router, Request, Response } from 'express';
 import { idpConfigManager } from '../config/idp.config.js';
 import { strategyFactory } from '../strategies/strategy.factory.js';
 import { tokenService } from '../services/token.service.js';
-import { InternalUser } from '../services/user-mapping.service.js';
+import { buildAuthorizationUrl, handleCallback } from '../strategies/oidc-client.js';
 
 const router = Router();
 
@@ -33,12 +32,11 @@ router.get('/providers', (req: Request, res: Response) => {
  * GET /api/auth/external/:slug/login
  * Initiate OIDC login flow for a specific IdP
  */
-router.get('/:slug/login', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:slug/login', async (req: Request, res: Response) => {
   const { slug } = req.params;
   const returnUrl = (req.query.returnUrl as string) || process.env.FRONTEND_URL || 'http://localhost:3003';
 
   try {
-    // Verify IdP exists and is enabled (lookup by slug)
     const idp = idpConfigManager.getBySlug(slug);
     if (!idp || !idp.enabled) {
       return res.status(404).json({
@@ -46,25 +44,16 @@ router.get('/:slug/login', async (req: Request, res: Response, next: NextFunctio
       });
     }
 
-    // Ensure strategy is registered (using internal id)
-    if (!strategyFactory.isRegistered(idp.id)) {
-      await strategyFactory.registerStrategy(idp.id);
-    }
+    // Ensure IdP is discovered
+    await strategyFactory.ensureReady(idp.id);
 
-    // Store returnUrl in session for retrieval after callback
-    if (req.session) {
-      (req.session as any).pkce = {
-        returnUrl: returnUrl,
-      };
-      console.log(`[ExternalAuth] Stored returnUrl in session - sessionId: ${req.sessionID}`);
-    } else {
-      console.warn(`[ExternalAuth] No session available to store returnUrl!`);
-    }
+    console.log(`[ExternalAuth] Starting login for IdP: ${idp.name} (${slug}), returnUrl: ${returnUrl}`);
 
-    console.log(`[ExternalAuth] Starting login for IdP: ${idp.name} (${slug})`);
+    // Build authorization URL with PKCE
+    const { url } = await buildAuthorizationUrl(idp, returnUrl);
 
-    // Initiate Passport authentication - passport-openidconnect handles state internally
-    (passport.authenticate(strategyFactory.getStrategyName(idp.id)) as ReturnType<typeof passport.authenticate>)(req, res, next);
+    console.log(`[ExternalAuth] Redirecting to IdP authorization endpoint`);
+    res.redirect(url);
   } catch (error) {
     console.error(`[ExternalAuth] Login error for ${slug}:`, error);
     res.status(500).json({ error: 'Failed to initiate login' });
@@ -74,82 +63,57 @@ router.get('/:slug/login', async (req: Request, res: Response, next: NextFunctio
 /**
  * GET /api/auth/external/:slug/callback
  * OIDC callback handler
- * Note: passport-openidconnect handles state validation internally
  */
-router.get('/:slug/callback', (req: Request, res: Response, next: NextFunction) => {
+router.get('/:slug/callback', async (req: Request, res: Response) => {
   const { slug } = req.params;
   const { error, error_description } = req.query;
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3003';
 
   // Handle IdP errors
   if (error) {
     console.error(`[ExternalAuth] IdP error for ${slug}: ${error} - ${error_description}`);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3003';
     return res.redirect(
       `${frontendUrl}/login?error=${encodeURIComponent(error as string)}&error_description=${encodeURIComponent((error_description as string) || '')}`
     );
   }
 
-  // Verify IdP is still valid (lookup by slug)
+  // Verify IdP is still valid
   const idp = idpConfigManager.getBySlug(slug);
   if (!idp || !idp.enabled) {
     console.error(`[ExternalAuth] IdP ${slug} no longer available`);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3003';
     return res.redirect(`${frontendUrl}/login?error=provider_unavailable`);
   }
 
-  // Get returnUrl from session (stored during login initiation)
-  const sessionData = (req.session as any)?.pkce;
-  const returnUrl = sessionData?.returnUrl || process.env.FRONTEND_URL || 'http://localhost:3003';
+  console.log(`[ExternalAuth] Processing callback for ${slug}`);
+  console.log(`[ExternalAuth] Query params:`, Object.keys(req.query));
 
-  console.log(`[ExternalAuth] Processing callback for ${slug}, returnUrl: ${returnUrl}`);
-  console.log(`[ExternalAuth] Query params:`, req.query);
+  try {
+    // Build the full current URL from the request
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:3002';
+    const currentUrl = new URL(`${backendUrl}${req.originalUrl}`);
 
-  // Process authentication callback - passport handles state validation internally
-  const strategyName = strategyFactory.getStrategyName(idp.id);
-  console.log(`[ExternalAuth] Using strategy: ${strategyName}`);
+    const user = await handleCallback(idp, backendUrl, currentUrl);
 
-  passport.authenticate(
-    strategyName,
-    {
-      failureRedirect: `${process.env.FRONTEND_URL || 'http://localhost:3003'}/login?error=auth_failed`,
-      session: false, // We use JWT, not sessions
-    } as passport.AuthenticateOptions,
-    (err: Error | null, user: InternalUser | false, info: unknown) => {
-      console.log(`[ExternalAuth] Passport callback - err: ${err}, user: ${!!user}, info:`, info);
-      // Clear session PKCE data after use
-      if (req.session && (req.session as any).pkce) {
-        delete (req.session as any).pkce;
-      }
+    // Generate JWT tokens
+    const tokens = tokenService.generateTokenPair(user);
 
-      if (err) {
-        console.error(`[ExternalAuth] Callback error for ${slug}:`, err);
-        return res.redirect(
-          `${process.env.FRONTEND_URL || 'http://localhost:3003'}/login?error=auth_error&message=${encodeURIComponent(err.message)}`
-        );
-      }
+    console.log(`[ExternalAuth] Login successful for ${user.email} via ${slug}`);
 
-      if (!user) {
-        console.error(`[ExternalAuth] No user returned for ${slug}`);
-        return res.redirect(
-          `${process.env.FRONTEND_URL || 'http://localhost:3003'}/login?error=no_user`
-        );
-      }
+    // Redirect to frontend with tokens
+    const redirectUrl = new URL(frontendUrl);
+    redirectUrl.searchParams.set('token', tokens.accessToken);
+    redirectUrl.searchParams.set('refresh_token', tokens.refreshToken);
+    redirectUrl.searchParams.set('expires_in', tokens.expiresIn.toString());
+    redirectUrl.searchParams.set('provider', slug);
 
-      // Generate JWT tokens
-      const tokens = tokenService.generateTokenPair(user);
-
-      console.log(`[ExternalAuth] Login successful for ${user.email} via ${slug}`);
-
-      // Redirect to frontend with tokens
-      const redirectUrl = new URL(returnUrl);
-      redirectUrl.searchParams.set('token', tokens.accessToken);
-      redirectUrl.searchParams.set('refresh_token', tokens.refreshToken);
-      redirectUrl.searchParams.set('expires_in', tokens.expiresIn.toString());
-      redirectUrl.searchParams.set('provider', slug);
-
-      res.redirect(redirectUrl.toString());
-    }
-  )(req, res, next);
+    res.redirect(redirectUrl.toString());
+  } catch (err) {
+    console.error(`[ExternalAuth] Callback error for ${slug}:`, err);
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    res.redirect(
+      `${frontendUrl}/login?error=auth_error&message=${encodeURIComponent(message)}`
+    );
+  }
 });
 
 /**
@@ -164,11 +128,8 @@ router.post('/refresh', async (req: Request, res: Response) => {
   }
 
   try {
-    // Verify refresh token
     const payload = tokenService.verifyRefreshToken(refreshToken);
 
-    // TODO: Look up user from database and generate new tokens
-    // For now, return error indicating implementation needed
     return res.status(501).json({
       error: 'Token refresh not fully implemented',
       message: 'Please implement user lookup from payload.sub',

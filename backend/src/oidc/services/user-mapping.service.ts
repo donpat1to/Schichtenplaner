@@ -2,7 +2,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../../services/databaseService.js';
 import { IdpConfig } from '../config/idp.schema.js';
-import { OidcProfile } from '../strategies/oidc.strategy.js';
+import { OidcProfile } from '../strategies/oidc-client.js';
 import { whitelistService } from './whitelist.service.js';
 
 /**

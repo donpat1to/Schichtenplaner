@@ -1,18 +1,17 @@
 // backend/src/oidc/strategies/strategy.factory.ts
-import passport from 'passport';
 import { idpConfigManager } from '../config/idp.config.js';
-import { createOidcStrategy } from './oidc.strategy.js';
+import { discoverAndConfigure, clearConfigCache } from './oidc-client.js';
 
 /**
- * Factory for managing Passport authentication strategies
- * Dynamically registers and unregisters OIDC strategies based on IdP configuration
+ * Factory for managing OIDC client configurations
+ * Discovers and caches openid-client configurations per IdP
  */
 class StrategyFactory {
-  private registeredStrategies: Set<string> = new Set();
+  private discoveredIdps: Set<string> = new Set();
   private initialized = false;
 
   /**
-   * Initialize all strategies from loaded IdP configurations
+   * Initialize all IdP configurations via OIDC discovery
    */
   async initializeAll(): Promise<void> {
     if (this.initialized) {
@@ -22,19 +21,28 @@ class StrategyFactory {
     const idps = idpConfigManager.getAll();
 
     for (const idp of idps) {
-      await this.registerStrategy(idp.id);
+      if (!idp.enabled) {
+        console.log(`[StrategyFactory] IdP '${idp.id}' is disabled, skipping`);
+        continue;
+      }
+      try {
+        await discoverAndConfigure(idp);
+        this.discoveredIdps.add(idp.id);
+        console.log(`[StrategyFactory] Discovered IdP: ${idp.id} (${idp.name})`);
+      } catch (err) {
+        console.error(`[StrategyFactory] Discovery failed for IdP '${idp.id}':`, err);
+      }
     }
 
     this.initialized = true;
-    console.log(`[StrategyFactory] Initialized ${this.registeredStrategies.size} strategy(ies)`);
+    console.log(`[StrategyFactory] Initialized ${this.discoveredIdps.size} IdP(s)`);
   }
 
   /**
-   * Register a Passport strategy for a specific IdP
+   * Ensure an IdP is discovered and ready
    */
-  async registerStrategy(idpId: string): Promise<void> {
-    if (this.registeredStrategies.has(idpId)) {
-      console.log(`[StrategyFactory] Strategy already registered: oidc-${idpId}`);
+  async ensureReady(idpId: string): Promise<void> {
+    if (this.discoveredIdps.has(idpId)) {
       return;
     }
 
@@ -42,71 +50,57 @@ class StrategyFactory {
     if (!idp) {
       throw new Error(`IdP '${idpId}' not found in configuration`);
     }
-
     if (!idp.enabled) {
-      console.log(`[StrategyFactory] IdP '${idpId}' is disabled, skipping`);
-      return;
+      throw new Error(`IdP '${idpId}' is disabled`);
     }
 
-    // Create and register the strategy
-    const strategy = createOidcStrategy(idp);
-    passport.use(`oidc-${idp.id}`, strategy);
-
-    this.registeredStrategies.add(idpId);
-    console.log(`[StrategyFactory] Registered strategy: oidc-${idp.id} (${idp.name})`);
+    await discoverAndConfigure(idp);
+    this.discoveredIdps.add(idpId);
   }
 
   /**
-   * Unregister a Passport strategy
+   * Register (discover) an IdP by ID — compatibility alias for ensureReady
+   */
+  async registerStrategy(idpId: string): Promise<void> {
+    await this.ensureReady(idpId);
+  }
+
+  /**
+   * Unregister (remove cached config) for an IdP
    */
   unregisterStrategy(idpId: string): void {
-    if (!this.registeredStrategies.has(idpId)) {
-      return;
-    }
-
-    passport.unuse(`oidc-${idpId}`);
-    this.registeredStrategies.delete(idpId);
-    console.log(`[StrategyFactory] Unregistered strategy: oidc-${idpId}`);
+    this.discoveredIdps.delete(idpId);
+    // Config cache is cleared on full reload; individual removal not needed
+    console.log(`[StrategyFactory] Unregistered IdP: ${idpId}`);
   }
 
   /**
-   * Check if a strategy is registered
+   * Check if an IdP has been discovered
    */
   isRegistered(idpId: string): boolean {
-    return this.registeredStrategies.has(idpId);
+    return this.discoveredIdps.has(idpId);
   }
 
   /**
-   * Get all registered strategy IDs
+   * Get all discovered IdP IDs
    */
   getRegisteredStrategies(): string[] {
-    return Array.from(this.registeredStrategies);
+    return Array.from(this.discoveredIdps);
   }
 
   /**
-   * Reload all strategies (useful for hot-reload)
+   * Reload all IdP configurations
    */
   async reloadAll(): Promise<void> {
-    // Unregister all existing strategies
-    for (const idpId of this.registeredStrategies) {
-      this.unregisterStrategy(idpId);
-    }
+    this.discoveredIdps.clear();
+    clearConfigCache();
 
-    // Reload IdP configurations
     await idpConfigManager.reload();
 
-    // Re-register strategies
     this.initialized = false;
     await this.initializeAll();
 
-    console.log('[StrategyFactory] Reloaded all strategies');
-  }
-
-  /**
-   * Get the Passport strategy name for an IdP
-   */
-  getStrategyName(idpId: string): string {
-    return `oidc-${idpId}`;
+    console.log('[StrategyFactory] Reloaded all IdP configurations');
   }
 }
 

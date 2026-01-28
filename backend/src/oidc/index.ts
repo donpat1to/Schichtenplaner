@@ -11,6 +11,9 @@ export { type IdpConfig, IdpConfigSchema, IdpConfigArraySchema } from './config/
 // Strategies
 export { strategyFactory } from './strategies/strategy.factory.js';
 
+// OIDC Client
+export { type OidcProfile } from './strategies/oidc-client.js';
+
 // Services
 export { tokenService, type TokenPayload, type TokenPair } from './services/token.service.js';
 export { userMappingService, type InternalUser, type MappingInput } from './services/user-mapping.service.js';
@@ -30,7 +33,6 @@ export { default as idpAdminRoutes } from './routes/idp-admin.routes.js';
 export { default as whitelistAdminRoutes } from './routes/whitelist-admin.routes.js';
 
 // Initialize function
-import passport from 'passport';
 import { idpConfigManager } from './config/idp.config.js';
 import { strategyFactory } from './strategies/strategy.factory.js';
 
@@ -44,17 +46,8 @@ export async function initializeExternalAuth(): Promise<void> {
   // Load IdP configurations
   await idpConfigManager.initialize();
 
-  // Initialize Passport strategies
+  // Discover OIDC configurations for all IdPs
   await strategyFactory.initializeAll();
-
-  // Configure Passport serialization (not used with JWT, but required)
-  passport.serializeUser((user, done) => {
-    done(null, user);
-  });
-
-  passport.deserializeUser((user, done) => {
-    done(null, user as Express.User);
-  });
 
   const providers = idpConfigManager.getAll();
   console.log(`[ExternalAuth] Initialized with ${providers.length} provider(s)`);
