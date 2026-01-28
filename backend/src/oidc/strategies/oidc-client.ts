@@ -37,8 +37,17 @@ export async function discoverAndConfigure(idp: IdpConfig): Promise<client.Confi
   console.log(`[OIDC] Discovering issuer for "${idp.name}": ${idp.issuer}`);
 
   const issuerUrl = new URL(idp.issuer);
-  const config = await client.discovery(issuerUrl, idp.clientId.trim(), idp.clientSecret.trim(), undefined, {
-    execute: [client.allowInsecureRequests],
+  const clientSecret = idp.clientSecret.trim();
+
+  // For confidential clients (with a secret), use client_secret_basic authentication
+  // (HTTP Basic auth with client_id:client_secret in Authorization header)
+  const clientAuth = clientSecret ? client.ClientSecretBasic(clientSecret) : client.None();
+
+  const executeOptions: ((config: client.Configuration) => void)[] = [];
+
+  // Third parameter is clientMetadata (not clientSecret!) - secret is passed via clientAuth
+  const config = await client.discovery(issuerUrl, idp.clientId.trim(), undefined, clientAuth, {
+    execute: executeOptions,
   });
 
   console.log(`[OIDC] Discovery complete for "${idp.name}" (${idp.id})`);

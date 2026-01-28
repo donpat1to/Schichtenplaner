@@ -220,7 +220,7 @@ const Login: React.FC = () => {
               paddingRight: '40px',
               boxSizing: 'border-box' as const,
             }}
-            placeholder="benutzername oder email@example.com"
+            placeholder="Benutzername / Email"
           />
         </div>
 
