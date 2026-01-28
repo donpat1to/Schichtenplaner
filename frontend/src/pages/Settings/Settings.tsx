@@ -101,10 +101,15 @@ const Settings: React.FC = () => {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  // Client Secret visibility states
+  const [showClientSecret, setShowClientSecret] = useState(false);
+
   // Refs for timeout management
   const currentPasswordTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const newPasswordTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const confirmPasswordTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const clientSecretTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
 
   useEffect(() => {
     if (currentUser) {
@@ -120,6 +125,16 @@ const Settings: React.FC = () => {
   useEffect(() => {
     return () => {
       [currentPasswordTimeoutRef, newPasswordTimeoutRef, confirmPasswordTimeoutRef].forEach(ref => {
+        if (ref.current) {
+          clearTimeout(ref.current);
+        }
+      });
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      [currentPasswordTimeoutRef, newPasswordTimeoutRef, confirmPasswordTimeoutRef, clientSecretTimeoutRef].forEach(ref => {
         if (ref.current) {
           clearTimeout(ref.current);
         }
@@ -184,6 +199,21 @@ const Settings: React.FC = () => {
       confirmPasswordTimeoutRef.current = null;
     }
     setShowConfirmPassword(false);
+  };
+
+  // Client Secret Visible handling
+  const handleClientSecretMouseDown = () => {
+    clientSecretTimeoutRef.current = setTimeout(() => {
+      setShowClientSecret(true);
+    }, 300);
+  };
+
+  const handleClientSecretMouseUp = () => {
+    if (clientSecretTimeoutRef.current) {
+      clearTimeout(clientSecretTimeoutRef.current);
+      clientSecretTimeoutRef.current = null;
+    }
+    setShowClientSecret(false);
   };
 
   // Touch event handlers
@@ -1511,8 +1541,11 @@ const Settings: React.FC = () => {
                             </div>
                           </div>
                         )}
-
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                        <div style={{
+                          marginBottom: '0px', display: 'flex',
+                          flexDirection: 'column' as const,
+                          width: '100%',
+                        }}>
                           <div style={styles.field}>
                             <label style={styles.fieldLabel}>Client ID *</label>
                             <input
@@ -1525,10 +1558,15 @@ const Settings: React.FC = () => {
                               required
                             />
                           </div>
+                        </div>
+                        <div style={{
+                          position: 'relative' as const,
+                          width: '100%',
+                        }}>
                           <div style={styles.field}>
                             <label style={styles.fieldLabel}>Client Secret *</label>
                             <input
-                              type="password"
+                              type={showClientSecret ? 'text' : 'password'}
                               name="clientSecret"
                               value={idpForm.clientSecret}
                               onChange={handleIdpFormChange}
@@ -1536,6 +1574,34 @@ const Settings: React.FC = () => {
                               style={styles.fieldInput}
                               required
                             />
+                            <button
+                              type="button"
+                              onMouseDown={handleClientSecretMouseDown}
+                              onMouseUp={handleClientSecretMouseUp}
+                              onMouseLeave={handleClientSecretMouseUp}
+                              onTouchStart={handleTouchStart(handleClientSecretMouseDown)}
+                              onTouchEnd={handleTouchEnd(handleClientSecretMouseUp)}
+                              onTouchCancel={handleTouchEnd(handleClientSecretMouseUp)}
+                              onContextMenu={handleContextMenu}
+                              style={{
+                                position: 'absolute' as const,
+                                right: '10px',
+                                top: '50%',
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: '5px',
+                                borderRadius: '4px',
+                                transition: 'background-color 0.2s',
+                                userSelect: 'none' as const,
+                                WebkitUserSelect: 'none' as const,
+                                touchAction: 'manipulation' as const,
+                                backgroundColor: showClientSecret ? '#e0e0e0' : 'transparent',
+                              }}
+                              title="Gedrückt halten zum Anzeigen des Passworts"
+                            >
+                              {showClientSecret ? '👁' : '👁'}
+                            </button>
                           </div>
                         </div>
                       </div>
