@@ -1,4 +1,4 @@
-// backend/src/auth/routes/whitelist-admin.routes.ts
+// backend/src/oidc/routes/whitelist-admin.routes.ts
 /**
  * Admin routes for managing IDP user whitelist
  * Requires admin or maintenance role

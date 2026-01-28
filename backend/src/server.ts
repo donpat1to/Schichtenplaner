@@ -23,7 +23,7 @@ import {
   expensiveEndpointLimiter
 } from './middleware/rateLimit.js';
 import { ipSecurityCheck as authIpCheck } from './middleware/auth.js';
-import { externalAuthRoutes, idpAdminRoutes, whitelistAdminRoutes, initializeExternalAuth } from './auth/index.js';
+import { externalAuthRoutes, idpAdminRoutes, whitelistAdminRoutes, initializeExternalAuth } from './oidc/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

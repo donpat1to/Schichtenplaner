@@ -1,4 +1,4 @@
-// backend/src/auth/config/idp.config.ts
+// backend/src/oidc/config/idp.config.ts
 import { db } from '../../services/databaseService.js';
 import {
   IdpConfig,

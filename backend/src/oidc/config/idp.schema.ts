@@ -1,4 +1,4 @@
-// backend/src/auth/config/idp.schema.ts
+// backend/src/oidc/config/idp.schema.ts
 import { z } from 'zod';
 
 /**

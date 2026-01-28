@@ -1,4 +1,4 @@
-// backend/src/auth/middleware/pkce.middleware.ts
+// backend/src/oidc/middleware/pkce.middleware.ts
 import crypto from 'crypto';
 
 /**

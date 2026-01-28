@@ -1,4 +1,4 @@
-// backend/src/auth/routes/idp-admin.routes.ts
+// backend/src/oidc/routes/idp-admin.routes.ts
 /**
  * Admin routes for managing Identity Providers
  * Requires admin or maintenance role

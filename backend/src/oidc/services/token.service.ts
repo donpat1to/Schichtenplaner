@@ -1,4 +1,4 @@
-// backend/src/auth/services/token.service.ts
+// backend/src/oidc/services/token.service.ts
 import jwt from 'jsonwebtoken';
 import { InternalUser } from './user-mapping.service.js';
 
