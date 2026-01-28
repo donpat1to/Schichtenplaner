@@ -61,14 +61,18 @@ export async function buildAuthorizationUrl(
 
   const callbackURL = `${process.env.BACKEND_URL || 'http://localhost:3002'}/api/auth/external/${idp.slug}/callback`;
 
-  // Generate PKCE state, code verifier, code challenge, nonce
-  const pkce = generatePkceState(idp.id, returnUrl);
+  // Generate PKCE state, code verifier, code challenge, nonce (PKCE conditional on idp.pkce)
+  const pkceEnabled = idp.pkce !== false;
+  const pkce = generatePkceState(idp.id, returnUrl, pkceEnabled);
 
   console.log(`[OIDC] Building authorization URL for "${idp.name}"`);
   console.log(`[OIDC]   Callback URL: ${callbackURL}`);
   console.log(`[OIDC]   State: ${pkce.state.substring(0, 8)}...`);
   console.log(`[OIDC]   Nonce: ${pkce.nonce.substring(0, 8)}...`);
-  console.log(`[OIDC]   PKCE code_challenge: ${pkce.codeChallenge.substring(0, 16)}...`);
+  console.log(`[OIDC]   PKCE enabled: ${pkceEnabled}`);
+  if (pkceEnabled) {
+    console.log(`[OIDC]   PKCE code_challenge: ${pkce.codeChallenge.substring(0, 16)}...`);
+  }
 
   const scopes = [...new Set(idp.scope)].join(' ');
 
@@ -77,9 +81,13 @@ export async function buildAuthorizationUrl(
     scope: scopes,
     state: pkce.state,
     nonce: pkce.nonce,
-    code_challenge: pkce.codeChallenge,
-    code_challenge_method: 'S256',
   };
+
+  // Only include PKCE parameters if enabled
+  if (pkceEnabled) {
+    parameters.code_challenge = pkce.codeChallenge;
+    parameters.code_challenge_method = 'S256';
+  }
 
   const redirectTo = client.buildAuthorizationUrl(config, parameters);
 
@@ -116,8 +124,13 @@ export async function handleCallback(
     throw new Error(`PKCE state IdP mismatch: expected ${idp.id}, got ${pkceEntry.idpId}`);
   }
 
+  const pkceEnabled = pkceEntry.codeVerifier !== '';
+
   console.log(`[OIDC] PKCE state validated for "${idp.name}"`);
-  console.log(`[OIDC]   Code verifier: ${pkceEntry.codeVerifier.substring(0, 8)}...`);
+  console.log(`[OIDC]   PKCE enabled: ${pkceEnabled}`);
+  if (pkceEnabled) {
+    console.log(`[OIDC]   Code verifier: ${pkceEntry.codeVerifier.substring(0, 8)}...`);
+  }
   console.log(`[OIDC]   Return URL: ${pkceEntry.returnUrl}`);
 
   const config = await discoverAndConfigure(idp);
@@ -126,15 +139,21 @@ export async function handleCallback(
 
   console.log(`[OIDC] Exchanging code for tokens...`);
 
-  // Exchange code for tokens using the code_verifier for PKCE
+  // Build token exchange options (include PKCE code verifier only if enabled)
+  const tokenOptions: Parameters<typeof client.authorizationCodeGrant>[2] = {
+    expectedNonce: pkceEntry.nonce,
+    expectedState: state,
+    idTokenExpected: true,
+  };
+
+  if (pkceEnabled) {
+    tokenOptions.pkceCodeVerifier = pkceEntry.codeVerifier;
+  }
+
+  // Exchange code for tokens
   let tokenResponse: Awaited<ReturnType<typeof client.authorizationCodeGrant>>;
   try {
-    tokenResponse = await client.authorizationCodeGrant(config, currentUrl, {
-      pkceCodeVerifier: pkceEntry.codeVerifier,
-      expectedNonce: pkceEntry.nonce,
-      expectedState: state,
-      idTokenExpected: true,
-    });
+    tokenResponse = await client.authorizationCodeGrant(config, currentUrl, tokenOptions);
   } catch (err) {
     console.error(`[OIDC] Token exchange failed for "${idp.name}":`, err);
     throw err;

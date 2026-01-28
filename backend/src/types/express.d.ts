@@ -1,11 +1,9 @@
 // backend/src/types/express.d.ts
-/**
- * Express type extensions to support both Passport and custom JWT auth
- */
-
-// Extend Express.User to include our custom auth properties
 declare global {
   namespace Express {
+    interface Request {
+      user?: User;
+    }
     interface User {
       // Properties used by JWT auth middleware
       userId: string;
@@ -37,4 +35,4 @@ declare module 'express-session' {
   }
 }
 
-export {};
+export { };

@@ -42,26 +42,39 @@ setInterval(() => {
 
 /**
  * Generate PKCE state, code verifier, and code challenge
+ * @param idpId - The IdP identifier
+ * @param returnUrl - The URL to return to after authentication
+ * @param pkceEnabled - Whether PKCE is enabled for this IdP (default: true)
  */
 export function generatePkceState(
   idpId: string,
-  returnUrl: string
+  returnUrl: string,
+  pkceEnabled: boolean = true
 ): {
   state: string;
   codeVerifier: string;
   codeChallenge: string;
   nonce: string;
 } {
-  // Generate cryptographically secure random values
+  // Generate cryptographically secure random values for state and nonce (always needed)
   const state = crypto.randomBytes(32).toString('hex');
-  const codeVerifier = crypto.randomBytes(32).toString('base64url');
   const nonce = crypto.randomBytes(16).toString('hex');
 
-  // Generate code challenge using S256 method
-  const codeChallenge = crypto
-    .createHash('sha256')
-    .update(codeVerifier)
-    .digest('base64url');
+  let codeVerifier: string;
+  let codeChallenge: string;
+
+  if (pkceEnabled) {
+    // Generate PKCE code verifier and challenge
+    codeVerifier = crypto.randomBytes(32).toString('base64url');
+    codeChallenge = crypto
+      .createHash('sha256')
+      .update(codeVerifier)
+      .digest('base64url');
+  } else {
+    // PKCE disabled - use empty strings (state/nonce still provide CSRF/replay protection)
+    codeVerifier = '';
+    codeChallenge = '';
+  }
 
   // Store state with associated data
   stateStore.set(state, {
@@ -72,7 +85,7 @@ export function generatePkceState(
     createdAt: Date.now(),
   });
 
-  console.log(`[PKCE] Generated state for IDP "${idpId}" (state: ${state.substring(0, 8)}..., returnUrl: ${returnUrl}, storeSize: ${stateStore.size})`);
+  console.log(`[PKCE] Generated state for IDP "${idpId}" (state: ${state.substring(0, 8)}..., pkceEnabled: ${pkceEnabled}, returnUrl: ${returnUrl}, storeSize: ${stateStore.size})`);
 
   return { state, codeVerifier, codeChallenge, nonce };
 }
