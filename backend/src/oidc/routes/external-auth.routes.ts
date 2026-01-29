@@ -4,7 +4,6 @@ import { idpConfigManager } from '../config/idp.config.js';
 import { strategyFactory } from '../strategies/strategy.factory.js';
 import { tokenService } from '../services/token.service.js';
 import { buildAuthorizationUrl, handleCallback } from '../strategies/oidc-client.js';
-import { whitelistService } from '../services/whitelist.service.js';
 
 const router = Router();
 

@@ -76,7 +76,7 @@ const Settings: React.FC = () => {
   const [whitelistEntries, setWhitelistEntries] = useState<WhitelistEntry[]>([]);
   const [loadingWhitelist, setLoadingWhitelist] = useState(false);
   const [whitelistForm, setWhitelistForm] = useState<CreateWhitelistEntryRequest>({
-    identifierType: 'email',
+    identifierType: 'username',
     identifierValue: '',
     defaultRole: 'user',
     notes: '',
@@ -397,7 +397,7 @@ const Settings: React.FC = () => {
     setSlugTouched(false);
     setWhitelistEntries([]);
     setWhitelistForm({
-      identifierType: 'email',
+      identifierType: 'username',
       identifierValue: '',
       defaultRole: 'user',
       notes: '',
@@ -635,7 +635,7 @@ const Settings: React.FC = () => {
 
       // Reset form
       setWhitelistForm({
-        identifierType: 'email',
+        identifierType: 'username',
         identifierValue: '',
         defaultRole: 'user',
         notes: '',
@@ -706,6 +706,33 @@ const Settings: React.FC = () => {
     } else {
       setIdpForm(prev => ({ ...prev, [name]: value }));
     }
+  };
+
+  const idpWhitelistPlaceholders: Record<'username' | 'email' | 'subject', string> = {
+    username: 'username123',
+    email: 'user@example.com',
+    subject: 'subject-id-123',
+  };
+
+  const idPWhitelistIdentifierTypeConfig: Record<
+    'username' | 'email' | 'subject',
+    { label: string; bg: string; color: string }
+  > = {
+    username: {
+      label: 'Username',
+      bg: '#e8f5e9',
+      color: '#2e7d32',
+    },
+    email: {
+      label: 'E-Mail',
+      bg: '#e3f2fd',
+      color: '#1565c0',
+    },
+    subject: {
+      label: 'Subject',
+      bg: '#f3e5f5',
+      color: '#7b1fa2',
+    },
   };
 
   // Clear validation errors when switching tabs
@@ -1772,10 +1799,11 @@ const Settings: React.FC = () => {
                                 value={whitelistForm.identifierType}
                                 onChange={(e) => setWhitelistForm(prev => ({
                                   ...prev,
-                                  identifierType: e.target.value as 'email' | 'subject'
+                                  identifierType: e.target.value as 'username' | 'email' | 'subject'
                                 }))}
                                 style={{ ...styles.fieldSelect, padding: '0.5rem' }}
                               >
+                                <option value="username">Username</option>
                                 <option value="email">E-Mail</option>
                                 <option value="subject">Subject ID</option>
                               </select>
@@ -1789,7 +1817,7 @@ const Settings: React.FC = () => {
                                   ...prev,
                                   identifierValue: e.target.value
                                 }))}
-                                placeholder={whitelistForm.identifierType === 'email' ? 'user@example.com' : 'subject-id-123'}
+                                placeholder={idpWhitelistPlaceholders[whitelistForm.identifierType]}
                                 style={{ ...styles.fieldInput, padding: '0.5rem' }}
                               />
                             </div>
@@ -1856,17 +1884,19 @@ const Settings: React.FC = () => {
                                 </thead>
                                 <tbody>
                                   {whitelistEntries.map((entry) => (
-                                    <tr key={entry.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                                    < tr key={entry.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
                                       <td style={{ padding: '0.5rem' }}>
-                                        <span style={{
-                                          background: entry.identifierType === 'email' ? '#e3f2fd' : '#f3e5f5',
-                                          color: entry.identifierType === 'email' ? '#1565c0' : '#7b1fa2',
-                                          padding: '2px 8px',
-                                          borderRadius: '4px',
-                                          fontSize: '0.75rem',
-                                          fontWeight: 500
-                                        }}>
-                                          {entry.identifierType === 'email' ? 'E-Mail' : 'Subject'}
+                                        <span
+                                          style={{
+                                            background: idPWhitelistIdentifierTypeConfig[entry.identifierType].bg,
+                                            color: idPWhitelistIdentifierTypeConfig[entry.identifierType].color,
+                                            padding: '2px 8px',
+                                            borderRadius: '4px',
+                                            fontSize: '0.75rem',
+                                            fontWeight: 500,
+                                          }}
+                                        >
+                                          {idPWhitelistIdentifierTypeConfig[entry.identifierType].label}
                                         </span>
                                       </td>
                                       <td style={{ padding: '0.5rem', fontFamily: 'monospace' }}>{entry.identifierValue}</td>
@@ -2061,9 +2091,10 @@ const Settings: React.FC = () => {
               </div>
             )}
           </>
-        )}
-      </div>
-    </div>
+        )
+        }
+      </div >
+    </div >
   );
 };
 

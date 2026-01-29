@@ -58,7 +58,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       const {
         title,
         message,
-        confirmText = 'OK',
+        confirmText = 'Ok',
         cancelText = 'Abbrechen',
         type = 'warning'
       } = options;

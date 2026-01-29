@@ -62,7 +62,7 @@ router.post('/:idpId/whitelist', async (req: Request, res: Response) => {
     }
 
     // Validate identifier type
-    if (!['email', 'subject'].includes(identifierType)) {
+    if (!['username', 'email', 'subject'].includes(identifierType)) {
       return res.status(400).json({
         error: 'Invalid identifier type',
         validationErrors: [
@@ -125,7 +125,7 @@ router.put('/:idpId/whitelist/:entryId', async (req: Request, res: Response) => 
     }
 
     // Validate identifier type if provided
-    if (identifierType && !['email', 'subject'].includes(identifierType)) {
+    if (identifierType && !['username', 'email', 'subject'].includes(identifierType)) {
       return res.status(400).json({
         error: 'Invalid identifier type',
         validationErrors: [

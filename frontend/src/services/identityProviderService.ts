@@ -83,7 +83,7 @@ export interface TestConnectionResult {
 export interface WhitelistEntry {
   id: string;
   idpId: string;
-  identifierType: 'email' | 'subject';
+  identifierType: 'username' | 'email' | 'subject';
   identifierValue: string;
   defaultRole: string;
   notes: string | null;
@@ -95,7 +95,7 @@ export interface WhitelistEntry {
  * Create whitelist entry request
  */
 export interface CreateWhitelistEntryRequest {
-  identifierType: 'email' | 'subject';
+  identifierType: 'username' | 'email' | 'subject';
   identifierValue: string;
   defaultRole?: string;
   notes?: string;
@@ -105,7 +105,7 @@ export interface CreateWhitelistEntryRequest {
  * Update whitelist entry request
  */
 export interface UpdateWhitelistEntryRequest {
-  identifierType?: 'email' | 'subject';
+  identifierType?: 'username' | 'email' | 'subject';
   identifierValue?: string;
   defaultRole?: string;
   notes?: string;
