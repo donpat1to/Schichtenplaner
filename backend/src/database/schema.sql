@@ -273,7 +273,7 @@ CREATE TABLE IF NOT EXISTS employee_identities (
 CREATE TABLE IF NOT EXISTS idp_user_whitelist (
   id TEXT PRIMARY KEY,
   idp_id TEXT NOT NULL REFERENCES identity_providers(id) ON DELETE CASCADE,
-  identifier_type TEXT NOT NULL CHECK(identifier_type IN ('email', 'subject')),
+  identifier_type TEXT NOT NULL CHECK(identifier_type IN ('username', 'email', 'subject')),
   identifier_value TEXT NOT NULL,
   default_role TEXT DEFAULT 'user',
   notes TEXT,

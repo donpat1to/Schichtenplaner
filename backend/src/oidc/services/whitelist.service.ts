@@ -8,7 +8,7 @@ import { db } from '../../services/databaseService.js';
 export interface WhitelistEntry {
   id: string;
   idpId: string;
-  identifierType: 'email' | 'subject';
+  identifierType: 'username' | 'email' | 'subject';
   identifierValue: string;
   defaultRole: string;
   notes: string | null;
@@ -22,7 +22,7 @@ export interface WhitelistEntry {
 interface WhitelistDbRow {
   id: string;
   idp_id: string;
-  identifier_type: 'email' | 'subject';
+  identifier_type: 'username' | 'email' | 'subject';
   identifier_value: string;
   default_role: string;
   notes: string | null;
@@ -35,7 +35,7 @@ interface WhitelistDbRow {
  */
 export interface CreateWhitelistEntry {
   idpId: string;
-  identifierType: 'email' | 'subject';
+  identifierType: 'username' | 'email' | 'subject';
   identifierValue: string;
   defaultRole?: string;
   notes?: string;
@@ -46,7 +46,7 @@ export interface CreateWhitelistEntry {
  * Input for updating a whitelist entry
  */
 export interface UpdateWhitelistEntry {
-  identifierType?: 'email' | 'subject';
+  identifierType?: 'username' | 'email' | 'subject';
   identifierValue?: string;
   defaultRole?: string;
   notes?: string;
@@ -88,11 +88,17 @@ class WhitelistService {
   async isAllowed(
     idpId: string,
     email: string | null,
-    subject: string | null
+    subject: string | null,
+    username: string | null
   ): Promise<WhitelistCheckResult> {
     // Build query to check both email and subject
     const conditions: string[] = [];
     const params: string[] = [idpId];
+
+    if (username) {
+      conditions.push("(identifier_type = 'username' AND LOWER(identifier_value) = LOWER(?))");
+      params.push(username);
+    }
 
     if (email) {
       conditions.push("(identifier_type = 'email' AND LOWER(identifier_value) = LOWER(?))");
