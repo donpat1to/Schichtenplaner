@@ -233,6 +233,121 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
     });
   });
 
+  // 9. DAY STAFFING BALANCE SOFT CONSTRAINT
+  console.log('\n📅 ADDING DAY STAFFING BALANCE SOFT CONSTRAINT');
+
+  // Group shifts by date
+  //const shiftsByDate = groupShiftsByDate(data.shifts);
+  const days = Object.keys(shiftsByDate);
+
+  if (days.length > 1) { // Only apply if we have multiple days
+    // Count managers already assigned per day (hard constraints)
+    const managers = data.employees.filter(emp =>
+      emp.isActive && emp.employeeType === 'manager'
+    );
+
+    const managersPerDay: Record<string, number> = {};
+    days.forEach(date => {
+      const dayShifts = shiftsByDate[date];
+      let managerCount = 0;
+
+      dayShifts.forEach(shift => {
+        // Count managers who have this shift as preferred (preferenceLevel = 1)
+        const managerPreferences = data.availabilities.filter(avail =>
+          managers.some(m => m.id === avail.employeeId) &&
+          avail.shiftId === shift.id &&
+          avail.preferenceLevel === 1
+        );
+        managerCount += managerPreferences.length;
+      });
+
+      managersPerDay[date] = managerCount;
+    });
+
+    console.log(`Managers already assigned per day:`, managersPerDay);
+
+    // Calculate ideal personnel distribution
+    const totalRequiredPersonnel = data.shifts.reduce((sum, shift) =>
+      sum + (shift.requiredEmployees || 1), 0
+    );
+
+    const totalManagersAssigned = Object.values(managersPerDay).reduce((a, b) => a + b, 0);
+    const personnelNeeded = totalRequiredPersonnel - totalManagersAssigned;
+
+    if (personnelNeeded > 0) {
+      const idealPersonnelPerDay = personnelNeeded / days.length;
+      const tolerance = idealPersonnelPerDay * 0.2; // 20% tolerance
+
+      console.log(`Ideal personnel per day: ${idealPersonnelPerDay.toFixed(1)} ±${tolerance.toFixed(1)}`);
+
+      // Create variables and penalties for day staffing
+      days.forEach(date => {
+        const dayShifts = shiftsByDate[date];
+        const managerCount = managersPerDay[date] || 0;
+
+        // Create expression for total personnel on this day
+        let dayPersonnelExpression = '';
+
+        schedulableEmployees.forEach(employee => {
+          dayShifts.forEach(shift => {
+            const varName = `assign_${employee.id}_${shift.id}`;
+
+            if (dayPersonnelExpression) {
+              dayPersonnelExpression += ` + ${varName}`;
+            } else {
+              dayPersonnelExpression = varName;
+            }
+          });
+        });
+
+        if (dayPersonnelExpression) {
+          // We want: total personnel for day ≈ (idealPersonnelPerDay * dayShifts.length)
+          const targetForDay = idealPersonnelPerDay * (dayShifts.length / data.shifts.length) * days.length;
+
+          // Create a slack variable for over-staffing
+          const overSlack = `over_slack_${date}`;
+          const underSlack = `under_slack_${date}`;
+
+          model.addVariable(overSlack, 'int', { lowerBound: 0 });
+          model.addVariable(underSlack, 'int', { lowerBound: 0 });
+
+          // Constraint: dayPersonnelExpression + underSlack - overSlack = targetForDay
+          model.addConstraint(
+            `${dayPersonnelExpression} + ${underSlack} - ${overSlack} == ${Math.round(targetForDay)}`,
+            `Day ${date} staffing target`
+          );
+
+          // Add penalties for over/under staffing
+          // Penalize over-staffing MORE than under-staffing (since we have manager-heavy days)
+          const overPenalty = 5;  // Cost per extra person beyond target
+          const underPenalty = 3; // Cost per missing person
+
+          if (softConstraintPenalty) {
+            softConstraintPenalty += ` - ${overPenalty} * ${overSlack} - ${underPenalty} * ${underSlack}`;
+          } else {
+            softConstraintPenalty = `- ${overPenalty} * ${overSlack} - ${underPenalty} * ${underSlack}`;
+          }
+
+          console.log(`Day ${date}: target ${Math.round(targetForDay)} personnel, ${managerCount} managers already`);
+        }
+      });
+    }
+  } else {
+    console.log('Only one day in schedule, skipping day balance constraint');
+  }
+
+  // Combine objective with soft constraint penalties
+  let finalObjective = objectiveExpression;
+
+  if (softConstraintPenalty) {
+    if (finalObjective) {
+      finalObjective += ` + ${softConstraintPenalty}`;
+    } else {
+      finalObjective = softConstraintPenalty;
+    }
+    console.log(`Added day balance soft penalty to objective`);
+  }
+
   if (objectiveExpression) {
     model.maximize(objectiveExpression);
     console.log('Objective function set with strict availability enforcement');
@@ -563,6 +678,35 @@ async function runScheduling() {
         sum + shiftAssignments.length, 0
       );
       resolutionReport.push(`📊 Total assignments: ${totalAssignments} (including managers)`);
+
+      // Calculate day distribution for the report
+      const shiftsByDate = groupShiftsByDate(data.shifts);
+      const dayDistribution: Record<string, number> = {};
+
+      Object.entries(shiftsByDate).forEach(([date, dayShifts]) => {
+        let count = 0;
+        dayShifts.forEach(shift => {
+          count += Object.keys(assignments)[shift.id]?.length || 0;
+        });
+        dayDistribution[date] = count;
+      });
+
+      resolutionReport.push('\n📅 DAY STAFFING DISTRIBUTION:');
+      Object.entries(dayDistribution).forEach(([date, count]) => {
+        resolutionReport.push(`   ${date}: ${count} total assignments`);
+      });
+
+      // Check day balance
+      const values = Object.values(dayDistribution);
+      const max = Math.max(...values);
+      const min = Math.min(...values);
+      const imbalance = max - min;
+
+      if (imbalance > 2) {
+        resolutionReport.push(`⚠️ Day imbalance detected: ${imbalance} difference between heaviest/lightest days`);
+      } else {
+        resolutionReport.push(`✅ Good day balance: max difference of ${imbalance}`);
+      }
 
     } else {
       violations.push('SCHEDULING_FAILED: No feasible solution found for non-manager employees');

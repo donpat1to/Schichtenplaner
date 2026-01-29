@@ -15,13 +15,18 @@ export interface ProgressStep {
   solution_count: number;
 }
 
+type VariableBounds = {
+  lowerBound?: number;
+  upperBound?: number;
+};
+
 export interface SolutionWithProgress extends Solution {
   progress?: ProgressStep[];
 }
 
 export class CPModel {
   private modelData: any;
-  
+
   constructor() {
     this.modelData = {
       variables: {},
@@ -29,43 +34,51 @@ export class CPModel {
       objective: null
     };
   }
-  
-  addVariable(name: string, type: 'bool' | 'int', min?: number, max?: number): void {
-    this.modelData.variables[name] = { type, min, max };
+
+  addVariable(
+    name: string,
+    type: 'bool' | 'int',
+    bounds: VariableBounds = {}
+  ): void {
+    this.modelData.variables[name] = {
+      type,
+      min: bounds.lowerBound,
+      max: bounds.upperBound,
+    };
   }
-  
+
   addConstraint(expression: string, description?: string): void {
     this.modelData.constraints.push({
       expression,
       description
     });
   }
-  
+
   maximize(expression: string): void {
     this.modelData.objective = {
       type: 'maximize',
       expression
     };
   }
-  
+
   minimize(expression: string): void {
     this.modelData.objective = {
-      type: 'minimize', 
+      type: 'minimize',
       expression
     };
   }
-  
+
   export(): any {
     return this.modelData;
   }
 }
 
 export class CPSolver {
-  constructor(private options: SolverOptions) {}
-  
+  constructor(private options: SolverOptions) { }
+
   async solve(model: CPModel): Promise<Solution> {
     await this.checkPythonEnvironment();
-    
+
     try {
       return await this.solveViaPythonBridge(model);
     } catch (error) {
@@ -73,7 +86,7 @@ export class CPSolver {
       return await this.solveWithTypeScript(model);
     }
   }
-  
+
   private async solveViaPythonBridge(model: CPModel): Promise<Solution> {
     // Try multiple possible paths for the Python script
     const possiblePaths = [
@@ -82,7 +95,7 @@ export class CPSolver {
       path.resolve(__dirname, '../../../python-scripts/scheduling_solver.py'),
       path.resolve(__dirname, '../../src/python-scripts/scheduling_solver.py'),
     ];
-    
+
     let pythonScriptPath = '';
     for (const p of possiblePaths) {
       if (fs.existsSync(p)) {
@@ -90,15 +103,15 @@ export class CPSolver {
         break;
       }
     }
-    
+
     if (!pythonScriptPath) {
       throw new Error(`Python script not found. Tried: ${possiblePaths.join(', ')}`);
     }
-    
+
     console.log('Using Python script at:', pythonScriptPath);
-    
-  const modelData = model.export();
-  
+
+    const modelData = model.export();
+
     return new Promise((resolve, reject) => {
       const pythonProcess = spawn('python', [pythonScriptPath], {
         timeout: this.options.maxTimeInSeconds * 1000,
@@ -132,9 +145,9 @@ export class CPSolver {
 
         try {
           console.log('Python raw output:', stdout.substring(0, 500));
-          
+
           const result = JSON.parse(stdout);
-          
+
           // Enhanced solution parsing with progress data
           const solution: SolutionWithProgress = {
             success: result.success || false,
@@ -151,7 +164,7 @@ export class CPSolver {
           };
 
           console.log(`Python solver result: success=${solution.success}, assignments=${solution.assignments.length}, progress_steps=${solution.progress?.length}`);
-          
+
           resolve(solution);
         } catch (parseError) {
           console.error('Failed to parse Python output. Raw output:', stdout.substring(0, 500));
@@ -179,17 +192,17 @@ export class CPSolver {
         // Try multiple Python commands
         const commands = ['python', 'python3', 'py'];
         let currentCommandIndex = 0;
-        
+
         const tryNextCommand = () => {
           if (currentCommandIndex >= commands.length) {
             console.log('❌ Python is not available (tried: ' + commands.join(', ') + ')');
             resolve(false);
             return;
           }
-          
+
           const command = commands[currentCommandIndex];
           const pythonProcess = spawn(command, ['--version']);
-          
+
           pythonProcess.on('close', (code) => {
             if (code === 0) {
               console.log(`✅ Python is available (using: ${command})`);
@@ -199,13 +212,13 @@ export class CPSolver {
               tryNextCommand();
             }
           });
-          
+
           pythonProcess.on('error', () => {
             currentCommandIndex++;
             tryNextCommand();
           });
         };
-        
+
         tryNextCommand();
       });
     } catch {
@@ -216,17 +229,17 @@ export class CPSolver {
   private async solveWithTypeScript(model: CPModel): Promise<Solution> {
     const startTime = Date.now();
     const modelData = model.export();
-    
+
     console.log('Using TypeScript fallback solver');
     console.log(`Model has ${Object.keys(modelData.variables).length} variables and ${modelData.constraints.length} constraints`);
-    
+
     // Create a simple feasible solution
     const assignments: Assignment[] = [];
-    
+
     // Generate basic assignments - try to satisfy constraints
-    const employeeShiftCount: {[key: string]: number} = {};
-    const shiftAssignments: {[key: string]: string[]} = {};
-    
+    const employeeShiftCount: { [key: string]: number } = {};
+    const shiftAssignments: { [key: string]: string[] } = {};
+
     // Initialize
     Object.keys(modelData.variables).forEach(varName => {
       if (varName.startsWith('assign_')) {
@@ -234,13 +247,13 @@ export class CPSolver {
         if (parts.length >= 3) {
           const employeeId = parts[1];
           const shiftId = parts.slice(2).join('_');
-          
+
           if (!employeeShiftCount[employeeId]) employeeShiftCount[employeeId] = 0;
           if (!shiftAssignments[shiftId]) shiftAssignments[shiftId] = [];
         }
       }
     });
-    
+
     // Simple assignment logic
     Object.keys(modelData.variables).forEach(varName => {
       if (modelData.variables[varName].type === 'bool' && varName.startsWith('assign_')) {
@@ -248,10 +261,10 @@ export class CPSolver {
         if (parts.length >= 3) {
           const employeeId = parts[1];
           const shiftId = parts.slice(2).join('_');
-          
+
           // Simple logic: assign about 30% of shifts randomly, but respect some constraints
           const shouldAssign = Math.random() > 0.7 && employeeShiftCount[employeeId] < 10;
-          
+
           if (shouldAssign) {
             assignments.push({
               shiftId,
@@ -265,11 +278,11 @@ export class CPSolver {
         }
       }
     });
-    
+
     const processingTime = Date.now() - startTime;
-    
+
     console.log(`TypeScript solver created ${assignments.length} assignments in ${processingTime}ms`);
-    
+
     return {
       assignments,
       violations: [],
