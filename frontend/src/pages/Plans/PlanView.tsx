@@ -670,7 +670,7 @@ const PlanView: React.FC = () => {
             {isAdmin && (
               <div>
                 {/* Shift plan: Generate assignments button */}
-                {planType === 'shift' && (
+                {planType === 'shift' && !hasAssignments && (
                   <button
                     onClick={handlePreviewAssignments}
                     disabled={!availabilityStatus.canPublish || isPublishing}
