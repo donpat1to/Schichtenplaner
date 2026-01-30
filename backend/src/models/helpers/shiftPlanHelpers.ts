@@ -58,14 +58,6 @@ export function validateTimeSlot(timeSlot: { startTime: string; endTime: string 
 }
 
 // Type guards
-export function isScheduledShift(shift: Shift | ScheduledShift): shift is ScheduledShift {
-  return 'date' in shift;
-}
-
-export function isTemplateShift(shift: Shift | ScheduledShift): shift is Shift {
-  return 'dayOfWeek' in shift && !('date' in shift);
-}
-
 // Business logic helpers
 export function getShiftsForDay(plan: ShiftPlan, dayOfWeek: number): Shift[] {
   return plan.shifts.filter(shift => shift.dayOfWeek === dayOfWeek);

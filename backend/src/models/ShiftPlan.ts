@@ -41,14 +41,14 @@ export interface ScheduledShift {
   assignedEmployees: string[]; // employee IDs
 }
 
-export interface ShiftAssignment {
+/*export interface ShiftAssignment {
   id: string;
   scheduledShiftId: string;
   employeeId: string;
   assignmentStatus: 'assigned' | 'cancelled';
   assignedAt: string;
   assignedBy: string;
-}
+}*/
 
 // Request/Response DTOs
 export interface CreateShiftPlanRequest {
