@@ -13,11 +13,13 @@ export class SchedulingService {
     return new Promise((resolve, reject) => {
       // Use the built JavaScript file
       const workerPath = path.resolve(__dirname, '../../dist/workers/scheduler-worker.js');
-      
+
       console.log('Looking for worker at:', workerPath);
-      
+      const workerData = this.prepareWorkerData(request);
+      //console.log('Loaded worker data:', workerData)
+
       const worker = new Worker(workerPath, {
-        workerData: this.prepareWorkerData(request)
+        workerData
       });
 
       // Timeout after 110 seconds
@@ -47,10 +49,10 @@ export class SchedulingService {
 
   private prepareWorkerData(request: ScheduleRequest): any {
     const { shiftPlan, employees, availabilities, constraints } = request;
-    
+
     const shifts = this.prepareShifts(shiftPlan);
     const workerAvailabilities = this.prepareAvailabilities(availabilities, shiftPlan);
-    
+
     // 🆕 ENHANCED DATA VALIDATION
     console.log('\n🔍 ===== ENHANCED DATA VALIDATION =====');
     console.log(`Shift Plan: ${shiftPlan.name} (${shiftPlan.id})`);
@@ -58,21 +60,21 @@ export class SchedulingService {
     console.log(`Generated shifts: ${shifts.length}`);
     console.log(`Input availabilities: ${availabilities.length}`);
     console.log(`Mapped availabilities: ${workerAvailabilities.length}`);
-    
+
     // Check shift ID patterns
     const shiftIdsFromShifts = shifts.map(s => s.id);
     const shiftIdsFromAvailabilities = [...new Set(workerAvailabilities.map(a => a.shiftId))];
-    
+
     console.log(`Shift IDs in generated shifts: ${shiftIdsFromShifts.length}`);
     console.log(`Unique shift IDs in availabilities: ${shiftIdsFromAvailabilities.length}`);
-    
+
     // Find matching shift IDs
-    const matchingShiftIds = shiftIdsFromAvailabilities.filter(availId => 
+    const matchingShiftIds = shiftIdsFromAvailabilities.filter(availId =>
       shiftIdsFromShifts.includes(availId)
     );
-    
+
     console.log(`✅ Matching shift IDs: ${matchingShiftIds.length}/${shiftIdsFromAvailabilities.length}`);
-    
+
     // Show first few matches for verification
     if (matchingShiftIds.length > 0) {
       console.log('🔍 FIRST 5 MATCHING SHIFT IDs:');
@@ -82,12 +84,12 @@ export class SchedulingService {
         console.log(`   - ${id}: ${availCount} availabilities, Date: ${shift?.date}, TimeSlot: ${shift?.timeSlotId}`);
       });
     }
-    
+
     // Show unmatched availabilities for debugging
-    const unmatchedAvailabilities = workerAvailabilities.filter(avail => 
+    const unmatchedAvailabilities = workerAvailabilities.filter(avail =>
       !shiftIdsFromShifts.includes(avail.shiftId)
     );
-    
+
     if (unmatchedAvailabilities.length > 0) {
       console.log('❌ UNMATCHED AVAILABILITIES:');
       const uniqueUnmatched = [...new Set(unmatchedAvailabilities.map(a => a.shiftId))];
@@ -97,9 +99,9 @@ export class SchedulingService {
       });
       if (uniqueUnmatched.length > 5) console.log(`   ... and ${uniqueUnmatched.length - 5} more unique unmatched shift IDs`);
     }
-    
+
     console.log('===== END ENHANCED DATA VALIDATION =====\n');
-    
+
     return {
       shiftPlan: {
         id: shiftPlan.id,
@@ -116,15 +118,14 @@ export class SchedulingService {
   }
 
   private prepareShifts(shiftPlan: ShiftPlan): any[] {
-    if (!shiftPlan.isTemplate || !shiftPlan.scheduledShifts) {
+    if (!shiftPlan.isTemplate || !shiftPlan.shiftAssignments) {
       return this.generateScheduledShiftsFromTemplate(shiftPlan);
     }
-    
-    return shiftPlan.scheduledShifts.map(shift => ({
+
+    return shiftPlan.shifts.map(shift => ({
       id: shift.id,
-      date: shift.date,
-      timeSlotId: shift.timeSlotId,
-      requiredEmployees: shift.requiredEmployees,
+      planId: shift.planId,
+      //requiredEmployees: shift.requiredEmployees,
       minWorkers: 1,
       maxWorkers: 2,
       isPriority: false
@@ -133,25 +134,25 @@ export class SchedulingService {
 
   private generateScheduledShiftsFromTemplate(shiftPlan: ShiftPlan): any[] {
     const shifts: any[] = [];
-    
+
     if (!shiftPlan || !shiftPlan.startDate) {
       return shifts;
     }
 
     const startDate = new Date(shiftPlan.startDate);
-    
+
     // Generate shifts for one week (Monday to Sunday)
     for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
       const currentDate = new Date(startDate);
       currentDate.setDate(startDate.getDate() + dayOffset);
-      
+
       const dayOfWeek = currentDate.getDay() === 0 ? 7 : currentDate.getDay();
       const dayShifts = shiftPlan.shifts.filter(shift => shift.dayOfWeek === dayOfWeek);
-      
+
       dayShifts.forEach(shift => {
         const shiftId = shift.id; // Use the original shift pattern ID
         const dateStr = currentDate.toISOString().split('T')[0];
-        
+
         shifts.push({
           id: shiftId, // This matches the frontend availability records
           date: dateStr,
@@ -167,25 +168,25 @@ export class SchedulingService {
     }
 
     console.log("Created shifts for one week. Amount: ", shifts.length);
-    
+
     // Debug: Show which shift IDs we're using
     console.log('🔍 SHIFT IDS IN GENERATED SHIFTS:');
     shifts.forEach(shift => {
       console.log(`   - ${shift.id} (Date: ${shift.date}, TimeSlot: ${shift.timeSlotId})`);
     });
-    
+
     return shifts;
   }
 
   private prepareAvailabilities(availabilities: Availability[], shiftPlan: ShiftPlan): any[] {
     console.log('🔄 Preparing availabilities for worker...');
     console.log(`Input availabilities: ${availabilities.length} records`);
-    
+
     const workerAvailabilities = availabilities.map(avail => {
       const shiftId = avail.shiftId;
-      
-      console.log(`📋 Availability ${avail.id}: employee=${avail.employeeId}, shift=${shiftId}, preference=${avail.preferenceLevel}`);
-      
+
+      //console.log(`📋 Availability ${avail.id}: employee=${avail.employeeId}, shift=${shiftId}, preference=${avail.preferenceLevel}`);
+
       return {
         employeeId: avail.employeeId,
         shiftId: shiftId, // Use the original shift ID from frontend

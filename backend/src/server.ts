@@ -14,8 +14,6 @@ import employeeRoutes from './routes/employees.js';
 import shiftPlanRoutes from './routes/shiftPlans.js';
 import weeklyPlanRoutes from './routes/weeklyPlans.js';
 import setupRoutes from './routes/setup.js';
-import scheduledShifts from './routes/scheduledShifts.js';
-import schedulingRoutes from './routes/scheduling.js';
 import {
   apiLimiter,
   authLimiter,
@@ -206,8 +204,6 @@ app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/shift-plans', shiftPlanRoutes);
 app.use('/api/weekly-plans', weeklyPlanRoutes);
-app.use('/api/scheduled-shifts', scheduledShifts);
-app.use('/api/scheduling', expensiveEndpointLimiter, schedulingRoutes);
 
 // External authentication routes (OIDC)
 app.use('/api/auth/external', authLimiter, externalAuthRoutes);

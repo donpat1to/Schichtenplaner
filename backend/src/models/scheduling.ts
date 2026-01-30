@@ -52,7 +52,6 @@ export interface Assignment {
   shiftId: string;
   employeeId: string;
   assignedAt: Date;
-  score: number; // Qualität der Zuweisung (1-100)
 }
 
 export interface Violation {

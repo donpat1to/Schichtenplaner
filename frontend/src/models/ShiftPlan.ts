@@ -11,7 +11,50 @@ export interface ShiftPlan {
   createdAt: string;
   timeSlots: TimeSlot[];
   shifts: Shift[];
-  scheduledShifts?: ScheduledShift[];
+  shiftAssignments?: ShiftAssignment[];
+}
+
+export interface GenerateResult {
+  success: boolean;
+  message: string;
+  assignments: {
+    shiftId: string;
+    employeeId: string;
+    assignedAt?: string;
+  }[];
+  violations: string[];
+  processingTime: number;
+  plan?: ShiftPlan; // If you have ShiftPlan type in frontend
+}
+
+export interface ShiftPlanStatistics {
+  planInfo: {
+    name: string;
+    status: 'draft' | 'published' | 'archived';
+    isTemplate: boolean;
+    startDate?: string;
+    endDate?: string;
+  };
+  totals: {
+    totalShifts: number;
+    totalAssignments: number;
+    totalEmployees: number;
+    totalRequiredEmployees: number;
+  };
+  coverage: {
+    coverageRate: number;
+    employeesWithAssignments: number;
+    averageAssignmentsPerEmployee: number;
+  };
+  breakdown: {
+    employeeTypeBreakdown: Record<string, number>;
+    shiftsByDay: Record<number, number>;
+  };
+  assignmentDistribution: {
+    assignmentsPerEmployee: Record<string, number>;
+    mostAssignedEmployee: [string, number] | null;
+    leastAssignedEmployee: [string, number] | null;
+  };
 }
 
 export interface TimeSlot {
@@ -29,6 +72,8 @@ export interface Shift {
   timeSlotId: string;
   dayOfWeek: number; // 1=Monday, 7=Sunday
   requiredEmployees: number;
+  minEmployees: number;
+  maxEmployees: number;
   color?: string;
 }
 
@@ -41,14 +86,14 @@ export interface ScheduledShift {
   assignedEmployees: string[]; // employee IDs
 }
 
-/*export interface ShiftAssignment {
+export interface ShiftAssignment {
   id: string;
-  scheduledShiftId: string;
+  planId: string;
+  shiftId: string;
   employeeId: string;
-  assignmentStatus: 'assigned' | 'cancelled';
   assignedAt: string;
   assignedBy: string;
-}*/
+}
 
 // Request/Response DTOs
 export interface CreateShiftPlanRequest {
@@ -84,7 +129,6 @@ export interface AssignEmployeeRequest {
   employeeId: string;
   scheduledShiftId: string;
 }
-
 
 export interface UpdateRequiredEmployeesRequest {
   requiredEmployees: number;

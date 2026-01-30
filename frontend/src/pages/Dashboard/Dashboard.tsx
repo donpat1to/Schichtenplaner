@@ -4,9 +4,8 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { shiftPlanService } from '../../services/shiftPlanService';
 import { employeeService } from '../../services/employeeService';
-import { ShiftPlan, ScheduledShift } from '../../models/ShiftPlan';
+import { ShiftPlan } from '../../models/ShiftPlan';
 import { Employee } from '../../models/Employee';
-import { shiftAssignmentService } from '../../services/shiftAssignmentService';
 
 interface DashboardData {
   currentShiftPlan: ShiftPlan | null;
@@ -31,7 +30,7 @@ interface DashboardData {
 const Dashboard: React.FC = () => {
   const { user, hasRole } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [currentPlanShifts, setCurrentPlanShifts] = useState<ScheduledShift[]>([]);
+  //const [currentPlanShifts, setCurrentPlanShifts] = useState<ShiftAssignment[]>([]);
   const [data, setData] = useState<DashboardData>({
     currentShiftPlan: null,
     upcomingShifts: [],
@@ -65,17 +64,17 @@ const Dashboard: React.FC = () => {
       const currentPlan = findCurrentShiftPlan(shiftPlans, today);
 
       // Load shifts for current plan
-      if (currentPlan) {
-        const shifts = await shiftAssignmentService.getScheduledShiftsForPlan(currentPlan.id);
+      /*if (currentPlan) {
+        const shifts = await shiftAssignmentService.getShiftAssignments(currentPlan.id);
         setCurrentPlanShifts(shifts);
       } else {
         setCurrentPlanShifts([]);
-      }
+      }*/
 
       console.log('📊 Loaded data:', {
         plans: shiftPlans.length,
         employees: employees.length,
-        currentPlanShifts
+        //currentPlanShifts
       });
 
       // Debug: Log plan details
@@ -158,32 +157,7 @@ const Dashboard: React.FC = () => {
 
       // Check each plan for user assignments
       for (const plan of shiftPlans) {
-        const scheduledShifts = (await shiftAssignmentService.getScheduledShiftsForPlan(plan.id));
-        if (plan.status !== 'published' || scheduledShifts.length === 0) {
-          continue;
-        }
 
-        console.log(`🔍 Checking plan ${plan.name} for user shifts:`, scheduledShifts.length);
-
-        for (const scheduledShift of scheduledShifts) {
-          // Ensure assignedEmployees is an array
-          const assignedEmployees = Array.isArray(scheduledShift.assignedEmployees)
-            ? scheduledShift.assignedEmployees
-            : [];
-
-          if (scheduledShift.date >= today && assignedEmployees.includes(user.id)) {
-            const timeSlot = plan.timeSlots.find(ts => ts.id === scheduledShift.timeSlotId);
-
-            userShifts.push({
-              id: scheduledShift.id,
-              date: formatShiftDate(scheduledShift.date),
-              time: timeSlot ? `${timeSlot.startTime} - ${timeSlot.endTime}` : 'Unbekannt',
-              type: timeSlot?.name || 'Unbekannt',
-              assigned: true,
-              planName: plan.name
-            });
-          }
-        }
       }
 
       // Sort by date and limit to 5 upcoming shifts
@@ -257,7 +231,7 @@ const Dashboard: React.FC = () => {
     return `${start} - ${end}`;
   };
 
-  const calculatePlanProgress = (plan: ShiftPlan, shifts: ScheduledShift[]): {
+  /*const calculatePlanProgress = (plan: ShiftPlan, shifts: ShiftAssignments[]): {
     covered: number; total: number; percentage: number
   } => {
     if (!plan.id || shifts.length === 0) {
@@ -285,7 +259,7 @@ const Dashboard: React.FC = () => {
       total: totalShifts,
       percentage
     };
-  };
+  };*/
 
   if (loading) {
     return (
@@ -295,51 +269,10 @@ const Dashboard: React.FC = () => {
     );
   }
 
-  const regenerateScheduledShifts = async (planId: string) => {
-    await shiftPlanService.regenerateScheduledShifts(planId);
-    loadDashboardData();
-  };
-
-  const PlanDebugInfo = () => {
-    if (!data.currentShiftPlan) return null;
-
-    return (
-      <div style={{
-        backgroundColor: '#fff3cd',
-        padding: '15px',
-        borderRadius: '8px',
-        marginBottom: '20px',
-        border: '1px solid #ffeaa7',
-        fontSize: '14px'
-      }}>
-        <h4>🔍 Plan Debug Information:</h4>
-        <div><strong>Plan ID:</strong> {data.currentShiftPlan.id}</div>
-        <div><strong>Status:</strong> {data.currentShiftPlan.status}</div>
-        <div><strong>Is Template:</strong> {data.currentShiftPlan.isTemplate ? 'Yes' : 'No'}</div>
-        <div><strong>Start Date:</strong> {data.currentShiftPlan.startDate}</div>
-        <div><strong>End Date:</strong> {data.currentShiftPlan.endDate}</div>
-        <div><strong>Shifts Defined:</strong> {data.currentShiftPlan.shifts?.length || 0}</div>
-        <div><strong>Time Slots:</strong> {data.currentShiftPlan.timeSlots?.length || 0}</div>
-        <div><strong>Scheduled Shifts:</strong> {data.currentShiftPlan.shifts.length || 0}</div>
-
-        {data.currentShiftPlan.shifts && data.currentShiftPlan.shifts.length > 0 && (
-          <div style={{ marginTop: '10px' }}>
-            <strong>Defined Shifts:</strong>
-            {data.currentShiftPlan.shifts.slice(0, 3).map(shift => (
-              <div key={shift.id} style={{ marginLeft: '10px', fontSize: '12px' }}>
-                Day {shift.dayOfWeek} - TimeSlot: {shift.timeSlotId} - Required: {shift.requiredEmployees}
-              </div>
-            ))}
-            {data.currentShiftPlan.shifts.length > 3 && <div>... and {data.currentShiftPlan.shifts.length - 3} more</div>}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const progress = data.currentShiftPlan
+  /*const progress = data.currentShiftPlan
     ? calculatePlanProgress(data.currentShiftPlan, currentPlanShifts)
-    : { covered: 0, total: 0, percentage: 0 };
+    : { covered: 0, total: 0, percentage: 0 };*/
+  const progress = { covered: 0, total: 0, percentage: 0 };
 
   return (
     <div>

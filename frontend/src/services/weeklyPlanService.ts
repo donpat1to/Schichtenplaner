@@ -241,7 +241,7 @@ export const weeklyPlanService = {
     }
   },
 
-  // Statistics - NEW METHOD
+  // Statistics
   async getPlanStatistics(planId: string): Promise<WeeklyPlanStatistics> {
     try {
       return await apiClient.get<WeeklyPlanStatistics>(`/weekly-plans/${planId}/statistics`);

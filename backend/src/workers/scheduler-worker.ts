@@ -3,7 +3,7 @@ import { parentPort, workerData } from 'worker_threads';
 import { CPModel, CPSolver } from './cp-sat-wrapper.js';
 import { ShiftPlan, Shift } from '../models/ShiftPlan.js';
 import { Employee } from '../models/Employee.js';
-import { Availability, Constraint } from '../models/scheduling.js';
+import { Assignment, Availability, Constraint } from '../models/scheduling.js';
 
 interface WorkerData {
   shiftPlan: ShiftPlan;
@@ -28,8 +28,8 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
   let availabilityConstraints = 0;
 
   // Count availability constraints
-  schedulableEmployees.forEach((employee: any) => {
-    shifts.forEach((shift: any) => {
+  schedulableEmployees.forEach((employee: Employee) => {
+    shifts.forEach((shift: Shift) => {
       const availability = availabilities.find(
         (a: any) => a.employeeId === employee.id && a.shiftId === shift.id
       );
@@ -52,8 +52,8 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
   console.log(`- Excluded: ${employees.filter(emp => !emp.isActive || emp.employeeType !== 'personell').length} employees (managers, apprentices, guests, inactive)`);
 
   // 1. Create assignment variables for all possible assignments
-  schedulableEmployees.forEach((employee: any) => {
-    shifts.forEach((shift: any) => {
+  schedulableEmployees.forEach((employee: Employee) => {
+    shifts.forEach((shift: Shift) => {
       const varName = `assign_${employee.id}_${shift.id}`;
       model.addVariable(varName, 'bool');
     });
@@ -78,9 +78,9 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
   });
 
   // 3. Max 1 shift per day per employee
-  const shiftsByDate = groupShiftsByDate(shifts);
+  const shiftsByDayOfWeek = groupShiftsByDayOfWeek(shifts);
   schedulableEmployees.forEach((employee: any) => {
-    Object.entries(shiftsByDate).forEach(([date, dayShifts]) => {
+    Object.entries(shiftsByDayOfWeek).forEach(([dayOfWeek, dayShifts]) => {
       const dayAssignmentVars = (dayShifts as any[]).map(
         (shift: any) => `assign_${employee.id}_${shift.id}`
       );
@@ -88,7 +88,7 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
       if (dayAssignmentVars.length > 0) {
         model.addConstraint(
           `${dayAssignmentVars.join(' + ')} <= 1`,
-          `Max one shift per day for ${employee.name} on ${date}`
+          `Max one shift per day for ${employee.name} on ${dayOfWeek}`
         );
       }
     });
@@ -236,9 +236,9 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
   // 9. DAY STAFFING BALANCE SOFT CONSTRAINT
   console.log('\n📅 ADDING DAY STAFFING BALANCE SOFT CONSTRAINT');
 
-  // Group shifts by date
+  // Group shifts by dayOfWeek
   //const shiftsByDate = groupShiftsByDate(data.shifts);
-  const days = Object.keys(shiftsByDate);
+  const days = Object.keys(shiftsByDayOfWeek);
 
   if (days.length > 1) { // Only apply if we have multiple days
     // Count managers already assigned per day (hard constraints)
@@ -247,8 +247,8 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
     );
 
     const managersPerDay: Record<string, number> = {};
-    days.forEach(date => {
-      const dayShifts = shiftsByDate[date];
+    days.forEach(dayOfWeek => {
+      const dayShifts = shiftsByDayOfWeek[dayOfWeek];
       let managerCount = 0;
 
       dayShifts.forEach(shift => {
@@ -261,7 +261,7 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
         managerCount += managerPreferences.length;
       });
 
-      managersPerDay[date] = managerCount;
+      managersPerDay[dayOfWeek] = managerCount;
     });
 
     console.log(`Managers already assigned per day:`, managersPerDay);
@@ -281,9 +281,9 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
       console.log(`Ideal personnel per day: ${idealPersonnelPerDay.toFixed(1)} ±${tolerance.toFixed(1)}`);
 
       // Create variables and penalties for day staffing
-      days.forEach(date => {
-        const dayShifts = shiftsByDate[date];
-        const managerCount = managersPerDay[date] || 0;
+      days.forEach(dayOfWeek => {
+        const dayShifts = shiftsByDayOfWeek[dayOfWeek];
+        const managerCount = managersPerDay[dayOfWeek] || 0;
 
         // Create expression for total personnel on this day
         let dayPersonnelExpression = '';
@@ -305,8 +305,8 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
           const targetForDay = idealPersonnelPerDay * (dayShifts.length / data.shifts.length) * days.length;
 
           // Create a slack variable for over-staffing
-          const overSlack = `over_slack_${date}`;
-          const underSlack = `under_slack_${date}`;
+          const overSlack = `over_slack_${dayOfWeek}`;
+          const underSlack = `under_slack_${dayOfWeek}`;
 
           model.addVariable(overSlack, 'int', { lowerBound: 0 });
           model.addVariable(underSlack, 'int', { lowerBound: 0 });
@@ -314,7 +314,7 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
           // Constraint: dayPersonnelExpression + underSlack - overSlack = targetForDay
           model.addConstraint(
             `${dayPersonnelExpression} + ${underSlack} - ${overSlack} == ${Math.round(targetForDay)}`,
-            `Day ${date} staffing target`
+            `Day ${dayOfWeek} staffing target`
           );
 
           // Add penalties for over/under staffing
@@ -328,7 +328,7 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
             softConstraintPenalty = `- ${overPenalty} * ${overSlack} - ${underPenalty} * ${underSlack}`;
           }
 
-          console.log(`Day ${date}: target ${Math.round(targetForDay)} personnel, ${managerCount} managers already`);
+          console.log(`Day ${dayOfWeek}: target ${Math.round(targetForDay)} personnel, ${managerCount} managers already`);
         }
       });
     }
@@ -356,51 +356,46 @@ function buildSchedulingModel(model: CPModel, data: WorkerData): void {
   }
 }
 
-function groupShiftsByDate(shifts: any[]): Record<string, any[]> {
-  return shifts.reduce((groups: Record<string, any[]>, shift: any) => {
-    const date = shift.date?.split('T')[0] || 'unknown';
-    if (!groups[date]) groups[date] = [];
-    groups[date].push(shift);
+function groupShiftsByDayOfWeek(shifts: Shift[]): Record<string, Shift[]> {
+  return shifts.reduce((groups: Record<string, Shift[]>, shift: Shift) => {
+    const day = shift.dayOfWeek;
+    if (!groups[day]) groups[day] = [];
+    groups[day].push(shift);
     return groups;
   }, {});
 }
 
-function extractAssignmentsFromSolution(solution: any, employees: any[], shifts: any[]): any {
-  const assignments: any = {};
+function extractAssignmentsFromSolution(
+  solution: any,
+  employees: any[],
+  shifts: Shift[],
+): Assignment[] {
+  const assignments: Assignment[] = [];
 
-  console.log('🔍 DEBUG: Available shifts with new ID pattern:');
+  // Build employee map for names
+  const employeeMap = new Map(employees.map(emp => [emp.id, emp]));
+
   shifts.forEach(shift => {
-    console.log(`   - ${shift.id} (Day: ${shift.id.split('-')[0]}, TimeSlot: ${shift.id.split('-')[1]})`);
+    const assignedEmployees: string[] = solution.assignments?.filter(
+      (a: any) => a.shiftId === shift.id
+    ).map((a: any) => a.employeeId) || [];
+
+    // Generate one assignment per required slot
+    for (let i = 0; i < (shift.requiredEmployees || 1); i++) {
+      const employeeId = assignedEmployees[i] || null;
+
+      assignments.push({
+        shiftId: shift.id,
+        employeeId: employeeId || '',
+        assignedAt: new Date(),
+      });
+    }
   });
 
-  // Your existing assignment extraction logic...
-  if (solution.assignments && solution.assignments.length > 0) {
-    console.log('Using Python-parsed assignments (cleaner)');
-
-    solution.assignments.forEach((assignment: any) => {
-      const shiftId = assignment.shiftId;
-      const employeeId = assignment.employeeId;
-
-      if (shiftId && employeeId) {
-        if (!assignments[shiftId]) {
-          assignments[shiftId] = [];
-        }
-        // Check if this assignment already exists to avoid duplicates
-        if (!assignments[shiftId].includes(employeeId)) {
-          assignments[shiftId].push(employeeId);
-        }
-      }
-    });
-  }
-
-  // 🆕 ADD: Enhanced logging with employee names
-  console.log('🎯 FINAL ASSIGNMENTS WITH EMPLOYEE :');
-  Object.entries(assignments).forEach(([shiftId, employeeIds]) => {
-    const employeeNames = (employeeIds as string[]).map(empId => {
-      const employee = employees.find(emp => emp.id === empId);
-      return employee ? employee.id : 'Unknown';
-    });
-    console.log(`   📅 ${shiftId}: ${employeeNames.join(', ')}`);
+  console.log('🎯 FINAL ASSIGNMENTS:');
+  assignments.forEach(a => {
+    const emp = a.employeeId ? employeeMap.get(a.employeeId) : null;
+    console.log(`   Shift ${a.shiftId}, Employee: ${emp ? emp.firstname + ' ' + emp.lastname : 'UNASSIGNED'}`);
   });
 
   return assignments;
@@ -453,9 +448,9 @@ function detectViolations(assignments: any, employees: any[], shifts: any[]): st
   });
 
   // Check for multiple shifts per day per employee
-  const shiftsByDate = groupShiftsByDate(shifts);
+  const shiftsByDate = groupShiftsByDayOfWeek(shifts);
   employees.forEach((employee: any) => {
-    Object.entries(shiftsByDate).forEach(([date, dayShifts]) => {
+    Object.entries(shiftsByDate).forEach(([dayOfWeek, dayShifts]) => {
       let shiftsAssigned = 0;
       dayShifts.forEach((shift: any) => {
         if (assignments[shift.id]?.includes(employee.id)) {
@@ -464,7 +459,7 @@ function detectViolations(assignments: any, employees: any[], shifts: any[]): st
       });
 
       if (shiftsAssigned > 1) {
-        violations.push(`MULTIPLE_SHIFTS: ${employee.name} has ${shiftsAssigned} shifts on ${date}`);
+        violations.push(`MULTIPLE_SHIFTS: ${employee.name} has ${shiftsAssigned} shifts on ${dayOfWeek}`);
       }
     });
   });
@@ -545,7 +540,7 @@ async function runScheduling() {
       const pref3 = shiftAvailabilities.filter(a => a.preferenceLevel === 3).length;
 
       console.log(`Shift ${index + 1}: ${shift.id}`);
-      console.log(`  📅 Date: ${shift.dayOfWeek}, TimeSlot: ${shift.timeSlotId}`);
+      console.log(`  📅 Day: ${shift.dayOfWeek}, TimeSlot: ${shift.timeSlotId}`);
       console.log(`  👥 Required: ${shift.requiredEmployees}`);
       console.log(`  ✅ Preferred (1): ${pref1}`);
       console.log(`  🔶 Available (2): ${pref2}`);
@@ -641,7 +636,7 @@ async function runScheduling() {
     console.log(`Scheduling completed in ${processingTime}ms`);
     console.log(`Solution success: ${solution.success}`);
 
-    let assignments = {};
+    let assignments: Assignment[] = [];
     let violations: string[] = [];
     let resolutionReport: string[] = [
       `Solved in ${processingTime}ms`,
@@ -680,20 +675,20 @@ async function runScheduling() {
       resolutionReport.push(`📊 Total assignments: ${totalAssignments} (including managers)`);
 
       // Calculate day distribution for the report
-      const shiftsByDate = groupShiftsByDate(data.shifts);
+      const shiftsByDayOfWeek = groupShiftsByDayOfWeek(data.shifts);
       const dayDistribution: Record<string, number> = {};
 
-      Object.entries(shiftsByDate).forEach(([date, dayShifts]) => {
+      Object.entries(shiftsByDayOfWeek).forEach(([dayOfWeek, dayShifts]) => {
         let count = 0;
         dayShifts.forEach(shift => {
-          count += Object.keys(assignments)[shift.id]?.length || 0;
+          count += assignments.length || 0;
         });
-        dayDistribution[date] = count;
+        dayDistribution[dayOfWeek] = count;
       });
 
       resolutionReport.push('\n📅 DAY STAFFING DISTRIBUTION:');
-      Object.entries(dayDistribution).forEach(([date, count]) => {
-        resolutionReport.push(`   ${date}: ${count} total assignments`);
+      Object.entries(dayDistribution).forEach(([dayOfWeek, count]) => {
+        resolutionReport.push(`   ${dayOfWeek}: ${count} total assignments`);
       });
 
       // Check day balance

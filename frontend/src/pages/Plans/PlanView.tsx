@@ -5,19 +5,20 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
 import { useBackendValidation } from '../../hooks/useBackendValidation';
 import { shiftPlanService } from '../../services/shiftPlanService';
-import { weeklyPlanService, GenerateResult } from '../../services/weeklyPlanService';
+import { weeklyPlanService } from '../../services/weeklyPlanService';
 import { employeeService } from '../../services/employeeService';
-import { shiftAssignmentService } from '../../services/shiftAssignmentService';
 import { ShiftPlan, ScheduledShift } from '../../models/ShiftPlan';
 import { WeeklyPlanWithDetails, formatWeekRange } from '../../models/WeeklyPlan';
 import { Employee, EmployeeAvailability } from '../../models/Employee';
-import { AssignmentResult } from '../../models/scheduling';
-import { formatDate, formatTime } from '../../utils/formatters';
+import { formatDate } from '../../utils/formatters';
 import { saveAs } from 'file-saver';
 import { backTextButton } from '@/utils/buttonStyles';
 import Timetable from '../../components/Timetable/Timetable';
 import Calendar from '../../components/Calendar/Calendar';
 import styles from './PlanView.module.css';
+
+// Remove the local GenerateResult interface since it's now imported from shiftPlanService
+// Note: The GenerateResult interface should be exported from shiftPlanService
 
 type PlanType = 'shift' | 'weekly';
 
@@ -44,15 +45,13 @@ const PlanView: React.FC = () => {
   const [weeklyPlan, setWeeklyPlan] = useState<WeeklyPlanWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Shift plan specific state
+  // Shift plan specific state - REMOVED scheduledShifts as it's no longer needed
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [availabilities, setAvailabilities] = useState<EmployeeAvailability[]>([]);
-  const [scheduledShifts, setScheduledShifts] = useState<ScheduledShift[]>([]);
-  const [assignmentResult, setAssignmentResult] = useState<AssignmentResult | null>(null);
+  const [solverResult, setSolverResult] = useState<any>(null); // Changed from assignmentResult to solverResult for consistency
   const [employeesWithAvailability, setEmployeesWithAvailability] = useState<{ id: string; name: string }[]>([]);
 
   // Weekly plan specific state
-  const [solverResult, setSolverResult] = useState<GenerateResult | null>(null);
   const [currentMonth, setCurrentMonth] = useState<Date>(() => new Date());
 
   // Unified solver result display state (for both plan types)
@@ -60,6 +59,7 @@ const PlanView: React.FC = () => {
 
   // Shared action states
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportFormat, setExportFormat] = useState<'pdf' | 'excel' | null>(null);
@@ -87,15 +87,10 @@ const PlanView: React.FC = () => {
         setPlanType('shift');
         setShiftPlan(shiftData);
 
-        // Load shift plan related data
-        const [employeesData, shiftsData] = await Promise.all([
-          employeeService.getEmployees(),
-          shiftAssignmentService.getScheduledShiftsForPlan(id)
-        ]);
-
+        // Load employees for availability check
+        const employeesData = await employeeService.getEmployees();
         const activeEmployees = employeesData.filter(emp => emp.isActive);
         setEmployees(activeEmployees);
-        setScheduledShifts(shiftsData);
 
         // Load availabilities for each employee
         const availabilityPromises = activeEmployees.map(emp =>
@@ -103,7 +98,7 @@ const PlanView: React.FC = () => {
         );
         const allAvailabilities = await Promise.all(availabilityPromises);
         const planAvailabilities = allAvailabilities.flat().filter(
-          availability => availability.planId === id
+          availability => availability?.planId === id
         );
         setAvailabilities(planAvailabilities);
 
@@ -142,17 +137,6 @@ const PlanView: React.FC = () => {
       setDropdownWidth(dropdownRef.current.offsetWidth / 40);
     }
   }, [exportFormat]);
-
-  // Reload on visibility change (for shift plans)
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && planType === 'shift') {
-        loadPlanData();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [planType, loadPlanData]);
 
   // Update availability status map
   const updateAvailabilityStatus = (emps: Employee[], avails: EmployeeAvailability[]) => {
@@ -199,11 +183,11 @@ const PlanView: React.FC = () => {
 
   // Get unified solver result data for display
   const getUnifiedSolverResult = () => {
-    if (planType === 'shift' && assignmentResult) {
+    if (planType === 'shift' && solverResult) {
       return {
-        success: assignmentResult.success,
-        resolutionReport: assignmentResult.resolutionReport || [],
-        violations: assignmentResult.violations || []
+        success: solverResult.success,
+        resolutionReport: solverResult.resolutionReport || [],
+        violations: solverResult.violations || []
       };
     } else if (planType === 'weekly' && solverResult) {
       return {
@@ -215,165 +199,55 @@ const PlanView: React.FC = () => {
     return null;
   };
 
-  // Check if assignments can be published (shift plans)
-  const canPublishAssignments = (): boolean => {
-    if (!assignmentResult) return false;
-    if (!assignmentResult.success) return false;
-    const hasCriticalViolations = assignmentResult.violations.some(v =>
-      v.includes('ERROR:') || v.includes('KRITISCH:')
-    );
-    return !hasCriticalViolations;
-  };
+  // Handle generate assignments for shift plans (using new backend route)
+  const handleGenerateShiftAssignments = async () => {
+    if (!id || !shiftPlan) return;
 
-  // Get day of week from date string
-  const getDayOfWeek = (dateString: string): number => {
-    const date = new Date(dateString);
-    return date.getDay() === 0 ? 7 : date.getDay();
-  };
-
-  // Get timetable data for shift plans
-  const getTimetableData = () => {
-    if (!shiftPlan?.shifts || !shiftPlan?.timeSlots) {
-      return { days: [], allTimeSlots: [] };
-    }
-
-    const timeSlotMap = new Map(shiftPlan.timeSlots.map(ts => [ts.id, ts]));
-
-    const days = Array.from(new Set(shiftPlan.shifts.map(shift => shift.dayOfWeek)))
-      .sort()
-      .map(dayId => WEEKDAYS.find(day => day.id === dayId) || { id: dayId, name: `Tag ${dayId}` });
-
-    const allTimeSlotsMap = new Map();
-    days.forEach(day => {
-      const dayShifts = shiftPlan.shifts.filter(s => s.dayOfWeek === day.id);
-      dayShifts.forEach(shift => {
-        const timeSlot = timeSlotMap.get(shift.timeSlotId);
-        if (timeSlot && !allTimeSlotsMap.has(timeSlot.id)) {
-          allTimeSlotsMap.set(timeSlot.id, { ...timeSlot });
-        }
-      });
+    const confirmed = await confirmDialog({
+      title: 'Zuweisungen generieren',
+      message: 'Der Solver wird die optimale Zuweisung basierend auf den Mitarbeiterverfügbarkeiten berechnen.',
+      confirmText: 'Generieren',
+      cancelText: 'Abbrechen',
+      type: 'info'
     });
 
-    const allTimeSlots = Array.from(allTimeSlotsMap.values()).sort((a, b) => {
-      const timeToMinutes = (timeStr: string) => {
-        if (!timeStr) return 0;
-        const [hours, minutes] = timeStr.split(':').map(Number);
-        return hours * 60 + minutes;
-      };
-      return timeToMinutes(a.startTime) - timeToMinutes(b.startTime);
-    });
-
-    return { days, allTimeSlots };
-  };
-
-  // Handle automatic assignment preview (shift plans)
-  const handlePreviewAssignments = async () => {
-    if (!shiftPlan) return;
+    if (!confirmed) return;
 
     try {
-      setIsPublishing(true);
-      setAssignmentResult(null);
-
-      // Force refresh availabilities
-      const availabilityPromises = employees
-        .filter(emp => emp.isActive)
-        .map(async (emp) => {
-          try {
-            return await employeeService.getAvailabilities(emp.id);
-          } catch {
-            return [];
-          }
-        });
-
-      const allAvailabilities = await Promise.all(availabilityPromises);
-      const refreshedAvailabilities = allAvailabilities.flat().filter(
-        availability => availability?.planId === id
-      );
-
-      const constraints = {
-        enforceNoTraineeAlone: true,
-        enforceExperiencedWithChef: true,
-        maxRepairAttempts: 50,
-        targetEmployeesPerShift: 2
-      };
-
-      const result = await shiftAssignmentService.assignShifts(
-        shiftPlan,
-        employees.filter(emp => emp.isActive),
-        refreshedAvailabilities,
-        constraints
-      );
-
-      setAssignmentResult(result);
+      setIsGenerating(true);
+      const result = await shiftPlanService.generateAssignments(id);
+      setSolverResult(result);
       setShowSolverResult(true);
 
       if (result.success) {
         showNotification({
           type: 'success',
-          title: 'Berechnung abgeschlossen',
-          message: 'Die Zuweisungen wurden erfolgreich berechnet.'
+          title: 'Zuweisungen generiert',
+          message: 'Zuweisungen wurden erfolgreich generiert'
+        });
+        // Reload plan to get updated assignments
+        await loadPlanData();
+      } else {
+        showNotification({
+          type: 'warning',
+          title: 'Solver-Problem',
+          message: result.violations?.length > 0 ? result.violations[0] : 'Keine optimale Lösung gefunden'
         });
       }
-    } catch (error) {
-      console.error('Error during assignment:', error);
+    } catch (error: any) {
+      console.error('Error generating assignments:', error);
       showNotification({
         type: 'error',
         title: 'Fehler',
-        message: 'Automatische Zuordnung fehlgeschlagen.'
+        message: error.message || 'Fehler beim Generieren der Zuweisungen'
       });
     } finally {
-      setIsPublishing(false);
-    }
-  };
-
-  // Handle publish assignments (shift plans)
-  const handlePublishShiftPlan = async () => {
-    if (!shiftPlan || !assignmentResult) return;
-
-    try {
-      setIsPublishing(true);
-
-      const updatedShifts = await shiftAssignmentService.getScheduledShiftsForPlan(shiftPlan.id);
-
-      const updatePromises = updatedShifts.map(async (scheduledShift) => {
-        const dayOfWeek = getDayOfWeek(scheduledShift.date);
-        const shiftPattern = shiftPlan.shifts?.find(shift =>
-          shift.dayOfWeek === dayOfWeek && shift.timeSlotId === scheduledShift.timeSlotId
-        );
-
-        const assignedEmployees = shiftPattern
-          ? assignmentResult.assignments[shiftPattern.id] || []
-          : [];
-
-        await shiftAssignmentService.updateScheduledShift(scheduledShift.id, { assignedEmployees });
-      });
-
-      await Promise.all(updatePromises);
-      await shiftPlanService.updateShiftPlan(shiftPlan.id, { status: 'published' });
-
-      setAssignmentResult(null);
-      setShowSolverResult(false);
-      await loadPlanData();
-
-      showNotification({
-        type: 'success',
-        title: 'Erfolg',
-        message: 'Schichtplan wurde erfolgreich veröffentlicht!'
-      });
-    } catch (error) {
-      console.error('Error publishing shift plan:', error);
-      showNotification({
-        type: 'error',
-        title: 'Fehler',
-        message: 'Schichtplan konnte nicht veröffentlicht werden.'
-      });
-    } finally {
-      setIsPublishing(false);
+      setIsGenerating(false);
     }
   };
 
   // Handle generate assignments (weekly plans)
-  const handleGenerateAssignments = async () => {
+  const handleGenerateWeeklyAssignments = async () => {
     if (!id || !weeklyPlan) return;
 
     const confirmed = await confirmDialog({
@@ -387,6 +261,7 @@ const PlanView: React.FC = () => {
     if (!confirmed) return;
 
     await executeWithValidation(async () => {
+      setIsGenerating(true);
       const result = await weeklyPlanService.generateAssignments(id);
       setSolverResult(result);
       setShowSolverResult(true);
@@ -405,8 +280,44 @@ const PlanView: React.FC = () => {
         });
       }
 
-      loadPlanData();
+      await loadPlanData();
+      setIsGenerating(false);
     });
+  };
+
+  // Handle publish for shift plans (using new backend route)
+  const handlePublishShiftPlan = async () => {
+    if (!id) return;
+
+    const confirmed = await confirmDialog({
+      title: 'Plan veröffentlichen',
+      message: 'Der Plan wird veröffentlicht und die Zuweisungen sind für alle Mitarbeiter sichtbar.',
+      confirmText: 'Veröffentlichen',
+      cancelText: 'Abbrechen',
+      type: 'info'
+    });
+
+    if (!confirmed) return;
+
+    try {
+      setIsPublishing(true);
+      await shiftPlanService.publishPlan(id);
+      showNotification({
+        type: 'success',
+        title: 'Veröffentlicht',
+        message: 'Der Schichtplan wurde erfolgreich veröffentlicht'
+      });
+      await loadPlanData();
+    } catch (error: any) {
+      console.error('Error publishing shift plan:', error);
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: error.message || 'Fehler beim Veröffentlichen des Plans'
+      });
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
   // Handle publish (weekly plans)
@@ -424,25 +335,25 @@ const PlanView: React.FC = () => {
     if (!confirmed) return;
 
     await executeWithValidation(async () => {
+      setIsPublishing(true);
       await weeklyPlanService.publishPlan(id);
       showNotification({
         type: 'success',
         title: 'Veröffentlicht',
         message: 'Der Wochenplan wurde erfolgreich veröffentlicht'
       });
-      loadPlanData();
+      await loadPlanData();
+      setIsPublishing(false);
     });
   };
 
-  // Handle clear assignments
-  const handleClearAssignments = async () => {
-    if (!id || !plan) return;
-
-    const planTypeName = planType === 'shift' ? 'Schichtplan' : 'Wochenplan';
+  // Handle clear assignments for shift plans
+  const handleClearShiftAssignments = async () => {
+    if (!id || !shiftPlan) return;
 
     const confirmed = await confirmDialog({
       title: 'Zuweisungen löschen',
-      message: `Alle Zuweisungen für diesen ${planTypeName} werden gelöscht. Dieser Vorgang kann nicht rückgängig gemacht werden.`,
+      message: 'Alle Zuweisungen für diesen Schichtplan werden gelöscht. Dieser Vorgang kann nicht rückgängig gemacht werden.',
       confirmText: 'Löschen',
       cancelText: 'Abbrechen',
       type: 'warning'
@@ -452,20 +363,57 @@ const PlanView: React.FC = () => {
 
     try {
       setIsClearing(true);
+      await shiftPlanService.clearAssignments(id);
 
-      if (planType === 'shift' && shiftPlan) {
-        const currentShifts = await shiftAssignmentService.getScheduledShiftsForPlan(shiftPlan.id);
-        const clearPromises = currentShifts.map(shift =>
-          shiftAssignmentService.updateScheduledShift(shift.id, { assignedEmployees: [] })
-        );
-        await Promise.all(clearPromises);
-        await shiftPlanService.updateShiftPlan(shiftPlan.id, { status: 'draft' });
-        setAssignmentResult(null);
-      } else if (planType === 'weekly') {
-        await weeklyPlanService.clearAssignments(id);
-        if (weeklyPlan?.status !== 'draft') {
-          await weeklyPlanService.updateWeeklyPlan(id, { status: 'draft' });
-        }
+      // Reset to draft status if published
+      if (shiftPlan.status === 'published') {
+        await shiftPlanService.updateShiftPlan(id, { status: 'draft' });
+      }
+
+      // Clear solver result
+      setSolverResult(null);
+      setShowSolverResult(false);
+
+      await loadPlanData();
+
+      showNotification({
+        type: 'success',
+        title: 'Zuweisungen gelöscht',
+        message: 'Alle Zuweisungen wurden erfolgreich gelöscht.'
+      });
+    } catch (error: any) {
+      console.error('Error clearing assignments:', error);
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: error.message || 'Löschen der Zuweisungen fehlgeschlagen'
+      });
+    } finally {
+      setIsClearing(false);
+    }
+  };
+
+  // Handle clear assignments for weekly plans
+  const handleClearWeeklyAssignments = async () => {
+    if (!id || !weeklyPlan) return;
+
+    const confirmed = await confirmDialog({
+      title: 'Zuweisungen löschen',
+      message: 'Alle Zuweisungen für diesen Wochenplan werden gelöscht. Dieser Vorgang kann nicht rückgängig gemacht werden.',
+      confirmText: 'Löschen',
+      cancelText: 'Abbrechen',
+      type: 'warning'
+    });
+
+    if (!confirmed) return;
+
+    try {
+      setIsClearing(true);
+      await weeklyPlanService.clearAssignments(id);
+
+      // Reset to draft status if published
+      if (weeklyPlan.status !== 'draft') {
+        await weeklyPlanService.updateWeeklyPlan(id, { status: 'draft' });
       }
 
       await loadPlanData();
@@ -475,12 +423,12 @@ const PlanView: React.FC = () => {
         title: 'Zuweisungen gelöscht',
         message: 'Alle Zuweisungen wurden erfolgreich gelöscht.'
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error clearing assignments:', error);
       showNotification({
         type: 'error',
         title: 'Fehler',
-        message: `Löschen der Zuweisungen fehlgeschlagen: ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`
+        message: error.message || 'Löschen der Zuweisungen fehlgeschlagen'
       });
     } finally {
       setIsClearing(false);
@@ -516,12 +464,12 @@ const PlanView: React.FC = () => {
         title: 'Export erfolgreich',
         message: `Der ${planTypeLabel} wurde als ${exportFormat === 'excel' ? 'Excel' : 'PDF'} exportiert.`
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Error exporting to ${exportFormat}:`, error);
       showNotification({
         type: 'error',
         title: 'Export fehlgeschlagen',
-        message: `Der Export konnte nicht durchgeführt werden.`
+        message: error.message || 'Der Export konnte nicht durchgeführt werden.'
       });
     } finally {
       setIsExporting(false);
@@ -568,6 +516,50 @@ const PlanView: React.FC = () => {
     return '';
   };
 
+  // Check if shift plan has assignments
+  const shiftPlanHasAssignments = () => {
+    if (!shiftPlan?.shifts) return false;
+    // Check if any shift has assignments (assuming shift.assignments exists)
+    return shiftPlan.shifts.some(shift =>
+      shiftPlan.shiftAssignments && shiftPlan.shiftAssignments.length > 0
+    );
+  };
+
+  // Get timetable data for shift plans
+  const getTimetableData = () => {
+    if (!shiftPlan?.shifts || !shiftPlan?.timeSlots) {
+      return { days: [], allTimeSlots: [] };
+    }
+
+    const timeSlotMap = new Map(shiftPlan.timeSlots.map(ts => [ts.id, ts]));
+
+    const days = Array.from(new Set(shiftPlan.shifts.map(shift => shift.dayOfWeek)))
+      .sort()
+      .map(dayId => WEEKDAYS.find(day => day.id === dayId) || { id: dayId, name: `Tag ${dayId}` });
+
+    const allTimeSlotsMap = new Map();
+    days.forEach(day => {
+      const dayShifts = shiftPlan.shifts.filter(s => s.dayOfWeek === day.id);
+      dayShifts.forEach(shift => {
+        const timeSlot = timeSlotMap.get(shift.timeSlotId);
+        if (timeSlot && !allTimeSlotsMap.has(timeSlot.id)) {
+          allTimeSlotsMap.set(timeSlot.id, { ...timeSlot });
+        }
+      });
+    });
+
+    const allTimeSlots = Array.from(allTimeSlotsMap.values()).sort((a, b) => {
+      const timeToMinutes = (timeStr: string) => {
+        if (!timeStr) return 0;
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        return hours * 60 + minutes;
+      };
+      return timeToMinutes(a.startTime) - timeToMinutes(b.startTime);
+    });
+
+    return { days, allTimeSlots };
+  };
+
   // Loading state
   if (loading) {
     return (
@@ -595,7 +587,7 @@ const PlanView: React.FC = () => {
   const availabilityStatus = getAvailabilityStatus();
   const hasAssignments = planType === 'weekly'
     ? weeklyPlan?.employees?.some(e => e.assignedWeeks.length > 0)
-    : scheduledShifts.some(s => s.assignedEmployees.length > 0);
+    : shiftPlanHasAssignments();
 
   return (
     <div className={styles.container}>
@@ -629,7 +621,7 @@ const PlanView: React.FC = () => {
           </div>
           {getUnifiedSolverResult()?.resolutionReport && getUnifiedSolverResult()!.resolutionReport.length > 0 && (
             <div className={styles.solverReport}>
-              {getUnifiedSolverResult()!.resolutionReport.map((line, i) => (
+              {getUnifiedSolverResult()!.resolutionReport.map((line: string, i: number) => (
                 <div key={i}>{line}</div>
               ))}
             </div>
@@ -638,7 +630,7 @@ const PlanView: React.FC = () => {
             <div className={styles.violations}>
               <strong>Probleme:</strong>
               <ul>
-                {getUnifiedSolverResult()!.violations.map((v, i) => (
+                {getUnifiedSolverResult()!.violations.map((v: string, i: number) => (
                   <li key={i}>{v}</li>
                 ))}
               </ul>
@@ -672,22 +664,22 @@ const PlanView: React.FC = () => {
                 {/* Shift plan: Generate assignments button */}
                 {planType === 'shift' && !hasAssignments && (
                   <button
-                    onClick={handlePreviewAssignments}
-                    disabled={!availabilityStatus.canPublish || isPublishing}
+                    onClick={handleGenerateShiftAssignments}
+                    disabled={!availabilityStatus.canPublish || isGenerating}
                     className={`${styles.primaryButton} ${!availabilityStatus.canPublish ? styles.disabledButton : ''}`}
                   >
-                    {isPublishing ? 'Berechne...' : 'Zuweisungen generieren'}
+                    {isGenerating ? 'Berechne...' : 'Zuweisungen generieren'}
                   </button>
                 )}
 
                 {/* Weekly plan: Generate assignments button */}
                 {planType === 'weekly' && !hasAssignments && (
                   <button
-                    onClick={handleGenerateAssignments}
-                    disabled={!availabilityStatus.canPublish || isSubmitting}
+                    onClick={handleGenerateWeeklyAssignments}
+                    disabled={!availabilityStatus.canPublish || isGenerating}
                     className={`${styles.primaryButton} ${!availabilityStatus.canPublish ? styles.disabledButton : ''}`}
                   >
-                    {isSubmitting ? 'Berechne...' : 'Zuweisungen generieren'}
+                    {isGenerating ? 'Berechne...' : 'Zuweisungen generieren'}
                   </button>
                 )}
 
@@ -702,62 +694,20 @@ const PlanView: React.FC = () => {
             )}
           </div>
 
-          {/* Assignment result display for shift plans */}
-          {planType === 'shift' && assignmentResult && (
-            <div className={styles.assignmentResult}>
-              {assignmentResult.success ? (
-                <div className={styles.successBox}>
-                  <h5>Bereit zur Veröffentlichung</h5>
-                  <p>Alle kritischen Probleme wurden behoben. Der Schichtplan kann veröffentlicht werden.</p>
-                </div>
-              ) : (
-                <div className={styles.errorBox}>
-                  <h5>Kritische Probleme</h5>
-                  <ul>
-                    {assignmentResult.violations
-                      .filter(v => v.includes('ERROR:') || v.includes('KRITISCH:'))
-                      .map((violation, index) => (
-                        <li key={index}>{violation.replace('ERROR: ', '').replace('KRITISCH: ', '')}</li>
-                      ))}
-                  </ul>
-                </div>
-              )}
-
-              <div className={styles.assignmentActions}>
-                <button
-                  onClick={() => {
-                    setAssignmentResult(null);
-                    setShowSolverResult(false);
-                  }}
-                  className={styles.secondaryButton}
-                >
-                  Abbrechen
-                </button>
-                <button
-                  onClick={handlePublishShiftPlan}
-                  disabled={isPublishing || !canPublishAssignments()}
-                  className={`${styles.successButton} ${!canPublishAssignments() ? styles.disabledButton : ''}`}
-                >
-                  {isPublishing ? 'Veröffentliche...' : 'Schichtplan veröffentlichen'}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Publish button for weekly plans with assignments */}
-          {planType === 'weekly' && hasAssignments && (
+          {/* Publish buttons for both plan types when assignments exist */}
+          {hasAssignments && (
             <div className={styles.assignmentResult}>
               <div className={styles.successBox}>
                 <h5>Bereit zur Veröffentlichung</h5>
-                <p>Zuweisungen wurden generiert. Der Wochenplan kann veröffentlicht werden.</p>
+                <p>Zuweisungen wurden generiert. Der {planType === 'shift' ? 'Schichtplan' : 'Wochenplan'} kann veröffentlicht werden.</p>
               </div>
               <div className={styles.assignmentActions}>
                 <button
-                  onClick={handlePublishWeeklyPlan}
-                  disabled={isSubmitting}
+                  onClick={planType === 'shift' ? handlePublishShiftPlan : handlePublishWeeklyPlan}
+                  disabled={isPublishing || (planType === 'weekly' && isSubmitting)}
                   className={styles.successButton}
                 >
-                  {isSubmitting ? 'Veröffentliche...' : 'Wochenplan veröffentlichen'}
+                  {isPublishing ? 'Veröffentliche...' : `${planType === 'shift' ? 'Schichtplan' : 'Wochenplan'} veröffentlichen`}
                 </button>
               </div>
             </div>
@@ -771,8 +721,8 @@ const PlanView: React.FC = () => {
         {isAdmin && planStatus === 'published' && (
           <div className={styles.actionBar}>
             <button
-              onClick={handleClearAssignments}
-              disabled={isClearing || isSubmitting}
+              onClick={planType === 'shift' ? handleClearShiftAssignments : handleClearWeeklyAssignments}
+              disabled={isClearing || (planType === 'weekly' && isSubmitting)}
               className={styles.dangerButton}
             >
               {isClearing ? 'Lösche Zuweisungen...' : 'Zuweisungen entfernen'}
@@ -819,12 +769,9 @@ const PlanView: React.FC = () => {
               shifts={shiftPlan.shifts || []}
               timeSlots={shiftPlan.timeSlots || []}
               days={days}
-              scheduledShifts={scheduledShifts}
-              assignmentResult={assignmentResult}
+              shiftAssignments={shiftPlan.shiftAssignments || []}
               employees={employees}
               shiftPlanStatus={shiftPlan.status}
-              getDayOfWeek={getDayOfWeek}
-              showValidationWarnings={true}
               headerTitle="Schichtplan"
               showLegend={false}
             />
@@ -851,7 +798,7 @@ const PlanView: React.FC = () => {
             <strong>Legende:</strong> {
               planStatus === 'published'
                 ? 'Angezeigt werden die aktuell zugewiesenen Mitarbeiter'
-                : assignmentResult
+                : solverResult
                   ? 'Angezeigt werden die vorgeschlagenen Mitarbeiter für eine exemplarische Woche'
                   : 'Angezeigt wird "zugewiesene/benötigte Mitarbeiter" pro Schicht und Wochentag'
             }

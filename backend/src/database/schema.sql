@@ -10,6 +10,9 @@ CREATE TABLE IF NOT EXISTS employee_types (
   has_contract_type BOOLEAN NOT NULL DEFAULT FALSE
 );
 
+-- =====================================================
+-- Roles
+-- =====================================================
 -- Default Employee Types
 -- 'manager' and 'apprentice' contract_type_default = flexible
 -- 'personell' contract_type_default = small
@@ -28,6 +31,9 @@ CREATE TABLE IF NOT EXISTS roles (
   description TEXT
 );
 
+-- =====================================================
+-- Employees
+-- =====================================================
 -- Employees table
 CREATE TABLE IF NOT EXISTS employees (
   id TEXT PRIMARY KEY,
@@ -58,6 +64,9 @@ INSERT OR IGNORE INTO roles (role, authority_level, description) VALUES
   ('maintenance', 50, 'Wartungszugriff'),
   ('user', 10, 'Standardbenutzer');
 
+-- =====================================================
+-- Shift Plans
+-- =====================================================
 -- Shift plans table
 CREATE TABLE IF NOT EXISTS shift_plans (
   id TEXT PRIMARY KEY,
@@ -90,37 +99,27 @@ CREATE TABLE IF NOT EXISTS shifts (
   time_slot_id TEXT NOT NULL,
   day_of_week INTEGER NOT NULL CHECK (day_of_week >= 1 AND day_of_week <= 7),
   required_employees INTEGER NOT NULL CHECK (required_employees >= 1 AND required_employees <= 10) DEFAULT 2,
+  min_employees INTEGER NOT NULL CHECK (required_employees >= 1 AND required_employees <= 10) DEFAULT 1,
+  max_employees INTEGER NOT NULL CHECK (required_employees >= 1 AND required_employees <= 10) DEFAULT 2,
   color TEXT DEFAULT '#3498db',
   FOREIGN KEY (plan_id) REFERENCES shift_plans(id) ON DELETE CASCADE,
   FOREIGN KEY (time_slot_id) REFERENCES time_slots(id) ON DELETE CASCADE,
   UNIQUE(plan_id, time_slot_id, day_of_week)
 );
 
--- Actual scheduled shifts (generated from plan + date range)
-CREATE TABLE IF NOT EXISTS scheduled_shifts (
-  id TEXT PRIMARY KEY,
-  plan_id TEXT NOT NULL,
-  date TEXT NOT NULL,
-  time_slot_id TEXT NOT NULL,
-  required_employees INTEGER NOT NULL CHECK (required_employees >= 1 AND required_employees <= 10) DEFAULT 2,
-  assigned_employees TEXT DEFAULT '[]', -- JSON array of employee IDs
-  FOREIGN KEY (plan_id) REFERENCES shift_plans(id) ON DELETE CASCADE,
-  FOREIGN KEY (time_slot_id) REFERENCES time_slots(id) ON DELETE CASCADE,
-  UNIQUE(plan_id, date, time_slot_id)
-);
-
 -- Employee assignments to specific shifts
 CREATE TABLE IF NOT EXISTS shift_assignments (
   id TEXT PRIMARY KEY,
-  scheduled_shift_id TEXT NOT NULL,
+  plan_id TEXT NOT NULL,
+  shift_id TEXT NOT NULL,
   employee_id TEXT NOT NULL,
-  assignment_status TEXT CHECK(assignment_status IN ('assigned', 'cancelled')) DEFAULT 'assigned',
   assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   assigned_by TEXT NOT NULL,
-  FOREIGN KEY (scheduled_shift_id) REFERENCES scheduled_shifts(id) ON DELETE CASCADE,
+  FOREIGN KEY (plan_id) REFERENCES shift_plans(id) ON DELETE CASCADE,
+  FOREIGN KEY (shift_id) REFERENCES shifts(id) ON DELETE CASCADE,
   FOREIGN KEY (employee_id) REFERENCES employees(id),
   FOREIGN KEY (assigned_by) REFERENCES employees(id),
-  UNIQUE(scheduled_shift_id, employee_id)
+  UNIQUE(plan_id, shift_id, employee_id)
 );
 
 -- Employee availability preferences for specific shift plans
@@ -138,7 +137,7 @@ CREATE TABLE IF NOT EXISTS employee_availability (
 );
 
 -- =====================================================
--- Weekly Plans Module (parallel to shift_plans)
+-- Weekly Plans
 -- =====================================================
 
 -- Weekly Plans (main plan table)
@@ -284,34 +283,37 @@ CREATE TABLE IF NOT EXISTS idp_user_whitelist (
 
 CREATE INDEX IF NOT EXISTS idx_idp_whitelist_lookup ON idp_user_whitelist(idp_id, identifier_type, identifier_value);
 
--- Performance indexes
+-- =====================================================
+-- Indexes
+-- =====================================================
+CREATE INDEX IF NOT EXISTS idx_idp_whitelist_lookup ON idp_user_whitelist(idp_id, identifier_type, identifier_value);
 CREATE INDEX IF NOT EXISTS idx_identity_providers_enabled ON identity_providers(enabled);
 CREATE INDEX IF NOT EXISTS idx_identity_providers_slug ON identity_providers(slug);
 CREATE INDEX IF NOT EXISTS idx_employee_identities_employee ON employee_identities(employee_id);
 CREATE INDEX IF NOT EXISTS idx_employee_identities_idp ON employee_identities(idp_id);
 CREATE INDEX IF NOT EXISTS idx_employee_identities_subject ON employee_identities(idp_id, idp_subject);
 
--- Performance indexes
 CREATE INDEX IF NOT EXISTS idx_employees_username ON employees(username);
 CREATE INDEX IF NOT EXISTS idx_employees_email_active ON employees(email, is_active);
 CREATE INDEX IF NOT EXISTS idx_employees_type_active ON employees(employee_type, is_active);
 CREATE INDEX IF NOT EXISTS idx_employee_roles_employee ON employee_roles(employee_id);
 CREATE INDEX IF NOT EXISTS idx_employee_roles_role ON employee_roles(role);
+
 CREATE INDEX IF NOT EXISTS idx_shift_plans_status_date ON shift_plans(status, start_date, end_date);
 CREATE INDEX IF NOT EXISTS idx_shift_plans_created_by ON shift_plans(created_by);
 CREATE INDEX IF NOT EXISTS idx_shift_plans_template ON shift_plans(is_template, status);
 CREATE INDEX IF NOT EXISTS idx_time_slots_plan ON time_slots(plan_id);
+
 CREATE INDEX IF NOT EXISTS idx_shifts_plan_day ON shifts(plan_id, day_of_week);
 CREATE INDEX IF NOT EXISTS idx_shifts_required_employees ON shifts(required_employees);
 CREATE INDEX IF NOT EXISTS idx_shifts_plan_time ON shifts(plan_id, time_slot_id, day_of_week);
-CREATE INDEX IF NOT EXISTS idx_scheduled_shifts_plan_date ON scheduled_shifts(plan_id, date);
-CREATE INDEX IF NOT EXISTS idx_scheduled_shifts_date_time ON scheduled_shifts(date, time_slot_id);
-CREATE INDEX IF NOT EXISTS idx_scheduled_shifts_required_employees ON scheduled_shifts(required_employees);
+
+CREATE INDEX IF NOT EXISTS idx_shift_assignments_shift ON shift_assignments(shift_id);
+CREATE INDEX IF NOT EXISTS idx_shift_assignments_plan ON shift_assignments(plan_id);
 CREATE INDEX IF NOT EXISTS idx_shift_assignments_employee ON shift_assignments(employee_id);
-CREATE INDEX IF NOT EXISTS idx_shift_assignments_shift ON shift_assignments(scheduled_shift_id);
+
 CREATE INDEX IF NOT EXISTS idx_employee_availability_employee_plan ON employee_availability(employee_id, plan_id);
 
--- Weekly Plans indexes
 CREATE INDEX IF NOT EXISTS idx_weekly_plans_status ON weekly_plans(status);
 CREATE INDEX IF NOT EXISTS idx_weekly_plans_created_by ON weekly_plans(created_by);
 CREATE INDEX IF NOT EXISTS idx_weekly_plans_dates ON weekly_plans(start_date, end_date);

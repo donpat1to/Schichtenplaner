@@ -1,4 +1,4 @@
-import { ShiftPlan, CreateShiftPlanRequest, TimeSlot, Shift } from '../models/ShiftPlan';
+import { ShiftPlan, CreateShiftPlanRequest, TimeSlot, Shift, GenerateResult, ShiftPlanStatistics } from '../models/ShiftPlan';
 import { TEMPLATE_PRESETS } from '../models/defaults/shiftPlanDefaults';
 import { apiClient } from './apiClient';
 
@@ -106,17 +106,6 @@ export const shiftPlanService = {
     return await apiClient.get<ShiftPlan>(`/shift-plans/${id}`);
   },
 
-  async regenerateScheduledShifts(planId: string): Promise<void> {
-    try {
-      console.log('🔄 Attempting to regenerate scheduled shifts...');
-      await apiClient.post(`/shift-plans/${planId}/regenerate-shifts`);
-      console.log('✅ Scheduled shifts regenerated');
-    } catch (error) {
-      console.error('❌ Error regenerating shifts:', error);
-      throw error;
-    }
-  },
-
   async createPlan(data: CreateShiftPlanRequest): Promise<ShiftPlan> {
     return await apiClient.post<ShiftPlan>('/shift-plans', data);
   },
@@ -143,6 +132,26 @@ export const shiftPlanService = {
     }));
   },
 
+  // Solver & Assignments
+  async generateAssignments(planId: string): Promise<GenerateResult> {
+    try {
+      return await apiClient.post<GenerateResult>(`/shift-plans/${planId}/generate`);
+    } catch (error: any) {
+      if (error.statusCode === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('employee');
+        throw new Error('Nicht autorisiert - bitte erneut anmelden');
+      }
+      if (error.statusCode === 404) {
+        throw new Error('Wochenplan nicht gefunden');
+      }
+      if (error.statusCode === 500) {
+        throw new Error('Fehler beim Generieren der Zuweisungen. Bitte überprüfen Sie die Präferenzen.');
+      }
+      throw new Error('Fehler bei der Generierung der Zuweisungen');
+    }
+  },
+
   async clearAssignments(planId: string): Promise<void> {
     try {
       console.log('🔄 Clearing assignments for plan:', planId);
@@ -151,6 +160,42 @@ export const shiftPlanService = {
     } catch (error) {
       console.error('❌ Error clearing assignments:', error);
       throw error;
+    }
+  },
+
+  async publishPlan(planId: string): Promise<ShiftPlan> {
+    try {
+      return await apiClient.post<ShiftPlan>(`/shift-plans/${planId}/publish`);
+    } catch (error: any) {
+      if (error.statusCode === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('employee');
+        throw new Error('Nicht autorisiert - bitte erneut anmelden');
+      }
+      if (error.statusCode === 400) {
+        throw new Error('Plan kann ohne Zuweisungen nicht veröffentlicht werden');
+      }
+      if (error.statusCode === 404) {
+        throw new Error('Wochenplan nicht gefunden');
+      }
+      throw new Error('Fehler beim Veröffentlichen des Plans');
+    }
+  },
+
+  // Statistics
+  async getPlanStatistics(planId: string): Promise<ShiftPlanStatistics> {
+    try {
+      return await apiClient.get<ShiftPlanStatistics>(`/shift-plans/${planId}/statistics`);
+    } catch (error: any) {
+      if (error.statusCode === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('employee');
+        throw new Error('Nicht autorisiert - bitte erneut anmelden');
+      }
+      if (error.statusCode === 404) {
+        throw new Error('Wochenplan nicht gefunden');
+      }
+      throw new Error('Fehler beim Laden der Statistiken');
     }
   },
 

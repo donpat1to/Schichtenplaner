@@ -83,7 +83,7 @@ router.post('/:id/generate', validateId, handleValidationErrors, requireRole(['a
 router.post('/:id/clear-assignments', validateId, handleValidationErrors, requireRole(['admin', 'maintenance']), clearAssignments);
 router.post('/:id/publish', validateId, handleValidationErrors, requireRole(['admin', 'maintenance']), publishPlan);
 
-// Statistics route - ADD THIS
+// Statistics route
 router.get('/:id/statistics', validateId, handleValidationErrors, getPlanStatistics);
 
 // Export routes

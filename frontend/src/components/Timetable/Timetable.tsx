@@ -1,6 +1,6 @@
 // frontend/src/components/Timetable/Timetable.tsx
 import React, { useState, useMemo } from 'react';
-import { Shift, TimeSlot, ScheduledShift } from '../../models/ShiftPlan';
+import { Shift, TimeSlot, ShiftAssignment } from '../../models/ShiftPlan'; // Updated import
 import { Employee } from '../../models/Employee';
 import { AssignmentResult } from '../../models/scheduling';
 import TimeSlotEditor from './TimeSlotEditor';
@@ -22,7 +22,7 @@ export interface TimetableProps {
     shifts: Shift[];
     timeSlots: TimeSlot[];
     days: DayInfo[];
-    scheduledShifts?: ScheduledShift[];
+    shiftAssignments?: ShiftAssignment[]; // Replaces scheduledShifts
     assignmentResult?: AssignmentResult | null;
     employees?: Employee[];
     shiftPlanStatus?: string;
@@ -38,7 +38,6 @@ export interface TimetableProps {
     onDeleteShift?: (shiftId: string) => void;
 
     // Helper functions
-    getDayOfWeek?: (dateString: string) => number;
     showValidationWarnings?: boolean;
     disabled?: boolean;
 
@@ -63,7 +62,7 @@ const Timetable: React.FC<TimetableProps> = ({
     shifts = [],
     timeSlots = [],
     days = [],
-    scheduledShifts = [],
+    shiftAssignments = [], // Changed from scheduledShifts
     assignmentResult = null,
     employees = [],
     shiftPlanStatus = 'draft',
@@ -75,7 +74,6 @@ const Timetable: React.FC<TimetableProps> = ({
     onAddShift,
     onUpdateShift,
     onDeleteShift,
-    getDayOfWeek,
     showValidationWarnings = true,
     disabled = false,
     headerTitle = 'Schichtplan',
@@ -89,42 +87,6 @@ const Timetable: React.FC<TimetableProps> = ({
         endTime: '12:00',
         description: '',
     });
-    const [contentHeights, setContentHeights] = useState<Record<string, number>>({});
-
-    // Function to calculate dynamic row height based on content
-    const calculateRowHeight = (timeSlotId: string): string => {
-        if (mode === 'view' && shiftPlanStatus === 'published') {
-            // Find the maximum number of employees in this time slot
-            let maxEmployees = 0;
-
-            activeDays.forEach(dayId => {
-                const scheduledShift = scheduledShifts.find(scheduled => {
-                    if (!getDayOfWeek) return false;
-                    const scheduledDayOfWeek = getDayOfWeek(scheduled.date);
-                    return scheduledDayOfWeek === dayId &&
-                        scheduled.timeSlotId === timeSlotId;
-                });
-
-                if (scheduledShift) {
-                    const employeeCount = scheduledShift.assignedEmployees?.length || 0;
-                    if (employeeCount > maxEmployees) {
-                        maxEmployees = employeeCount;
-                    }
-                }
-            });
-
-            // Calculate height: base height + (employee count * employee row height)
-            const baseHeight = 60; // Base height in pixels
-            const employeeRowHeight = 25; // Height per employee row
-            const calculatedHeight = baseHeight + (maxEmployees * employeeRowHeight);
-
-            // Ensure minimum and maximum heights
-            return `${Math.max(60, Math.min(calculatedHeight, 200))}px`;
-        }
-
-        // For edit mode or draft status, use fixed height
-        return 'auto';
-    };
 
     // Get active days based on shifts
     const activeDays = useMemo(() => {
@@ -169,23 +131,61 @@ const Timetable: React.FC<TimetableProps> = ({
         return day?.name || `Tag ${dayId}`;
     };
 
-    // Get assignments for a scheduled shift
-    const getAssignmentsForScheduledShift = (scheduledShift: ScheduledShift): string[] => {
-        if (!assignmentResult || !getDayOfWeek) return [];
+    // Get assignments for a specific shift (NEW: based on shift_id)
+    const getAssignmentsForShift = (shiftId: string): string[] => {
+        if (!shiftId) return [];
 
-        const dayOfWeek = getDayOfWeek(scheduledShift.date);
+        // Get actual assignments from shiftAssignments
+        const assignments = shiftAssignments
+            .filter(sa => sa.shiftId === shiftId && sa.employeeId)
+            .map(sa => sa.employeeId!);
 
-        // Find the corresponding shift pattern for this day and time slot
-        const shiftPattern = shifts.find(shift =>
-            shift.dayOfWeek === dayOfWeek &&
-            shift.timeSlotId === scheduledShift.timeSlotId
-        );
-
-        if (shiftPattern && assignmentResult.assignments[shiftPattern.id]) {
-            return assignmentResult.assignments[shiftPattern.id];
+        // If we have assignment result, use it (for preview/planning)
+        if (assignmentResult && assignmentResult.assignments[shiftId]) {
+            return assignmentResult.assignments[shiftId];
         }
 
-        return [];
+        return assignments;
+    };
+
+    // Get assigned employees for a specific day and time slot (NEW)
+    const getAssignedEmployees = (dayOfWeek: number, timeSlotId: string): string[] => {
+        // Find the shift for this day and time slot
+        const shift = shifts.find(s =>
+            s.dayOfWeek === dayOfWeek &&
+            s.timeSlotId === timeSlotId
+        );
+
+        if (!shift) return [];
+
+        return getAssignmentsForShift(shift.id);
+    };
+
+    // Function to calculate dynamic row height based on content
+    const calculateRowHeight = (timeSlotId: string): string => {
+        if (mode === 'view' && shiftPlanStatus === 'published') {
+            // Find the maximum number of employees in this time slot across all days
+            let maxEmployees = 0;
+
+            activeDays.forEach(dayId => {
+                const assignedEmployees = getAssignedEmployees(dayId, timeSlotId);
+                const employeeCount = assignedEmployees.length;
+                if (employeeCount > maxEmployees) {
+                    maxEmployees = employeeCount;
+                }
+            });
+
+            // Calculate height: base height + (employee count * employee row height)
+            const baseHeight = 60; // Base height in pixels
+            const employeeRowHeight = 25; // Height per employee row
+            const calculatedHeight = baseHeight + (maxEmployees * employeeRowHeight);
+
+            // Ensure minimum and maximum heights
+            return `${Math.max(60, Math.min(calculatedHeight, 200))}px`;
+        }
+
+        // For edit mode or draft status, use fixed height
+        return 'auto';
     };
 
     // Validation function
@@ -215,11 +215,18 @@ const Timetable: React.FC<TimetableProps> = ({
             }
         });
 
-        // Check for scheduled shifts consistency
-        scheduledShifts.forEach(scheduledShift => {
-            const timeSlotExists = timeSlots.some(ts => ts.id === scheduledShift.timeSlotId);
-            if (!timeSlotExists) {
-                validationErrors.push(`Scheduled Shift ${scheduledShift.id} verweist auf nicht existierenden Zeitslot: ${scheduledShift.timeSlotId}`);
+        // Check for shift assignments consistency (NEW)
+        shiftAssignments.forEach(assignment => {
+            const shiftExists = shifts.some(s => s.id === assignment.shiftId);
+            if (!shiftExists) {
+                validationErrors.push(`Shift Assignment ${assignment.id} verweist auf nicht existierenden Shift: ${assignment.shiftId}`);
+            }
+
+            if (assignment.employeeId) {
+                const employeeExists = employees.some(e => e.id === assignment.employeeId);
+                if (!employeeExists) {
+                    validationErrors.push(`Shift Assignment ${assignment.id} verweist auf nicht existierenden Employee: ${assignment.employeeId}`);
+                }
             }
         });
 
@@ -281,21 +288,8 @@ const Timetable: React.FC<TimetableProps> = ({
 
         // View mode
         if (shiftPlanStatus === 'published' || assignmentResult) {
-            // Find scheduled shift for this day and time slot
-            const scheduledShift = scheduledShifts.find(scheduled => {
-                if (!getDayOfWeek) return false;
-                const scheduledDayOfWeek = getDayOfWeek(scheduled.date);
-                return scheduledDayOfWeek === dayId &&
-                    scheduled.timeSlotId === timeSlotId;
-            });
-
-            let assignedEmployees: string[] = [];
-
-            if (shiftPlanStatus === 'published' && scheduledShift) {
-                assignedEmployees = scheduledShift.assignedEmployees || [];
-            } else if (assignmentResult && scheduledShift && getDayOfWeek) {
-                assignedEmployees = getAssignmentsForScheduledShift(scheduledShift);
-            }
+            // Get assigned employees for this shift
+            const assignedEmployees = shift ? getAssignmentsForShift(shift.id) : [];
 
             if (assignedEmployees.length > 0) {
                 return (

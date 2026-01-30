@@ -328,47 +328,7 @@ export async function seedTestData(): Promise<void> {
                 }
             }
 
-            // 5. Generate scheduled shifts for the entire period
-            console.log('📋 Generating scheduled shifts for the entire period...');
-            const start = new Date(startDate.trim());
-            const end = new Date(endDate.trim());
-
-            // Generate all dates in the period
-            const allDates: Date[] = [];
-            const currentDate = new Date(start);
-            while (currentDate <= end) {
-                allDates.push(new Date(currentDate));
-                currentDate.setDate(currentDate.getDate() + 1);
-            }
-
-            for (const currentDate of allDates) {
-                const dayOfWeek = currentDate.getDay() === 0 ? 7 : currentDate.getDay();
-                const dayName = Object.keys(testData.shifts).find(day =>
-                    mapDayToNumber(day) === dayOfWeek
-                );
-
-                if (dayName && testData.shifts[dayName]) {
-                    for (const [shiftType, shiftData] of Object.entries(testData.shifts[dayName])) {
-                        const scheduledShiftId = uuidv4();
-                        const timeSlotId = timeSlotMap[shiftData.time];
-
-                        await db.run(
-                            `INSERT INTO scheduled_shifts (id, plan_id, date, time_slot_id, required_employees, assigned_employees) 
-                            VALUES (?, ?, ?, ?, ?, ?)`,
-                            [
-                                scheduledShiftId,
-                                planId,
-                                currentDate.toISOString().split('T')[0],
-                                timeSlotId,
-                                2,
-                                JSON.stringify([])
-                            ]
-                        );
-                    }
-                }
-            }
-
-            // 6. Create employee availabilities
+            // 5. Create employee availabilities
             console.log('📝 Creating employee availabilities...');
 
             for (const [dayName, dayShifts] of Object.entries(testData.shifts)) {
@@ -393,7 +353,7 @@ export async function seedTestData(): Promise<void> {
                 }
             }
 
-            // 7. Create weekly plan
+            // 6. Create weekly plan
             if (testData.weekly_plan) {
                 console.log('📊 Creating weekly plan...');
                 await seedWeeklyPlanData(testData.weekly_plan, employeeMap, createdBy);
@@ -408,7 +368,6 @@ export async function seedTestData(): Promise<void> {
             console.log(`   - Time Slots: ${Object.keys(timeSlotMap).length}`);
             console.log(`   - Shifts: ${Object.keys(shiftMap).length}`);
             console.log(`   - Period: ${testData.period}`);
-            console.log(`   - Scheduled Shifts: ${allDates.length} days`);
 
             if (testData.weekly_plan) {
                 console.log(`   - Weekly Plan: ${testData.weekly_plan.plan_name}`);

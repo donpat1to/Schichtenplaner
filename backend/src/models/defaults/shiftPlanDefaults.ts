@@ -47,19 +47,19 @@ export const DEFAULT_TIME_SLOTS: (Omit<TimeSlot, 'id' | 'planId'> & { timeSlotId
 export const DEFAULT_ZEBRA_SHIFTS: Omit<Shift, 'id' | 'planId'>[] = [
   // Monday-Thursday: Morning + Afternoon
   ...Array.from({ length: 4 }, (_, i) => i + 1).flatMap(day => [
-    { timeSlotId: 'morning', dayOfWeek: day, requiredEmployees: 2, color: '#3498db' },
-    { timeSlotId: 'afternoon', dayOfWeek: day, requiredEmployees: 2, color: '#3498db' }
+    { timeSlotId: 'morning', dayOfWeek: day, requiredEmployees: 2, minEmployees: 1, maxEmployees: 2, color: '#3498db' },
+    { timeSlotId: 'afternoon', dayOfWeek: day, requiredEmployees: 2, minEmployees: 1, maxEmployees: 2, color: '#3498db' }
   ]),
   // Friday: Morning only
-  { timeSlotId: 'morning', dayOfWeek: 5, requiredEmployees: 2, color: '#3498db' }
+  { timeSlotId: 'morning', dayOfWeek: 5, requiredEmployees: 2, minEmployees: 1, maxEmployees: 2, color: '#3498db' }
 ];
 
 export const DEFAULT_SHIFTS: Omit<Shift, 'id' | 'planId'>[] = [
   // Monday-Friday: Morning + Afternoon + Evening
   ...Array.from({ length: 5 }, (_, i) => i + 1).flatMap(day => [
-    { timeSlotId: 'morning', dayOfWeek: day, requiredEmployees: 2, color: '#3498db' },
-    { timeSlotId: 'afternoon', dayOfWeek: day, requiredEmployees: 2, color: '#3498db' },
-    { timeSlotId: 'evening', dayOfWeek: day, requiredEmployees: 1, color: '#3498db' }
+    { timeSlotId: 'morning', dayOfWeek: day, requiredEmployees: 2, minEmployees: 1, maxEmployees: 2, color: '#3498db' },
+    { timeSlotId: 'afternoon', dayOfWeek: day, requiredEmployees: 2, minEmployees: 1, maxEmployees: 2, color: '#3498db' },
+    { timeSlotId: 'evening', dayOfWeek: day, requiredEmployees: 1, minEmployees: 1, maxEmployees: 2, color: '#3498db' }
   ])
 ];
 

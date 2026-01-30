@@ -270,7 +270,6 @@ export class CPSolver {
               shiftId,
               employeeId,
               assignedAt: new Date(),
-              score: Math.floor(Math.random() * 50) + 50 // Random score 50-100
             });
             employeeShiftCount[employeeId]++;
             shiftAssignments[shiftId].push(employeeId);
