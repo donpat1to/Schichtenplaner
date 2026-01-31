@@ -125,7 +125,7 @@ const PlanView: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [id, showNotification]);
+  }, [id]);
 
   useEffect(() => {
     loadPlanData();
@@ -213,7 +213,7 @@ const PlanView: React.FC = () => {
 
     if (!confirmed) return;
 
-    try {
+    await executeWithValidation(async () => {
       setIsGenerating(true);
       const result = await shiftPlanService.generateAssignments(id);
       setSolverResult(result);
@@ -223,27 +223,19 @@ const PlanView: React.FC = () => {
         showNotification({
           type: 'success',
           title: 'Zuweisungen generiert',
-          message: 'Zuweisungen wurden erfolgreich generiert'
+          message: `${result.assignments.length} Zuweisungen in ${result.processingTime}ms erstellt`
         });
-        // Reload plan to get updated assignments
-        await loadPlanData();
       } else {
         showNotification({
           type: 'warning',
           title: 'Solver-Problem',
-          message: result.violations?.length > 0 ? result.violations[0] : 'Keine optimale Lösung gefunden'
+          message: result.violations.length > 0 ? result.violations[0] : 'Keine optimale Lösung gefunden'
         });
       }
-    } catch (error: any) {
-      console.error('Error generating assignments:', error);
-      showNotification({
-        type: 'error',
-        title: 'Fehler',
-        message: error.message || 'Fehler beim Generieren der Zuweisungen'
-      });
-    } finally {
+
+      await loadPlanData();
       setIsGenerating(false);
-    }
+    });
   };
 
   // Handle generate assignments (weekly plans)
@@ -299,25 +291,17 @@ const PlanView: React.FC = () => {
 
     if (!confirmed) return;
 
-    try {
+    await executeWithValidation(async () => {
       setIsPublishing(true);
       await shiftPlanService.publishPlan(id);
       showNotification({
         type: 'success',
         title: 'Veröffentlicht',
-        message: 'Der Schichtplan wurde erfolgreich veröffentlicht'
+        message: 'Der Wochenplan wurde erfolgreich veröffentlicht'
       });
       await loadPlanData();
-    } catch (error: any) {
-      console.error('Error publishing shift plan:', error);
-      showNotification({
-        type: 'error',
-        title: 'Fehler',
-        message: error.message || 'Fehler beim Veröffentlichen des Plans'
-      });
-    } finally {
       setIsPublishing(false);
-    }
+    });
   };
 
   // Handle publish (weekly plans)

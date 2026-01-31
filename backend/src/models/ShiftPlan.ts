@@ -13,6 +13,40 @@ export interface ShiftPlan {
   shifts: Shift[];
 }
 
+export interface ShiftPlanWithData extends ShiftPlan {
+  shifts: ShiftWithData[];
+}
+
+export interface ShiftWithData extends Shift {
+  timeSlot: {
+    id: string;
+    name: string;
+    startTime: string;
+    endTime: string;
+  };
+  assignments: ShiftAssignment[];
+}
+
+export interface TimeSlot {
+  id: string;
+  planId: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+  description?: string;
+}
+
+export interface Shift {
+  id: string;
+  planId: string;
+  timeSlotId: string;
+  dayOfWeek: number; // 1=Monday, 7=Sunday
+  requiredEmployees: number;
+  minEmployees: number;
+  maxEmployees: number;
+  color?: string;
+}
+
 export interface GenerateResult {
   success: boolean;
   message: string;
@@ -54,28 +88,6 @@ export interface ShiftPlanStatistics {
     leastAssignedEmployee: [string, number] | null;
   };
 }
-
-export interface TimeSlot {
-  id: string;
-  planId: string;
-  name: string;
-  startTime: string;
-  endTime: string;
-  description?: string;
-}
-
-export interface Shift {
-  id: string;
-  planId: string;
-  timeSlotId: string;
-  dayOfWeek: number; // 1=Monday, 7=Sunday
-  requiredEmployees: number;
-  minEmployees: number;
-  maxEmployees: number;
-  color?: string;
-}
-
-// Removed: ScheduledShift interface (no longer used)
 
 export interface ShiftAssignment {
   id: string;

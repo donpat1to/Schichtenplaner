@@ -1155,39 +1155,21 @@ export const generateAssignments = async (req: Request, res: Response): Promise<
           assignmentCount++;
         }
 
-        // Update plan status to published (or keep as draft based on your preference)
-        await db.run('UPDATE shift_plans SET status = ? WHERE id = ?', ['published', id]);
-
         await db.run('COMMIT');
-
-        console.log(`✅ Successfully saved ${assignmentCount} assignments to database for plan ${id}`);
-
-        // Fetch the updated plan with new assignments
-        const updatedPlan = await getShiftPlanById(id);
-
-        res.json({
-          success: true,
-          assignments: result.assignments,
-          violations: result.violations,
-          resolutionReport: result.resolutionReport,
-          processingTime: result.processingTime,
-        });
       } catch (error) {
         await db.run('ROLLBACK');
         console.error('❌ Transaction error:', error);
         throw error;
       }
-    } else {
-      console.error('❌ Scheduling failed:', result.violations);
-      res.status(400).json({
-        success: false,
-        assignment: [],
-        violations: result.violations,
-        resolutionReport: result.resolutionReport,
-        processingTime: result.processingTime,
-      });
     }
 
+    res.json({
+      success: result.success,
+      assignments: result.assignments,
+      violations: result.violations,
+      resolutionReport: result.resolutionReport,
+      processingTime: result.processingTime,
+    });
   } catch (error) {
     console.error('❌ Error generating assignments:', error);
     res.status(500).json({
