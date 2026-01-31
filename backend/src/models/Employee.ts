@@ -97,3 +97,14 @@ export interface EmployeeType {
   category: 'internal' | 'external';
   has_contract_type: boolean;
 }
+
+export interface IndividualShiftAssignment {
+  id: string;
+  planId: string;
+  shiftId: string;
+  employeeId: string | null; // null if not assigned yet
+  assignedAt: string;
+  assignedBy: string; // 'system' or user ID
+  assignmentStatus: 'pending' | 'assigned' | 'cancelled';
+  assignmentIndex: number; // Index within the shift (1, 2, 3... for requiredEmployees)
+}

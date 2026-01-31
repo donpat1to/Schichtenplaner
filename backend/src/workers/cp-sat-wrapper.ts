@@ -90,10 +90,10 @@ export class CPSolver {
   private async solveViaPythonBridge(model: CPModel): Promise<Solution> {
     // Try multiple possible paths for the Python script
     const possiblePaths = [
-      path.resolve(process.cwd(), 'python-scripts/scheduling_solver.py'),
-      path.resolve(process.cwd(), 'backend/python-scripts/scheduling_solver.py'),
-      path.resolve(__dirname, '../../../python-scripts/scheduling_solver.py'),
-      path.resolve(__dirname, '../../src/python-scripts/scheduling_solver.py'),
+      path.resolve(process.cwd(), 'python-scripts/shift_scheduling_solver.py'),
+      path.resolve(process.cwd(), 'backend/python-scripts/shift_scheduling_solver.py'),
+      path.resolve(__dirname, '../../../python-scripts/shift_scheduling_solver.py'),
+      path.resolve(__dirname, '../../src/python-scripts/shift_scheduling_solver.py'),
     ];
 
     let pythonScriptPath = '';

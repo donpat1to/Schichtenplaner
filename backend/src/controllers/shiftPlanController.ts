@@ -931,6 +931,7 @@ async function getShiftPlanById(planId: string): Promise<any> {
 
   return {
     ...plan,
+    name: plan.name,
     isTemplate: plan.is_template === 1,
     startDate: plan.start_date,
     endDate: plan.end_date,
@@ -990,7 +991,7 @@ export const generateAssignments = async (req: Request, res: Response): Promise<
 
     console.log('🚀 Starting assignment generation for shift plan:', id);
 
-    // Get plan with all details
+    // Get plan with all details using the helper
     const planData = await getShiftPlanById(id);
     if (!planData) {
       res.status(404).json({ error: 'Shift plan not found' });
@@ -1009,87 +1010,130 @@ export const generateAssignments = async (req: Request, res: Response): Promise<
       return;
     }
 
-    // Get availabilities for this plan
+    console.log('🔍 DEBUG: Plan data structure from database:');
+    console.log(`- Plan ID: ${planData.id}`);
+    console.log(`- Plan Name: ${planData.name}`);
+    console.log(`- Is Template: ${planData.isTemplate}`);
+    console.log(`- Status: ${planData.status}`);
+    console.log(`- Number of shifts: ${planData.shifts?.length || 0}`);
+    console.log(`- Number of employees: ${planData.employees?.length || 0}`);
+
+    // Get availabilities for this plan - FIXED QUERY
     const availabilities = await db.all<any>(`
       SELECT 
         a.id,
         a.employee_id as employeeId,
+        a.plan_id as planId,
         a.shift_id as shiftId,
         a.preference_level as preferenceLevel,
-        a.notes,
-        s.day_of_week as dayOfWeek,
-        s.time_slot_id as timeSlotId,
-        ts.name as timeSlotName,
-        ts.start_time as startTime,
-        ts.end_time as endTime
+        a.notes
       FROM employee_availability a
-      LEFT JOIN shifts s ON a.shift_id = s.id
-      LEFT JOIN time_slots ts ON s.time_slot_id = ts.id
       WHERE a.plan_id = ?
     `, [id]);
 
     console.log(`📊 Found ${availabilities.length} availabilities for plan ${id}`);
 
+    // Check if shifts have timeSlot data
+    if (planData.shifts && planData.shifts.length > 0) {
+      console.log('🔍 First shift structure:');
+      const firstShift = planData.shifts[0];
+      console.log(JSON.stringify({
+        id: firstShift.id,
+        planId: firstShift.planId,
+        timeSlotId: firstShift.timeSlotId,
+        dayOfWeek: firstShift.dayOfWeek,
+        requiredEmployees: firstShift.requiredEmployees,
+        minEmployees: firstShift.minEmployees,
+        maxEmployees: firstShift.maxEmployees,
+        color: firstShift.color,
+        hasTimeSlot: !!firstShift.timeSlot,
+        timeSlot: firstShift.timeSlot
+      }, null, 2));
+    }
+
+    // Get ALL active employees (not just those already in plan)
+    const allEmployees = await db.all<any>(`
+      SELECT 
+        e.id, 
+        e.username,
+        e.email, 
+        e.firstname, 
+        e.lastname, 
+        e.employee_type as employeeType,
+        e.contract_type as contractType,
+        e.can_work_alone as canWorkAlone,
+        e.is_trainee as isTrainee,
+        e.is_active as isActive,
+        GROUP_CONCAT(er.role) as roles
+      FROM employees e
+      LEFT JOIN employee_roles er ON e.id = er.employee_id
+      WHERE e.is_active = 1
+      GROUP BY e.id
+      ORDER BY e.firstname, e.lastname
+    `, []);
+
+    console.log(`📊 Total active employees in system: ${allEmployees.length}`);
+
     // Create a proper ShiftPlan object with all required properties
     const shiftPlan: ShiftPlan = {
       id: planData.id,
       name: planData.name,
-      description: planData.description,
-      startDate: planData.startDate,
-      endDate: planData.endDate,
+      description: planData.description || '',
+      startDate: planData.startDate || '',
+      endDate: planData.endDate || '',
       isTemplate: planData.isTemplate,
       status: planData.status,
       createdBy: planData.createdBy,
       createdAt: planData.createdAt,
-      timeSlots: planData.timeSlots || [],
-      shifts: planData.shifts || [],
-      shiftAssignments: planData.shifts?.map((shift: Shift) => ({
-        id: `${shift.id}-assignment`,
-        planId: planData.id,
-        shiftId: shift.id,
-        employeeId: '',
-        assignedAt: new Date().toISOString(),
-        assignedBy: userId,
-      })) || []
+      timeSlots: planData.timeSlots,
+      shifts: (planData.shifts).map((shift: Shift) => ({
+        id: shift.id,
+        planId: shift.planId,
+        timeSlotId: shift.timeSlotId,
+        dayOfWeek: shift.dayOfWeek,
+        requiredEmployees: shift.requiredEmployees,
+        minEmployees: shift.minEmployees,
+        maxEmployees: shift.maxEmployees,
+        color: shift.color,
+      })),
+      shiftAssignments: []
     };
+
+    // Prepare employees data
+    const employees = allEmployees.map(emp => ({
+      id: emp.id,
+      username: emp.username,
+      email: emp.email,
+      firstname: emp.firstname,
+      lastname: emp.lastname,
+      employeeType: emp.employeeType,
+      contractType: emp.contractType,
+      canWorkAlone: emp.canWorkAlone === 1,
+      isActive: emp.isActive === 1,
+      isTrainee: emp.isTrainee === 1,
+      createdAt: emp.createdAt,
+      roles: emp.roles ? emp.roles.split(',') : []
+    }));
+
+    console.log('🔍 Preparing schedule request:');
+    console.log(`  - Shifts: ${shiftPlan.shifts.length}`);
+    console.log(`  - Employees: ${employees.length}`);
+    console.log(`  - Availabilities: ${availabilities.length}`);
 
     // Prepare data for scheduling service
     const scheduleRequest = {
       shiftPlan,
-      employees: planData.employees || [],
-      availabilities: availabilities.map((avail: any) => ({
+      employees,
+      availabilities: availabilities.map(avail => ({
         id: avail.id,
         employeeId: avail.employeeId,
-        planId: id,
+        planId: avail.planId,
         shiftId: avail.shiftId,
         preferenceLevel: avail.preferenceLevel,
-        notes: avail.notes,
-        dayOfWeek: avail.dayOfWeek,
-        timeSlotId: avail.timeSlotId,
-        timeSlotName: avail.timeSlotName,
-        startTime: avail.startTime,
-        endTime: avail.endTime,
+        notes: avail.notes
       })),
-      constraints: [
-        {
-          type: 'basic',
-          severity: 'hard' as const,
-          parameters: {
-            maxShiftsPerDay: 2,
-            minEmployeesPerShift: planData.shifts?.[0]?.minEmployees || 1,
-            maxEmployeesPerShift: planData.shifts?.[0]?.maxEmployees || 2,
-            enforceTraineeSupervision: true,
-            contractHoursLimit: true,
-            maxHoursPerWeek: 40,
-          }
-        }
-      ],
+      constraints: [],
     };
-
-    console.log('📋 Prepared schedule request with:');
-    console.log(`  - ${scheduleRequest.shiftPlan.shifts.length} shifts`);
-    console.log(`  - ${scheduleRequest.employees.length} employees`);
-    console.log(`  - ${scheduleRequest.availabilities.length} availabilities`);
 
     // Import and run the scheduling service
     const { SchedulingService } = await import('../services/SchedulingService.js');

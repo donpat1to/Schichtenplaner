@@ -2,7 +2,7 @@
 import { Worker } from 'worker_threads';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { ShiftPlan } from '../models/ShiftPlan.js';
+import { ShiftPlan, Shift } from '../models/ShiftPlan.js';
 import { ScheduleRequest, ScheduleResult, Availability, Constraint } from '../models/scheduling.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -11,18 +11,13 @@ const __dirname = path.dirname(__filename);
 export class SchedulingService {
   async generateOptimalSchedule(request: ScheduleRequest): Promise<ScheduleResult> {
     return new Promise((resolve, reject) => {
-      // Use the built JavaScript file
-      const workerPath = path.resolve(__dirname, '../../dist/workers/scheduler-worker.js');
-
-      console.log('Looking for worker at:', workerPath);
+      const workerPath = path.resolve(__dirname, '../../dist/workers/shift-scheduler-worker.js');
       const workerData = this.prepareWorkerData(request);
-      //console.log('Loaded worker data:', workerData)
 
       const worker = new Worker(workerPath, {
         workerData
       });
 
-      // Timeout after 110 seconds
       const timeout = setTimeout(() => {
         worker.terminate();
         reject(new Error('Scheduling timeout after 110 seconds'));
@@ -53,11 +48,16 @@ export class SchedulingService {
     const shifts = this.prepareShifts(shiftPlan);
     const workerAvailabilities = this.prepareAvailabilities(availabilities, shiftPlan);
 
-    // 🆕 ENHANCED DATA VALIDATION
+    // Enhanced data validation
     console.log('\n🔍 ===== ENHANCED DATA VALIDATION =====');
     console.log(`Shift Plan: ${shiftPlan.name} (${shiftPlan.id})`);
     console.log(`Template: ${shiftPlan.isTemplate}`);
-    console.log(`Generated shifts: ${shifts.length}`);
+    console.log(`Shifts: ${shifts.length}`);
+
+    // Calculate total assignment slots
+    const totalAssignmentSlots = shifts.reduce((sum, shift) => sum + shift.requiredEmployees, 0);
+    console.log(`Total assignment slots needed: ${totalAssignmentSlots}`);
+
     console.log(`Input availabilities: ${availabilities.length}`);
     console.log(`Mapped availabilities: ${workerAvailabilities.length}`);
 
@@ -65,7 +65,6 @@ export class SchedulingService {
     const shiftIdsFromShifts = shifts.map(s => s.id);
     const shiftIdsFromAvailabilities = [...new Set(workerAvailabilities.map(a => a.shiftId))];
 
-    console.log(`Shift IDs in generated shifts: ${shiftIdsFromShifts.length}`);
     console.log(`Unique shift IDs in availabilities: ${shiftIdsFromAvailabilities.length}`);
 
     // Find matching shift IDs
@@ -81,7 +80,7 @@ export class SchedulingService {
       matchingShiftIds.slice(0, 5).forEach(id => {
         const shift = shifts.find(s => s.id === id);
         const availCount = workerAvailabilities.filter(a => a.shiftId === id).length;
-        console.log(`   - ${id}: ${availCount} availabilities, Date: ${shift?.date}, TimeSlot: ${shift?.timeSlotId}`);
+        console.log(`   - ${id}: ${availCount} availabilities, Day: ${shift?.dayOfWeek}, TimeSlot: ${shift?.timeSlotId}, Required: ${shift?.requiredEmployees}`);
       });
     }
 
@@ -108,74 +107,37 @@ export class SchedulingService {
         name: shiftPlan.name,
         startDate: shiftPlan.startDate,
         endDate: shiftPlan.endDate,
-        status: shiftPlan.status
+        status: shiftPlan.status,
+        isTemplate: shiftPlan.isTemplate
       },
-      employees: employees.filter(emp => emp.isActive),
-      shifts,
+      employees: employees.filter(emp => emp.isActive).map(emp => ({
+        id: emp.id,
+        firstname: emp.firstname,
+        lastname: emp.lastname,
+        employeeType: emp.employeeType,
+        contractType: emp.contractType,
+        canWorkAlone: emp.canWorkAlone || true,
+        isTrainee: emp.isTrainee || false,
+        isActive: emp.isActive
+      })),
+      shifts: shifts,
       availabilities: workerAvailabilities,
-      constraints: this.prepareConstraints(constraints)
+      constraints: this.prepareConstraints(constraints),
+      totalAssignmentSlots: shifts.reduce((sum, shift) => sum + shift.requiredEmployees, 0)
     };
   }
 
   private prepareShifts(shiftPlan: ShiftPlan): any[] {
-    if (!shiftPlan.isTemplate || !shiftPlan.shiftAssignments) {
-      return this.generateScheduledShiftsFromTemplate(shiftPlan);
-    }
-
+    // Map shifts with their timeSlot information
     return shiftPlan.shifts.map(shift => ({
       id: shift.id,
       planId: shift.planId,
-      //requiredEmployees: shift.requiredEmployees,
-      minWorkers: 1,
-      maxWorkers: 2,
-      isPriority: false
+      timeSlotId: shift.timeSlotId,
+      dayOfWeek: shift.dayOfWeek,
+      requiredEmployees: shift.requiredEmployees,
+      minEmployees: shift.minEmployees || 1,
+      maxEmployees: shift.maxEmployees || 2,
     }));
-  }
-
-  private generateScheduledShiftsFromTemplate(shiftPlan: ShiftPlan): any[] {
-    const shifts: any[] = [];
-
-    if (!shiftPlan || !shiftPlan.startDate) {
-      return shifts;
-    }
-
-    const startDate = new Date(shiftPlan.startDate);
-
-    // Generate shifts for one week (Monday to Sunday)
-    for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
-      const currentDate = new Date(startDate);
-      currentDate.setDate(startDate.getDate() + dayOffset);
-
-      const dayOfWeek = currentDate.getDay() === 0 ? 7 : currentDate.getDay();
-      const dayShifts = shiftPlan.shifts.filter(shift => shift.dayOfWeek === dayOfWeek);
-
-      dayShifts.forEach(shift => {
-        const shiftId = shift.id; // Use the original shift pattern ID
-        const dateStr = currentDate.toISOString().split('T')[0];
-
-        shifts.push({
-          id: shiftId, // This matches the frontend availability records
-          date: dateStr,
-          timeSlotId: shift.timeSlotId,
-          requiredEmployees: shift.requiredEmployees,
-          minWorkers: 1,
-          maxWorkers: 2,
-          isPriority: false
-        });
-
-        console.log(`✅ Generated shift: ${shiftId} for date ${dateStr}, day ${dayOfWeek}, timeSlot ${shift.timeSlotId}`);
-      });
-    }
-
-    console.log("Created shifts for one week. Amount: ", shifts.length);
-
-    // Debug: Show which shift IDs we're using
-    console.log('🔍 SHIFT IDS IN GENERATED SHIFTS:');
-    shifts.forEach(shift => {
-      console.log(`   - ${shift.id} (Date: ${shift.date}, TimeSlot: ${shift.timeSlotId})`);
-    });
-
-    return shifts;
   }
 
   private prepareAvailabilities(availabilities: Availability[], shiftPlan: ShiftPlan): any[] {
@@ -183,27 +145,15 @@ export class SchedulingService {
     console.log(`Input availabilities: ${availabilities.length} records`);
 
     const workerAvailabilities = availabilities.map(avail => {
-      const shiftId = avail.shiftId;
-
-      //console.log(`📋 Availability ${avail.id}: employee=${avail.employeeId}, shift=${shiftId}, preference=${avail.preferenceLevel}`);
-
       return {
         employeeId: avail.employeeId,
-        shiftId: shiftId, // Use the original shift ID from frontend
+        shiftId: avail.shiftId,
         preferenceLevel: avail.preferenceLevel
       };
     });
+
     console.log(`✅ Mapped ${workerAvailabilities.length} availabilities for worker`);
     return workerAvailabilities;
-  }
-
-  private findShiftIdForAvailability(availability: Availability, shiftPlan: ShiftPlan): string {
-    return availability.shiftId;
-  }
-
-  private getDayOfWeekFromDate(dateString: string): number {
-    const date = new Date(dateString);
-    return date.getDay() === 0 ? 7 : date.getDay();
   }
 
   private prepareConstraints(constraints: Constraint[]): any {
@@ -212,7 +162,8 @@ export class SchedulingService {
       minEmployeesPerShift: 1,
       maxEmployeesPerShift: 2,
       enforceTraineeSupervision: true,
-      contractHoursLimits: true
+      contractHoursLimits: true,
+      individualAssignments: true // NEW: Flag for individual assignment mode
     };
 
     return {
@@ -222,5 +173,29 @@ export class SchedulingService {
         return acc;
       }, {} as any)
     };
+  }
+
+  // Convert assignments to individual slot format
+  public convertToIndividualAssignments(
+    assignments: { [shiftId: string]: string[] },
+    shifts: Shift[]
+  ): { shiftId: string; employeeId: string; assignmentIndex: number }[] {
+    const individualAssignments: { shiftId: string; employeeId: string; assignmentIndex: number }[] = [];
+
+    Object.entries(assignments).forEach(([shiftId, employeeIds]) => {
+      const shift = shifts.find(s => s.id === shiftId);
+      if (!shift) return;
+
+      // For each employee assigned to this shift, create an individual assignment
+      employeeIds.forEach((employeeId, index) => {
+        individualAssignments.push({
+          shiftId,
+          employeeId,
+          assignmentIndex: index + 1 // 1-based index for assignment slots
+        });
+      });
+    });
+
+    return individualAssignments;
   }
 }
