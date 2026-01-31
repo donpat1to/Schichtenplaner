@@ -1,6 +1,4 @@
 // backend/src/models/ShiftPlan.ts
-import { IndividualShiftAssignment } from './Employee.js';
-
 export interface ShiftPlan {
   id: string;
   name: string;
@@ -13,7 +11,6 @@ export interface ShiftPlan {
   createdAt: string;
   timeSlots: TimeSlot[];
   shifts: Shift[];
-  shiftAssignments?: IndividualShiftAssignment[]; // Now individual rows instead of JSON arrays
 }
 
 export interface GenerateResult {
@@ -22,8 +19,6 @@ export interface GenerateResult {
   assignments: {
     shiftId: string;
     employeeId: string;
-    assignedAt?: string;
-    assignmentIndex: number; // New: indicates which slot in the shift
   }[];
   violations: string[];
   processingTime: number;
@@ -89,7 +84,6 @@ export interface ShiftAssignment {
   employeeId: string;
   assignedAt: string;
   assignedBy: string;
-  assignmentIndex: number; // New: to distinguish multiple slots per shift
 }
 
 // Request/Response DTOs
@@ -112,38 +106,4 @@ export interface UpdateShiftPlanRequest {
   status?: 'draft' | 'published' | 'archived';
   timeSlots?: Omit<TimeSlot, 'id' | 'planId'>[];
   shifts?: Omit<Shift, 'id' | 'planId'>[];
-}
-
-export interface CreateShiftFromTemplateRequest {
-  templatePlanId: string;
-  name: string;
-  startDate: string;
-  endDate: string;
-  description?: string;
-}
-
-export interface AssignEmployeeRequest {
-  employeeId: string;
-  shiftId: string;
-  assignmentIndex?: number; // Optional: specify which slot to assign
-}
-
-export interface UpdateRequiredEmployeesRequest {
-  shiftId: string;
-  requiredEmployees: number;
-}
-
-// New: For bulk assignment operations
-export interface BulkShiftAssignmentRequest {
-  assignments: {
-    shiftId: string;
-    employeeId: string;
-    assignmentIndex?: number;
-  }[];
-}
-
-// New: For generating shift assignment slots
-export interface GenerateAssignmentSlotsRequest {
-  shiftIds?: string[]; // Optional: specific shifts, otherwise all shifts in plan
-  clearExisting?: boolean; // Whether to clear existing assignments
 }

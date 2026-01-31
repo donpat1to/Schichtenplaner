@@ -2,7 +2,7 @@
 import { Employee } from './Employee.js';
 import { ShiftPlan } from './ShiftPlan.js';
 
-// Availability interface to match
+// Availability interface
 export interface Availability {
   id: string;
   employeeId: string;
@@ -41,9 +41,13 @@ export interface ScheduleRequest {
 }
 
 export interface ScheduleResult {
-  assignments: Assignment[];
-  violations: Violation[];
   success: boolean;
+  assignments: {
+    shiftId: string;
+    employeeId: string;
+    assignmentIndex: number;
+  }[]
+  violations: string[];
   resolutionReport: string[];
   processingTime: number;
 }
@@ -52,7 +56,6 @@ export interface Assignment {
   shiftId: string;
   employeeId: string;
   assignedAt: Date;
-  score: number; // Qualität der Zuweisung (1-100)
 }
 
 export interface Violation {
@@ -106,97 +109,7 @@ export interface AssignmentResult {
   };
 }
 
-export interface EmployeeAvailabilitySummary {
-  employeeId: string;
-  employeeName: string;
-  preferredSlots: number;
-  availableSlots: number;
-  unavailableSlots: number;
-  totalSlots: number;
-}
-
-export interface ShiftRequirement {
-  shiftId: string;
-  timeSlotId: string;
-  dayOfWeek: number;
-  date?: string;
-  requiredEmployees: number;
-  minEmployees: number;
-  maxEmployees: number;
-  assignedEmployees: string[];
-  isPriority: boolean;
-}
-
 // New types for the updated schema
 export interface EmployeeWithRoles extends Employee {
   roles: string[];
-}
-
-export interface ShiftWithDetails {
-  id: string;
-  planId: string;
-  timeSlotId: string;
-  dayOfWeek: number;
-  requiredEmployees: number;
-  color?: string;
-  timeSlot: {
-    id: string;
-    name: string;
-    startTime: string;
-    endTime: string;
-    description?: string;
-  };
-}
-
-export interface AvailabilityWithDetails extends Availability {
-  employee?: {
-    id: string;
-    firstname: string;
-    lastname: string;
-    employeeType: 'manager' | 'personell' | 'apprentice' | 'guest';
-    canWorkAlone: boolean;
-    isTrainee: boolean;
-  };
-  shift?: {
-    dayOfWeek: number;
-    timeSlotId: string;
-    timeSlot?: {
-      name: string;
-      startTime: string;
-      endTime: string;
-    };
-  };
-}
-
-// Types for scheduling algorithm input
-export interface SchedulingInput {
-  planId: string;
-  startDate: string;
-  endDate: string;
-  constraints: Constraint[];
-  options?: SolverOptions;
-}
-
-// Types for scheduling results with enhanced information
-export interface EnhancedAssignment extends Assignment {
-  employeeName: string;
-  shiftDetails: {
-    date: string;
-    dayOfWeek: number;
-    timeSlotName: string;
-    startTime: string;
-    endTime: string;
-  };
-  preferenceLevel: number;
-}
-
-export interface SchedulingStatistics {
-  totalShifts: number;
-  totalAssignments: number;
-  coverageRate: number;
-  preferenceSatisfaction: number;
-  constraintViolations: number;
-  hardConstraintViolations: number;
-  softConstraintViolations: number;
-  processingTime: number;
 }

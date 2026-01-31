@@ -7,7 +7,7 @@ import { useBackendValidation } from '../../hooks/useBackendValidation';
 import { shiftPlanService } from '../../services/shiftPlanService';
 import { weeklyPlanService } from '../../services/weeklyPlanService';
 import { employeeService } from '../../services/employeeService';
-import { ShiftPlan, ScheduledShift } from '../../models/ShiftPlan';
+import { ShiftPlanWithData } from '../../models/ShiftPlan';
 import { WeeklyPlanWithDetails, formatWeekRange } from '../../models/WeeklyPlan';
 import { Employee, EmployeeAvailability } from '../../models/Employee';
 import { formatDate } from '../../utils/formatters';
@@ -41,7 +41,7 @@ const PlanView: React.FC = () => {
 
   // Plan state - unified for both types
   const [planType, setPlanType] = useState<PlanType | null>(null);
-  const [shiftPlan, setShiftPlan] = useState<ShiftPlan | null>(null);
+  const [shiftPlan, setShiftPlan] = useState<ShiftPlanWithData | null>(null);
   const [weeklyPlan, setWeeklyPlan] = useState<WeeklyPlanWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -516,15 +516,6 @@ const PlanView: React.FC = () => {
     return '';
   };
 
-  // Check if shift plan has assignments
-  const shiftPlanHasAssignments = () => {
-    if (!shiftPlan?.shifts) return false;
-    // Check if any shift has assignments (assuming shift.assignments exists)
-    return shiftPlan.shifts.some(shift =>
-      shiftPlan.shiftAssignments && shiftPlan.shiftAssignments.length > 0
-    );
-  };
-
   // Get timetable data for shift plans
   const getTimetableData = () => {
     if (!shiftPlan?.shifts || !shiftPlan?.timeSlots) {
@@ -587,7 +578,7 @@ const PlanView: React.FC = () => {
   const availabilityStatus = getAvailabilityStatus();
   const hasAssignments = planType === 'weekly'
     ? weeklyPlan?.employees?.some(e => e.assignedWeeks.length > 0)
-    : shiftPlanHasAssignments();
+    : shiftPlan?.shifts.some(s => s.assignments.length > 0);
 
   return (
     <div className={styles.container}>
@@ -769,7 +760,7 @@ const PlanView: React.FC = () => {
               shifts={shiftPlan.shifts || []}
               timeSlots={shiftPlan.timeSlots || []}
               days={days}
-              shiftAssignments={shiftPlan.shiftAssignments || []}
+              shiftAssignments={shiftPlan.shifts.flatMap(shift => shift.assignments) || []}
               employees={employees}
               shiftPlanStatus={shiftPlan.status}
               headerTitle="Schichtplan"

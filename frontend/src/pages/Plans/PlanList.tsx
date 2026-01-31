@@ -204,7 +204,7 @@ const PlanList: React.FC = () => {
         alignItems: 'center',
         marginBottom: '30px'
       }}>
-        <h1>📋 Alle Pläne</h1>
+        <h1>Alle Pläne</h1>
         <div style={{ display: 'flex', gap: '10px' }}>
           {hasRole(['admin', 'maintenance']) && (
             <>

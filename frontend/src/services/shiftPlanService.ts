@@ -1,4 +1,4 @@
-import { ShiftPlan, CreateShiftPlanRequest, TimeSlot, Shift, GenerateResult, ShiftPlanStatistics } from '../models/ShiftPlan';
+import { ShiftPlan, CreateShiftPlanRequest, TimeSlot, Shift, GenerateResult, ShiftPlanStatistics, ShiftPlanWithData } from '../models/ShiftPlan';
 import { TEMPLATE_PRESETS } from '../models/defaults/shiftPlanDefaults';
 import { apiClient } from './apiClient';
 
@@ -50,9 +50,9 @@ export const shiftPlanService = {
     }
   },
 
-  async getShiftPlan(id: string): Promise<ShiftPlan> {
+  async getShiftPlan(id: string): Promise<ShiftPlanWithData> {
     try {
-      return await apiClient.get<ShiftPlan>(`/shift-plans/${id}`);
+      return await apiClient.get<ShiftPlanWithData>(`/shift-plans/${id}`);
     } catch (error: any) {
       if (error.statusCode === 401) {
         localStorage.removeItem('token');

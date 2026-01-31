@@ -11,50 +11,20 @@ export interface ShiftPlan {
   createdAt: string;
   timeSlots: TimeSlot[];
   shifts: Shift[];
-  shiftAssignments?: ShiftAssignment[];
 }
 
-export interface GenerateResult {
-  success: boolean;
-  message: string;
-  assignments: {
-    shiftId: string;
-    employeeId: string;
-    assignedAt?: string;
-  }[];
-  violations: string[];
-  processingTime: number;
-  plan?: ShiftPlan; // If you have ShiftPlan type in frontend
+export interface ShiftPlanWithData extends ShiftPlan {
+  shifts: ShiftWithData[];
 }
 
-export interface ShiftPlanStatistics {
-  planInfo: {
+export interface ShiftWithData extends Shift {
+  timeSlot: {
+    id: string;
     name: string;
-    status: 'draft' | 'published' | 'archived';
-    isTemplate: boolean;
-    startDate?: string;
-    endDate?: string;
+    startTime: string;
+    endTime: string;
   };
-  totals: {
-    totalShifts: number;
-    totalAssignments: number;
-    totalEmployees: number;
-    totalRequiredEmployees: number;
-  };
-  coverage: {
-    coverageRate: number;
-    employeesWithAssignments: number;
-    averageAssignmentsPerEmployee: number;
-  };
-  breakdown: {
-    employeeTypeBreakdown: Record<string, number>;
-    shiftsByDay: Record<number, number>;
-  };
-  assignmentDistribution: {
-    assignmentsPerEmployee: Record<string, number>;
-    mostAssignedEmployee: [string, number] | null;
-    leastAssignedEmployee: [string, number] | null;
-  };
+  assignments: ShiftAssignment[];
 }
 
 export interface TimeSlot {
@@ -77,13 +47,46 @@ export interface Shift {
   color?: string;
 }
 
-export interface ScheduledShift {
-  id: string;
-  planId: string;
-  date: string;
-  timeSlotId: string;
-  requiredEmployees: number;
-  assignedEmployees: string[]; // employee IDs
+export interface GenerateResult {
+  success: boolean;
+  message: string;
+  assignments: {
+    shiftId: string;
+    employeeId: string;
+  }[];
+  violations: string[];
+  processingTime: number;
+  plan?: ShiftPlan;
+}
+
+export interface ShiftPlanStatistics {
+  planInfo: {
+    name: string;
+    status: 'draft' | 'published' | 'archived';
+    isTemplate: boolean;
+    startDate?: string;
+    endDate?: string;
+  };
+  totals: {
+    totalShifts: number;
+    totalAssignmentSlots: number; // Sum of requiredEmployees across all shifts
+    totalAssignedSlots: number; // Count of assigned employeeIds (not null)
+    totalEmployees: number;
+  };
+  coverage: {
+    coverageRate: number; // totalAssignedSlots / totalAssignmentSlots
+    employeesWithAssignments: number;
+    averageAssignmentsPerEmployee: number;
+  };
+  breakdown: {
+    employeeTypeBreakdown: Record<string, number>;
+    shiftsByDay: Record<number, number>;
+  };
+  assignmentDistribution: {
+    assignmentsPerEmployee: Record<string, number>;
+    mostAssignedEmployee: [string, number] | null;
+    leastAssignedEmployee: [string, number] | null;
+  };
 }
 
 export interface ShiftAssignment {
@@ -115,21 +118,4 @@ export interface UpdateShiftPlanRequest {
   status?: 'draft' | 'published' | 'archived';
   timeSlots?: Omit<TimeSlot, 'id' | 'planId'>[];
   shifts?: Omit<Shift, 'id' | 'planId'>[];
-}
-
-export interface CreateShiftFromTemplateRequest {
-  templatePlanId: string;
-  name: string;
-  startDate: string;
-  endDate: string;
-  description?: string;
-}
-
-export interface AssignEmployeeRequest {
-  employeeId: string;
-  scheduledShiftId: string;
-}
-
-export interface UpdateRequiredEmployeesRequest {
-  requiredEmployees: number;
 }

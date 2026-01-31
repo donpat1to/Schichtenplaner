@@ -22,7 +22,7 @@ export interface TimetableProps {
     shifts: Shift[];
     timeSlots: TimeSlot[];
     days: DayInfo[];
-    shiftAssignments?: ShiftAssignment[]; // Replaces scheduledShifts
+    shiftAssignments?: ShiftAssignment[];
     assignmentResult?: AssignmentResult | null;
     employees?: Employee[];
     shiftPlanStatus?: string;
@@ -62,7 +62,7 @@ const Timetable: React.FC<TimetableProps> = ({
     shifts = [],
     timeSlots = [],
     days = [],
-    shiftAssignments = [], // Changed from scheduledShifts
+    shiftAssignments = [],
     assignmentResult = null,
     employees = [],
     shiftPlanStatus = 'draft',

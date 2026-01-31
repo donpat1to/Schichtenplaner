@@ -7,6 +7,7 @@ import {
   UpdateShiftPlanRequest,
   ShiftPlan,
   Shift,
+  ShiftAssignment,
 } from '../models/ShiftPlan.js';
 import { Employee } from '../models/Employee.js';
 import { AuthRequest } from '../middleware/auth.js';
@@ -127,22 +128,23 @@ export const getShiftPlan = async (req: Request, res: Response): Promise<void> =
     let shiftAssignments: any[] = [];
     if (!plan.is_template) {
       shiftAssignments = await db.all<any>(`
-        SELECT sa.*, e.firstname || ' ' || e.lastname as employee_name
-        FROM shift_assignments sa
-        LEFT JOIN employees e ON sa.employee_id = e.id
-        WHERE sa.plan_id = ?
-        ORDER BY sa.shift_id, sa.assigned_at
-      `, [id]);
+      SELECT sa.*, e.firstname || ' ' || e.lastname as employee_name
+      FROM shift_assignments sa
+      LEFT JOIN employees e ON sa.employee_id = e.id
+      WHERE sa.plan_id = ?
+      ORDER BY sa.shift_id, sa.assigned_at
+    `, [id]);
     }
 
     // Gruppiere Zuweisungen pro Shift
-    const assignmentsByShift: Record<string, any[]> = {};
+    const assignmentsByShift: Record<string, ShiftAssignment[]> = {};
     shiftAssignments.forEach(a => {
       if (!assignmentsByShift[a.shift_id]) assignmentsByShift[a.shift_id] = [];
       assignmentsByShift[a.shift_id].push({
-        id: a.id,
+        id: a['id'],
+        planId: id,
+        shiftId: a['shift_id'],
         employeeId: a.employee_id,
-        employeeName: a.employee_name,
         assignedAt: a.assigned_at,
         assignedBy: a.assigned_by
       });
@@ -887,13 +889,14 @@ async function getShiftPlanById(planId: string): Promise<any> {
   }
 
   // Gruppiere Zuweisungen pro Shift
-  const assignmentsByShift: Record<string, any[]> = {};
+  const assignmentsByShift: Record<string, ShiftAssignment[]> = {};
   shiftAssignments.forEach(a => {
     if (!assignmentsByShift[a.shift_id]) assignmentsByShift[a.shift_id] = [];
     assignmentsByShift[a.shift_id].push({
       id: a.id,
+      planId: planId,
+      shiftId: a.shift_id,
       employeeId: a.employee_id,
-      employeeName: a.employee_name,
       assignedAt: a.assigned_at,
       assignedBy: a.assigned_by
     });
@@ -1086,7 +1089,6 @@ export const generateAssignments = async (req: Request, res: Response): Promise<
         maxEmployees: shift.maxEmployees,
         color: shift.color,
       })),
-      shiftAssignments: []
     };
 
     // Prepare employees data
@@ -1165,11 +1167,10 @@ export const generateAssignments = async (req: Request, res: Response): Promise<
 
         res.json({
           success: true,
-          message: `Successfully generated ${assignmentCount} assignments`,
           assignments: result.assignments,
-          violations: result.violations || [],
-          processingTime: result.processingTime || 0,
-          plan: updatedPlan,
+          violations: result.violations,
+          resolutionReport: result.resolutionReport,
+          processingTime: result.processingTime,
         });
       } catch (error) {
         await db.run('ROLLBACK');
@@ -1180,9 +1181,10 @@ export const generateAssignments = async (req: Request, res: Response): Promise<
       console.error('❌ Scheduling failed:', result.violations);
       res.status(400).json({
         success: false,
-        message: 'Scheduling failed to find a valid solution',
-        violations: result.violations || [],
-        processingTime: result.processingTime || 0,
+        assignment: [],
+        violations: result.violations,
+        resolutionReport: result.resolutionReport,
+        processingTime: result.processingTime,
       });
     }
 
