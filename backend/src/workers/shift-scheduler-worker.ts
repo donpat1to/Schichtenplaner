@@ -35,13 +35,14 @@ interface WorkerData {
   }[];
   employees: {
     id: string;
+    username: string,
     firstname: string;
     lastname: string;
     employeeType: 'manager' | 'personell' | 'apprentice' | 'guest';
     contractType?: 'small' | 'large' | 'flexible';
     canWorkAlone: boolean;
-    isTrainee: boolean;
     isActive: boolean;
+    isTrainee: boolean;
   }[];
   availabilities: {
     id: string;

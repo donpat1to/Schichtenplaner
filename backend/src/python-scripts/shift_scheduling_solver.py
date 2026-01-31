@@ -357,40 +357,36 @@ class ShiftSchedulingSolver:
         self.stats['hard_constraints'] += 1
     
     def add_cannot_work_alone_constraints(self):
-        """Add constraints for employees who cannot work alone (HARD) - SIMPLE AND CORRECT"""
+        """HARD: Employees with canWorkAlone=false must never be scheduled alone"""
 
-        cannot_work_alone_employees = [emp for emp in self.schedulable_employees if not emp.can_work_alone]
+        for shift_id in self.shifts:
+            for emp in self.schedulable_employees:
+                if not emp.cannot_work_alone:
+                    continue
 
-        if not cannot_work_alone_employees:
-            return
-        
-        for shift_id, shift in self.shifts.items():
-            # Get cannnot_work_alone variables
-            cannot_work_alone_employee_vars = []
-            for cannot_work_alone_employee in cannot_work_alone_employees:
-                if (cannot_work_alone_employee.id, shift_id) in self.variables:
-                    cannot_work_alone_employee_vars.append(self.variables[(cannot_work_alone_employee.id, shift_id)])
-                    
-            if cannot_work_alone_employee_vars:
-                # Get experienced employee variables for this shift
-                others_vars = []
-                for emp in self.schedulable_employees:
-                    if (emp.id, shift_id) in self.variables:
-                        others_vars.append(self.variables[(emp.id, shift_id)])
-                    
-                if others_vars:
-                    # If any not_work_alone is assigned, at least one experienced must be assigned
-                    # Using big-M formulation: sum(cannot_work_alone_employee_vars) <= M * sum(others_vars)
-                    M = len(cannot_work_alone_employee_vars)
-                    self.model.Add(sum(cannot_work_alone_employee_vars) <= M * sum(others_vars))
-                    self.stats['constraints_added'] += 1
+                # Variable for this employee on this shift
+                key = (emp.id, shift_id)
+                if key not in self.variables:
+                    continue
+
+                # All OTHER schedulable employees on this shift
+                others = [
+                    self.variables[(other.id, shift_id)]
+                    for other in self.schedulable_employees
+                    if other.id != emp.id and (other.id, shift_id) in self.variables
+                ]
+
+                if others:
+                    # If emp works → at least one other must work
+                    self.model.Add(self.variables[key] <= sum(others))
                 else:
-                    # No experienced available for this shift, cannot_work_alone_employees cannot work
-                    for var in cannot_work_alone_employee_vars:
-                        self.model.Add(var == 0)
-                        self.stats['constraints_added'] += 1
+                    # Nobody else available → emp can never work this shift
+                    self.model.Add(self.variables[key] == 0)
+
+                self.stats['constraints_added'] += 1
 
         self.stats['hard_constraints'] += 1
+
     
     def add_contract_type_constraints(self):
         """Add contract type constraints (HARD - EXACT requirements)"""

@@ -112,18 +112,18 @@ export class SchedulingService {
       },
       employees: employees.filter(emp => emp.isActive).map(emp => ({
         id: emp.id,
+        username: emp.username,
         firstname: emp.firstname,
         lastname: emp.lastname,
         employeeType: emp.employeeType,
         contractType: emp.contractType,
-        canWorkAlone: emp.canWorkAlone || true,
-        isTrainee: emp.isTrainee || false,
-        isActive: emp.isActive
+        canWorkAlone: emp.canWorkAlone,
+        isActive: emp.isActive,
+        isTrainee: emp.isTrainee
       })),
       shifts: shifts,
       availabilities: workerAvailabilities,
       constraints: this.prepareConstraints(constraints),
-      //totalAssignmentSlots: shifts.reduce((sum, shift) => sum + shift.requiredEmployees, 0)
     };
   }
 
