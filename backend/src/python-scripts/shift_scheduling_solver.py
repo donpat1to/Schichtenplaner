@@ -1,841 +1,812 @@
 # backend/src/python-scripts/shift_scheduling_solver.py
-"""
-Shift Plan Scheduling Solver using Google OR-Tools CP-SAT
-
-This solver handles daily shift assignments with the following constraints:
-
-Hard Constraints:
-1. Availability Constraints (preferenceLevel 3 = Not Available)
-2. Maximum 1 shift per day per employee
-3. Shift staffing requirements (min/max employees per shift)
-4. Trainee supervision (trainees need experienced staff)
-5. Employees who cannot work alone
-6. Contract type constraints (small=1 shift, large=2 shifts)
-7. Employee eligibility (active personnel only)
-8. Manager pre-assignments (fixed assignments)
-
-Soft Constraints:
-9. Day staffing balance (penalize over/under staffing)
-10. Maximize assignments to preferred shifts (pref1=100, pref2=50)
-"""
-
-from ortools.sat.python import cp_model
 import json
 import sys
-import logging
+import math
+from typing import Dict, List, Tuple, Set, Optional, Any
+from ortools.sat.python import cp_model
 import time
-from typing import Dict, List, Any, Tuple, Set, Optional
-from collections import defaultdict
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# ============================================================================
+# DATA MODEL CLASSES
+# ============================================================================
 
+class Employee:
+    def __init__(self, data: Dict):
+        self.id = data['id']
+        self.firstname = data.get('firstname', '')
+        self.lastname = data.get('lastname', '')
+        self.employee_type = data['employeeType']  # 'manager', 'personell', 'apprentice', 'guest'
+        self.contract_type = data.get('contractType')  # 'small', 'large', 'flexible'
+        self.can_work_alone = data.get('canWorkAlone', True)
+        self.is_trainee = data.get('isTrainee', False)
+        self.is_active = data.get('isActive', True)
+        
+    @property
+    def name(self) -> str:
+        return f"{self.firstname} {self.lastname}".strip() or f"Employee {self.id}"
+    
+    @property
+    def is_schedulable(self) -> bool:
+        return self.is_active and self.employee_type == 'personell'
+    
+    @property
+    def is_manager(self) -> bool:
+        return self.employee_type == 'manager'
+    
+    @property
+    def required_shifts(self) -> int:
+        """Get required number of shifts based on contract type"""
+        if self.contract_type == 'small':
+            return 1
+        elif self.contract_type == 'large':
+            return 2
+        elif self.contract_type == 'flexible':
+            return 0  # No fixed requirement
+        else:
+            return 0  # Default for managers, apprentices, guests
 
-class ShiftSchedulingSolutionCallback(cp_model.CpSolverSolutionCallback):
-    """Callback to track solution progress"""
+class Shift:
+    def __init__(self, data: Dict):
+        self.id = data['id']
+        self.plan_id = data['planId']
+        self.time_slot_id = data['timeSlotId']
+        self.day_of_week = data['dayOfWeek']  # 1=Monday, 7=Sunday
+        self.required_employees = data['requiredEmployees']
+        self.min_employees = data.get('minEmployees', 1)
+        self.max_employees = data.get('maxEmployees', 2)
+        self.color = data.get('color', '#3498db')
+        
+        # Time slot details
+        time_slot = data.get('timeSlot', {})
+        self.time_slot_name = time_slot.get('name', '')
+        self.start_time = time_slot.get('startTime', '')
+        self.end_time = time_slot.get('endTime', '')
 
-    def __init__(self):
-        cp_model.CpSolverSolutionCallback.__init__(self)
-        self.solution_count = 0
-        self.start_time = time.time()
-        self.solutions = []
+class Availability:
+    def __init__(self, data: Dict):
+        self.id = data.get('id', '')
+        self.employee_id = data['employeeId']
+        self.shift_id = data['shiftId']
+        self.preference_level = data['preferenceLevel']  # 1=Preferred, 2=Available, 3=Unavailable
+        self.notes = data.get('notes')
 
-    def on_solution_callback(self):
-        current_time = time.time() - self.start_time
-        self.solution_count += 1
-
-        try:
-            objective_value = self.ObjectiveValue()
-        except:
-            objective_value = 0
-
-        try:
-            best_bound = self.BestObjectiveBound()
-        except:
-            best_bound = 0
-
-        solution_info = {
-            'timestamp': current_time,
-            'objective': objective_value,
-            'bound': best_bound,
-            'solution_count': self.solution_count
-        }
-
-        self.solutions.append(solution_info)
-        print(f"Progress: Solution {self.solution_count}, Objective: {objective_value}, Time: {current_time:.2f}s", file=sys.stderr)
-
+# ============================================================================
+# SOLVER IMPLEMENTATION
+# ============================================================================
 
 class ShiftSchedulingSolver:
-    """CP-SAT Solver for Shift Plan Scheduling"""
-
-    def __init__(self, max_time_seconds: int = 120, num_workers: int = 8):
+    def __init__(self, data: Dict):
+        # Parse input data
+        self.plan = data['plan']
+        self.employees = {e['id']: Employee(e) for e in data['employees']}
+        self.shifts = {s['id']: Shift(s) for s in data['shifts']}
+        self.availabilities = [Availability(a) for a in data['availabilities']]
+        self.constraints = data.get('constraints', {})
+        self.solver_options = data.get('solverOptions', {
+            'maxTimeInSeconds': 120,
+            'numSearchWorkers': 8
+        })
+        
+        # Filter schedulable employees
+        self.schedulable_employees = [
+            emp for emp in self.employees.values() 
+            if emp.is_schedulable
+        ]
+        
+        # Filter managers
+        self.managers = [
+            emp for emp in self.employees.values() 
+            if emp.is_manager
+        ]
+        # Initialize CP-SAT model
         self.model = cp_model.CpModel()
         self.solver = cp_model.CpSolver()
-        self.solver.parameters.max_time_in_seconds = max_time_seconds
-        self.solver.parameters.num_search_workers = num_workers
+        self.variables = {}  # (employee_id, shift_id) -> IntVar
+        self.slack_variables = {}  # For soft constraints
+        
+        # Set solver parameters
+        self.solver.parameters.max_time_in_seconds = self.solver_options.get('maxTimeInSeconds', 120)
+        self.solver.parameters.num_search_workers = self.solver_options.get('numSearchWorkers', 8)
         self.solver.parameters.log_search_progress = False
-
-        # Variables storage
-        self.assignment_vars: Dict[Tuple[str, str, int], Any] = {}  # (employee_id, shift_id, slot_index) -> BoolVar
-        self.shift_vars: Dict[Tuple[str, str], Any] = {}  # (employee_id, shift_id) -> BoolVar (for convenience)
-
-    def solve(self, data: Dict) -> Dict:
-        """
-        Main solve method
-
-        Args:
-            data: Dictionary containing:
-                - plan: Plan info (optional)
-                - shifts: List of shift objects with requiredEmployees, minEmployees, maxEmployees
-                - employees: List of employee objects
-                - availabilities: List of availability preferences
-                - constraints: Constraint configuration
-                - solverOptions: Solver options
-
-        Returns:
-            Dictionary with assignments, violations, success flag, and metadata
-        """
+        
+        # Statistics
+        self.stats = {
+            'variables_created': 0,
+            'constraints_added': 0,
+            'hard_constraints': 0,
+            'soft_constraints': 0
+        }
+    
+    # ------------------------------------------------------------------------
+    # FEASIBILITY CHECKS
+    # ------------------------------------------------------------------------
+    
+    def check_feasibility(self) -> Tuple[bool, List[str]]:
+        """Check if the problem is mathematically feasible"""
+        issues = []
+        
+        # 1. Calculate total required slots
+        total_required_slots = sum(s.required_employees for s in self.shifts.values())
+        
+        # 2. Calculate employee capacity
+        employee_capacity = 0
+        small_contract = 0
+        large_contract = 0
+        
+        for emp in self.schedulable_employees:
+            if emp.contract_type == 'small':
+                employee_capacity += 1
+                small_contract += 1
+            elif emp.contract_type == 'large':
+                employee_capacity += 2
+                large_contract += 1
+            elif emp.contract_type == 'flexible':
+                # Flexible employees can work up to total required
+                employee_capacity += total_required_slots
+        
+        if employee_capacity > total_required_slots:
+            issues.append(
+                f"Too much employee capacity: {employee_capacity} < {total_required_slots}"
+            )
+        
+        # 3. Check per-shift availability
+        for shift_id, shift in self.shifts.items():
+            # Count employees available for this shift (preference 1 or 2)
+            available_employees = set()
+            for avail in self.availabilities:
+                if avail.shift_id == shift_id and avail.preference_level in [1, 2]:
+                    emp = self.employees.get(avail.employee_id)
+                    if emp and emp.is_schedulable:
+                        available_employees.add(emp.id)
+            
+            if len(available_employees) < shift.min_employees:
+                issues.append(
+                    f"Shift {shift_id} (Day {shift.day_of_week}, {shift.time_slot_name}): "
+                    f"Only {len(available_employees)} employees available, "
+                    f"but min required is {shift.min_employees}"
+                )
+        
+        # 4. Check trainee supervision feasibility
+        trainees = [emp for emp in self.schedulable_employees if emp.is_trainee]
+        experienced = [emp for emp in self.schedulable_employees if not emp.is_trainee]
+        
+        if trainees and not experienced:
+            issues.append("No experienced employees available to supervise trainees")
+        
+        # 5. Check "cannot work alone" feasibility
+        cannot_work_alone = [emp for emp in self.schedulable_employees if not emp.can_work_alone]
+        if cannot_work_alone and len(self.schedulable_employees) < 2:
+            issues.append("Employees who cannot work alone, but not enough employees for pairing")
+        
+        return len(issues) == 0, issues
+    
+    # ------------------------------------------------------------------------
+    # VARIABLE CREATION
+    # ------------------------------------------------------------------------
+    
+    def create_variables(self):
+        """Create decision variables for the CP-SAT model"""
+        
+        # Create assignment variables: x[employee_id, shift_id] = 1 if assigned
+        for emp in self.schedulable_employees:
+            for shift_id, shift in self.shifts.items():
+                # Check if employee is available for this shift
+                is_available = False
+                preference = None
+                
+                for avail in self.availabilities:
+                    if avail.employee_id == emp.id and avail.shift_id == shift_id:
+                        if avail.preference_level == 3:
+                            # Unavailable - don't create variable
+                            break
+                        else:
+                            # Available (preference 1 or 2)
+                            is_available = True
+                            preference = avail.preference_level
+                            break
+                else:
+                    # No availability record found - treat as unavailable
+                    continue
+                
+                if is_available:
+                    var_name = f"x_{emp.id}_{shift_id}"
+                    var = self.model.NewBoolVar(var_name)
+                    self.variables[(emp.id, shift_id)] = var
+                    self.stats['variables_created'] += 1
+        
+    
+    # ------------------------------------------------------------------------
+    # HARD CONSTRAINT IMPLEMENTATIONS
+    # ------------------------------------------------------------------------
+    
+    def add_availability_constraints(self):
+        """Add constraints for employee availability (HARD)"""
+        
+        # Variables for unavailable employees are not created, so no constraint needed
+        # For preference level 3, we simply don't create the variable
+        
+        self.stats['hard_constraints'] += 1
+    
+    def add_max_shifts_per_day_constraint(self):
+        """Add maximum 1 shift per day constraint (HARD)"""
+        
+        for emp in self.schedulable_employees:
+            # Group shifts by day
+            shifts_by_day = {}
+            for shift_id, shift in self.shifts.items():
+                if (emp.id, shift_id) in self.variables:
+                    shifts_by_day.setdefault(shift.day_of_week, []).append(
+                        self.variables[(emp.id, shift_id)]
+                    )
+            
+            # Add constraint for each day: at most 1 shift
+            for day, vars_list in shifts_by_day.items():
+                if len(vars_list) > 1:
+                    self.model.Add(sum(vars_list) <= 1)
+                    self.stats['constraints_added'] += 1
+        
+        self.stats['hard_constraints'] += 1
+    
+    def add_shift_staffing_constraints(self):
+        """Add minimum and maximum staffing constraints (HARD)"""
+        
+        for shift_id, shift in self.shifts.items():
+            # Get all variables for this shift
+            shift_vars = []
+            for emp in self.schedulable_employees:
+                if (emp.id, shift_id) in self.variables:
+                    shift_vars.append(self.variables[(emp.id, shift_id)])
+            
+            if shift_vars:
+                total_assigned = sum(shift_vars)
+                
+                # Minimum staffing requirement
+                self.model.Add(total_assigned >= shift.min_employees)
+                self.stats['constraints_added'] += 1
+                
+                # Maximum staffing limit
+                self.model.Add(total_assigned <= shift.max_employees)
+                self.stats['constraints_added'] += 1
+        
+        self.stats['hard_constraints'] += 1
+    
+    def add_trainee_supervision_constraints(self):
+        """Add trainee supervision constraints (HARD)"""
+        
+        trainees = [emp for emp in self.schedulable_employees if emp.is_trainee]
+        experienced = [emp for emp in self.schedulable_employees if not emp.is_trainee]
+        
+        if not trainees:
+            return
+        
+        for shift_id, shift in self.shifts.items():
+            # Get trainee variables for this shift
+            trainee_vars = []
+            for trainee in trainees:
+                if (trainee.id, shift_id) in self.variables:
+                    trainee_vars.append(self.variables[(trainee.id, shift_id)])
+            
+            if trainee_vars:
+                # Get experienced employee variables for this shift
+                experienced_vars = []
+                for exp in experienced:
+                    if (exp.id, shift_id) in self.variables:
+                        experienced_vars.append(self.variables[(exp.id, shift_id)])
+                
+                # Constraint: If any trainee is assigned, at least one experienced must be assigned
+                # Using big-M formulation: sum(trainee_vars) <= M * sum(experienced_vars)
+                M = len(trainee_vars)  # Maximum possible trainees in this shift
+                
+                if experienced_vars:
+                    self.model.Add(
+                        sum(trainee_vars) <= M * sum(experienced_vars)
+                    )
+                    self.stats['constraints_added'] += 1
+                else:
+                    # No experienced employees available for this shift
+                    # Trainees cannot work this shift at all
+                    for var in trainee_vars:
+                        self.model.Add(var == 0)
+                        self.stats['constraints_added'] += 1
+        
+        self.stats['hard_constraints'] += 1
+    
+    def add_cannot_work_alone_constraints(self):
+        """Add constraints for employees who cannot work alone (HARD)"""
+        
+        cannot_work_alone = [emp for emp in self.schedulable_employees if not emp.can_work_alone]
+        
+        if not cannot_work_alone:
+            return
+        
+        for emp in cannot_work_alone:
+            for shift_id, shift in self.shifts.items():
+                if (emp.id, shift_id) in self.variables:
+                    # Get all variables for this shift (including this employee)
+                    all_shift_vars = []
+                    for other_emp in self.schedulable_employees:
+                        if (other_emp.id, shift_id) in self.variables:
+                            all_shift_vars.append(self.variables[(other_emp.id, shift_id)])
+                    
+                    # If this employee is assigned (var = 1), then total assignments must be >= 2
+                    # Formulation: total_assigned >= 2 * var_emp
+                    var_emp = self.variables[(emp.id, shift_id)]
+                    self.model.Add(sum(all_shift_vars) >= 2 * var_emp)
+                    self.stats['constraints_added'] += 1
+        
+        self.stats['hard_constraints'] += 1
+    
+    def add_contract_type_constraints(self):
+        """Add contract type constraints (HARD - EXACT requirements)"""
+        
+        for emp in self.schedulable_employees:
+            # Get all variables for this employee
+            emp_vars = []
+            for shift_id in self.shifts:
+                if (emp.id, shift_id) in self.variables:
+                    emp_vars.append(self.variables[(emp.id, shift_id)])
+            
+            if not emp_vars:
+                continue  # Employee has no available shifts
+            
+            total_shifts = sum(emp_vars)
+            
+            if emp.contract_type == 'small':
+                # HARD: Exactly 1 shift
+                self.model.Add(total_shifts == 1)
+                self.stats['constraints_added'] += 1
+            elif emp.contract_type == 'large':
+                # HARD: Exactly 2 shifts
+                self.model.Add(total_shifts == 2)
+                self.stats['constraints_added'] += 1
+            # 'flexible' has no hard constraint
+        
+        self.stats['hard_constraints'] += 1
+    
+    def add_manager_post_assignments(self):
+        """Add manager assignments after solving for schedulable employees (POST-PROCESSING)"""
+        
+        # This method is called after we have assignments for schedulable employees
+        # Managers are added to shifts where they are available and where there is space
+        
+        # First, get all manager availability records
+        manager_availabilities = {}
+        for avail in self.availabilities:
+            emp = self.employees.get(avail.employee_id)
+            if emp and emp.is_manager:
+                manager_availabilities.setdefault(avail.shift_id, []).append(
+                    (emp.id, avail.preference_level)
+                )
+        
+        # We'll return a list of manager assignments to be added to the final result
+        manager_assignments = []
+        
+        # For each shift, check if we can add managers
+        for shift_id, shift in self.shifts.items():
+            # Get current assignments for this shift (from schedulable employees)
+            current_assignment_count = 0
+            for (emp_id, s_id), var in self.variables.items():
+                if s_id == shift_id and self.solver.Value(var) == 1:
+                    current_assignment_count += 1
+            
+            # Check if there's room for managers
+            if current_assignment_count >= shift.max_employees:
+                continue  # No room for managers
+            
+            # Get available managers for this shift
+            available_managers = manager_availabilities.get(shift_id, [])
+            
+            # Sort by preference (preferred first)
+            available_managers.sort(key=lambda x: x[1])
+            
+            # Add managers until we reach max_employees or run out of available managers
+            for manager_id, preference in available_managers:
+                if current_assignment_count >= shift.max_employees:
+                    break
+                
+                # Add manager assignment
+                manager_assignments.append({
+                    'shiftId': shift_id,
+                    'employeeId': manager_id,
+                    'assignmentIndex': current_assignment_count + 1,
+                    'isManager': True,
+                    'preferenceLevel': preference
+                })
+                current_assignment_count += 1
+        
+        return manager_assignments
+    
+    # ------------------------------------------------------------------------
+    # SOFT CONSTRAINT IMPLEMENTATIONS
+    # ------------------------------------------------------------------------
+    
+    def add_day_staffing_balance(self):
+        """Add day staffing balance as soft constraint with penalties"""
+        
+        # Get days in the schedule
+        days_in_schedule = set(shift.day_of_week for shift in self.shifts.values())
+        if len(days_in_schedule) <= 1:
+            return
+        
+        # Calculate target personnel per day (excluding managers)
+        total_personnel_needed = sum(
+            s.required_employees for s in self.shifts.values()
+        )
+        
+        # Count assigned managers (pre-assigned with preference 1)
+        assigned_managers = 0
+        for avail in self.availabilities:
+            emp = self.employees.get(avail.employee_id)
+            if emp and emp.is_manager and avail.preference_level == 1:
+                assigned_managers += 1
+        
+        target_per_day = (total_personnel_needed - assigned_managers) / len(days_in_schedule)
+        tolerance = self.constraints.get('dayBalanceTolerance', 0.2)  # 20%
+        over_penalty = self.constraints.get('overStaffingPenalty', 5)
+        under_penalty = self.constraints.get('underStaffingPenalty', 3)
+        
+        # Create slack variables for each day
+        for day in days_in_schedule:
+            # Get all personnel (non-manager) variables for this day
+            day_vars = []
+            for emp in self.schedulable_employees:
+                for shift_id, shift in self.shifts.items():
+                    if shift.day_of_week == day and (emp.id, shift_id) in self.variables:
+                        day_vars.append(self.variables[(emp.id, shift_id)])
+            
+            if day_vars:
+                total_day = sum(day_vars)
+                
+                # Create slack variables
+                over_var = self.model.NewIntVar(0, 100, f'over_day_{day}')
+                under_var = self.model.NewIntVar(0, 100, f'under_day_{day}')
+                
+                # Constraint: total_day = target + over - under
+                self.model.Add(
+                    total_day - over_var + under_var == round(target_per_day)
+                )
+                
+                # Store for objective function
+                self.slack_variables[f'over_day_{day}'] = (over_var, over_penalty)
+                self.slack_variables[f'under_day_{day}'] = (under_var, under_penalty)
+                
+                self.stats['variables_created'] += 2
+                self.stats['constraints_added'] += 1
+        
+        self.stats['soft_constraints'] += 1
+    
+    # ------------------------------------------------------------------------
+    # OBJECTIVE FUNCTION
+    # ------------------------------------------------------------------------
+    
+    def setup_objective_function(self):
+        """Set up the objective function to maximize preferences"""
+        
+        objective_terms = []
+        
+        # 1. Maximize preference satisfaction
+        for (emp_id, shift_id), var in self.variables.items():
+            # Find preference level
+            preference = None
+            for avail in self.availabilities:
+                if avail.employee_id == emp_id and avail.shift_id == shift_id:
+                    preference = avail.preference_level
+                    break
+            
+            if preference == 1:
+                # Preferred: 100 points
+                objective_terms.append(100 * var)
+            elif preference == 2:
+                # Available: 50 points
+                objective_terms.append(50 * var)
+            # preference == 3 not in variables
+        
+        # 2. Penalties for day staffing imbalance
+        for var, penalty in self.slack_variables.values():
+            objective_terms.append(-penalty * var)  # Negative because we maximize
+        
+        # Set objective
+        if objective_terms:
+            self.model.Maximize(sum(objective_terms))
+    
+    # ------------------------------------------------------------------------
+    # SOLVING AND SOLUTION EXTRACTION
+    # ------------------------------------------------------------------------
+    
+    def solve(self) -> Dict[str, Any]:
+        """Solve the CP-SAT model and return results"""
+        
         start_time = time.time()
-
-        try:
-            # Extract data with defaults
-            plan = data.get('plan', {})
-            shifts = data.get('shifts', [])
-            employees = data.get('employees', [])
-            availabilities = data.get('availabilities', [])
-            constraints = data.get('constraints', {})
-            solver_options = data.get('solverOptions', {})
-
-            # Set default constraints if not provided
-            default_constraints = {
-                'maxShiftsPerDay': 1,
-                'traineeSupervision': True,
-                'enforceContractHours': True,
-                'dayStaffingBalance': True,
-                'dayBalanceTolerance': 0.2,
-                'overStaffingPenalty': 5,
-                'underStaffingPenalty': 3
+        
+        # Add all constraints in order
+        self.create_variables()
+        self.add_availability_constraints()
+        self.add_max_shifts_per_day_constraint()
+        self.add_shift_staffing_constraints()
+        self.add_trainee_supervision_constraints()
+        self.add_cannot_work_alone_constraints()
+        self.add_contract_type_constraints()
+        self.add_day_staffing_balance()
+        self.setup_objective_function()
+        
+        # Solve for schedulable employees
+        status = self.solver.Solve(self.model)
+        solve_time = time.time() - start_time
+        
+        # Process results
+        result = {
+            'success': False,
+            'assignments': [],
+            'violations': [],
+            'metadata': {
+                'solveTime': solve_time,
+                'variablesCreated': self.stats['variables_created'],
+                'constraintsAdded': self.stats['constraints_added'],
+                'status': self.solver.StatusName(status),
+                'optimal': status == cp_model.OPTIMAL,
+                'feasible': status == cp_model.FEASIBLE or status == cp_model.OPTIMAL,
+                'infeasible': status == cp_model.INFEASIBLE,
+                'objectiveValue': self.solver.ObjectiveValue() if status in [cp_model.OPTIMAL, cp_model.FEASIBLE] else None
             }
-            
-            for key, default_value in default_constraints.items():
-                if key not in constraints:
-                    constraints[key] = default_value
-
-            print(f"\n=== SHIFT SCHEDULING SOLVER ===", file=sys.stderr)
-            print(f"Plan: {plan.get('name', 'Unknown Plan')}", file=sys.stderr)
-            print(f"Shifts: {len(shifts)}", file=sys.stderr)
-            print(f"Employees: {len(employees)}", file=sys.stderr)
-            print(f"Availabilities: {len(availabilities)}", file=sys.stderr)
-
-            # Filter employees
-            schedulable_employees = [
-                emp for emp in employees 
-                if emp.get('isActive', True) and 
-                emp.get('employeeType') == 'personell'
-            ]
-            
-            managers = [
-                emp for emp in employees 
-                if emp.get('isActive', True) and 
-                emp.get('employeeType') == 'manager'
-            ]
-
-            # Categorize employees
-            trainees = [emp for emp in schedulable_employees if emp.get('isTrainee', False)]
-            experienced = [emp for emp in schedulable_employees if not emp.get('isTrainee', False)]
-            cannot_work_alone = [emp for emp in schedulable_employees if not emp.get('canWorkAlone', True)]
-            
-            small_contract = [emp for emp in schedulable_employees if emp.get('contractType') == 'small']
-            large_contract = [emp for emp in schedulable_employees if emp.get('contractType') == 'large']
-            flexible_contract = [emp for emp in schedulable_employees if emp.get('contractType') in ['flexible', None]]
-
-            print(f"\nEmployee Categories:", file=sys.stderr)
-            print(f"  - Schedulable employees: {len(schedulable_employees)}", file=sys.stderr)
-            print(f"    * Trainees: {len(trainees)}", file=sys.stderr)
-            print(f"    * Experienced: {len(experienced)}", file=sys.stderr)
-            print(f"    * Cannot work alone: {len(cannot_work_alone)}", file=sys.stderr)
-            print(f"  - Managers: {len(managers)}", file=sys.stderr)
-            print(f"\nContract Types:", file=sys.stderr)
-            print(f"  - Small (1 shift): {len(small_contract)}", file=sys.stderr)
-            print(f"  - Large (2 shifts): {len(large_contract)}", file=sys.stderr)
-            print(f"  - Flexible: {len(flexible_contract)}", file=sys.stderr)
-
-            # Build lookup dictionaries
-            employee_lookup = {emp['id']: emp for emp in employees}
-            shift_lookup = {shift['id']: shift for shift in shifts}
-            
-            # Build preference lookup
-            pref_lookup: Dict[Tuple[str, str], int] = {}
-            for avail in availabilities:
-                key = (avail['employeeId'], avail['shiftId'])
-                pref_lookup[key] = avail['preferenceLevel']
-
-            # Group shifts by day for day constraints
-            shifts_by_day: Dict[int, List[Dict]] = defaultdict(list)
-            for shift in shifts:
-                shifts_by_day[shift['dayOfWeek']].append(shift)
-
-            print(f"\nShifts by day:", file=sys.stderr)
-            for day in sorted(shifts_by_day.keys()):
-                print(f"  Day {day}: {len(shifts_by_day[day])} shifts", file=sys.stderr)
-
-            # 1. Create assignment variables per shift slot
-            print(f"\nCreating variables...", file=sys.stderr)
-            variables_created = 0
-            
-            for shift in shifts:
-                shift_id = shift['id']
-                required_slots = shift.get('requiredEmployees', 2)
+        }
+        
+        if status == cp_model.INFEASIBLE:
+            result['violations'] = ['INFEASIBLE: No solution satisfies all hard constraints']
+            return result
+        
+        if status not in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
+            result['violations'] = [f'SOLVER_ERROR: Solver status {self.solver.StatusName(status)}']
+            return result
+        
+        # Extract assignments for schedulable employees
+        assignments = self.extract_assignments()
+        
+        # Verify solution against hard constraints
+        violations = self.verify_solution(assignments)
+        
+        if violations:
+            result['assignments'] = assignments
+            result['violations'] = violations
+            return result
+        
+        # Add manager assignments (post-processing)
+        manager_assignments = self.add_manager_post_assignments()
+        
+        # Combine assignments
+        all_assignments = assignments + manager_assignments
+        
+        # Final verification with managers included
+        final_violations = self.verify_solution(all_assignments)
+        
+        result['assignments'] = all_assignments
+        result['violations'] = final_violations
+        result['success'] = len(final_violations) == 0
+        
+        return result
+    
+    def extract_assignments(self) -> List[Dict]:
+        """Extract assignments from solver solution"""
+        assignments = []
+        assignment_slots = {}  # Track assignment indices per shift
+        
+        # First pass: collect all assignments
+        for (emp_id, shift_id), var in self.variables.items():
+            if self.solver.Value(var) == 1:
+                # Determine assignment index (slot within shift)
+                if shift_id not in assignment_slots:
+                    assignment_slots[shift_id] = 1
+                else:
+                    assignment_slots[shift_id] += 1
                 
-                for emp in schedulable_employees:
-                    emp_id = emp['id']
-                    
-                    # Create one variable per possible slot (1-based indexing)
-                    for slot_idx in range(1, required_slots + 1):
-                        var_name = f"assign_{emp_id}_{shift_id}_{slot_idx}"
-                        var = self.model.NewBoolVar(var_name)
-                        self.assignment_vars[(emp_id, shift_id, slot_idx)] = var
-                        variables_created += 1
-                    
-                    # Also create a convenience variable that is 1 if employee is assigned to this shift at all
-                    shift_var_name = f"emp_shift_{emp_id}_{shift_id}"
-                    shift_var = self.model.NewBoolVar(shift_var_name)
-                    self.shift_vars[(emp_id, shift_id)] = shift_var
-                    
-                    # Link shift_var to assignment variables
-                    assignment_vars_for_shift = [
-                        self.assignment_vars[(emp_id, shift_id, slot_idx)]
-                        for slot_idx in range(1, required_slots + 1)
-                    ]
-                    
-                    # shift_var = 1 if any assignment_var is 1
-                    self.model.AddMaxEquality(shift_var, assignment_vars_for_shift)
-                    # If shift_var is 1, at least one assignment_var must be 1 (already covered by AddMaxEquality)
-                    # If shift_var is 0, all assignment_vars must be 0
-                    for assignment_var in assignment_vars_for_shift:
-                        self.model.Add(assignment_var <= shift_var)
-
-            print(f"Created {variables_created} assignment variables", file=sys.stderr)
-            print(f"Created {len(self.shift_vars)} shift convenience variables", file=sys.stderr)
-
-            # 2. Hard Constraint: Availability (preferenceLevel 3 = Not Available)
-            print(f"\nApplying availability constraints...", file=sys.stderr)
-            unavail_count = 0
-            
-            for emp in schedulable_employees:
-                emp_id = emp['id']
-                for shift in shifts:
-                    shift_id = shift['id']
-                    
-                    # Default to unavailable if no preference set
-                    pref_level = pref_lookup.get((emp_id, shift_id), 3)
-                    
-                    if pref_level == 3:  # Unavailable
-                        # Employee cannot be assigned to any slot in this shift
-                        for slot_idx in range(1, shift.get('requiredEmployees', 2) + 1):
-                            var = self.assignment_vars.get((emp_id, shift_id, slot_idx))
-                            # FIX: Use explicit None check instead of boolean evaluation
-                            if var is not None:
-                                self.model.Add(var == 0)
-                                unavail_count += 1
-            
-            print(f"Added {unavail_count} unavailability constraints", file=sys.stderr)
-
-            # 3. Hard Constraint: Maximum 1 shift per day
-            print(f"\nApplying max 1 shift per day constraint...", file=sys.stderr)
-            max_shifts_constraints = 0
-            
-            for emp in schedulable_employees:
-                emp_id = emp['id']
-                
-                for day, day_shifts in shifts_by_day.items():
-                    if len(day_shifts) > 1:  # Only need constraint if more than one shift that day
-                        day_shift_vars = [
-                            self.shift_vars[(emp_id, shift['id'])]
-                            for shift in day_shifts
-                            if (emp_id, shift['id']) in self.shift_vars
-                        ]
-                        
-                        # FIX: Check if list has elements using len()
-                        if len(day_shift_vars) > 0:
-                            self.model.Add(sum(day_shift_vars) <= 1)
-                            max_shifts_constraints += 1
-            
-            print(f"Added {max_shifts_constraints} max shifts per day constraints", file=sys.stderr)
-
-            # 4. Hard Constraint: Shift staffing requirements
-            print(f"\nApplying shift staffing constraints...", file=sys.stderr)
-            staffing_constraints = 0
-            
-            for shift in shifts:
-                shift_id = shift['id']
-                min_emp = shift.get('minEmployees', 1)
-                max_emp = shift.get('maxEmployees', 2)
-                required_slots = shift.get('requiredEmployees', 2)
-                
-                # Count how many employees are assigned to this shift (across all slots)
-                shift_assignment_vars = [
-                    var for (emp_id, s_id, slot_idx), var in self.assignment_vars.items()
-                    if s_id == shift_id
-                ]
-                
-                # FIX: Check if list has elements using len()
-                if len(shift_assignment_vars) > 0:
-                    self.model.Add(sum(shift_assignment_vars) >= min_emp)
-                    self.model.Add(sum(shift_assignment_vars) <= max_emp)
-                    staffing_constraints += 2
-                
-                # Ensure exactly required_slots assignments (one per slot)
-                # But slots can be empty if minEmployees allows it
-                # Actually, we want exactly required_slots variables to be true
-                # This ensures each slot gets exactly one employee or remains empty
-                # We'll handle this by making sure the sum equals required_slots
-                if len(shift_assignment_vars) > 0:
-                    self.model.Add(sum(shift_assignment_vars) == required_slots)
-                    staffing_constraints += 1
-            
-            print(f"Added {staffing_constraints} shift staffing constraints", file=sys.stderr)
-
-            # 5. Hard Constraint: Trainee supervision
-            print(f"\nApplying trainee supervision constraints...", file=sys.stderr)
-            trainee_constraints = 0
-            
-            if constraints.get('traineeSupervision', True) and len(trainees) > 0 and len(experienced) > 0:
-                for shift in shifts:
-                    shift_id = shift['id']
-                    
-                    # Sum of trainees assigned to this shift
-                    trainee_vars = [
-                        self.shift_vars[(trainee['id'], shift_id)]
-                        for trainee in trainees
-                        if (trainee['id'], shift_id) in self.shift_vars
-                    ]
-                    
-                    # Sum of experienced assigned to this shift
-                    experienced_vars = [
-                        self.shift_vars[(exp['id'], shift_id)]
-                        for exp in experienced
-                        if (exp['id'], shift_id) in self.shift_vars
-                    ]
-                    
-                    # FIX: Check if lists have elements using len()
-                    if len(trainee_vars) > 0 and len(experienced_vars) > 0:
-                        # For each trainee, if they're assigned, at least one experienced must be assigned
-                        for trainee_var in trainee_vars:
-                            self.model.Add(sum(experienced_vars) >= trainee_var)
-                            trainee_constraints += 1
-            
-            print(f"Added {trainee_constraints} trainee supervision constraints", file=sys.stderr)
-
-            # 6. Hard Constraint: Employees who cannot work alone
-            print(f"\nApplying cannot work alone constraints...", file=sys.stderr)
-            alone_constraints = 0
-            
-            for emp in cannot_work_alone:
-                emp_id = emp['id']
-                
-                for shift in shifts:
-                    shift_id = shift['id']
-                    
-                    if (emp_id, shift_id) in self.shift_vars:
-                        emp_shift_var = self.shift_vars[(emp_id, shift_id)]
-                        
-                        # Sum of other employees assigned to this shift
-                        other_employees = [
-                            self.shift_vars[(other_emp['id'], shift_id)]
-                            for other_emp in schedulable_employees
-                            if other_emp['id'] != emp_id and (other_emp['id'], shift_id) in self.shift_vars
-                        ]
-                        
-                        # FIX: Check if list has elements using len()
-                        if len(other_employees) > 0:
-                            # If this employee is assigned, at least one other must be assigned
-                            self.model.Add(sum(other_employees) >= emp_shift_var)
-                            alone_constraints += 1
-            
-            print(f"Added {alone_constraints} cannot work alone constraints", file=sys.stderr)
-
-            # 7. Hard Constraint: Contract type requirements
-            print(f"\nApplying contract type constraints...", file=sys.stderr)
-            contract_constraints = 0
-            
-            if constraints.get('enforceContractHours', True):
-                # Small contract: exactly 1 shift
-                for emp in small_contract:
-                    emp_id = emp['id']
-                    emp_shift_vars = [
-                        var for (e_id, shift_id), var in self.shift_vars.items()
-                        if e_id == emp_id
-                    ]
-                    
-                    # FIX: Check if list has elements using len()
-                    if len(emp_shift_vars) > 0:
-                        self.model.Add(sum(emp_shift_vars) == 1)
-                        contract_constraints += 1
-                
-                # Large contract: exactly 2 shifts
-                for emp in large_contract:
-                    emp_id = emp['id']
-                    emp_shift_vars = [
-                        var for (e_id, shift_id), var in self.shift_vars.items()
-                        if e_id == emp_id
-                    ]
-                    
-                    # FIX: Check if list has elements using len()
-                    if len(emp_shift_vars) > 0:
-                        self.model.Add(sum(emp_shift_vars) == 2)
-                        contract_constraints += 1
-                
-                # Flexible contract: no specific constraint (can work 0 or more shifts)
-            
-            print(f"Added {contract_constraints} contract type constraints", file=sys.stderr)
-
-            # 8. Hard Constraint: Manager pre-assignments
-            print(f"\nApplying manager pre-assignments...", file=sys.stderr)
-            manager_assignments = 0
-            
-            for avail in availabilities:
-                emp_id = avail['employeeId']
-                shift_id = avail['shiftId']
-                
-                emp = employee_lookup.get(emp_id)
-                if emp and emp.get('employeeType') == 'manager' and avail['preferenceLevel'] == 1:
-                    # Manager is pre-assigned to this shift
-                    # We need to count this towards shift requirements
-                    # For now, we'll just log it
-                    manager_assignments += 1
-                    print(f"  Manager {emp_id} pre-assigned to shift {shift_id}", file=sys.stderr)
-            
-            print(f"Found {manager_assignments} manager pre-assignments", file=sys.stderr)
-
-            # 9. Soft Constraint: Day staffing balance
-            print(f"\nSetting up day staffing balance (soft constraint)...", file=sys.stderr)
-            objective_terms = []
-            
-            if constraints.get('dayStaffingBalance', True) and len(shifts_by_day) > 1:
-                # Calculate target personnel per day
-                total_required = sum(shift.get('requiredEmployees', 2) for shift in shifts)
-                num_days = len(shifts_by_day)
-                target_per_day = total_required / num_days
-                tolerance = constraints.get('dayBalanceTolerance', 0.2)
-                
-                over_penalty = constraints.get('overStaffingPenalty', 5)
-                under_penalty = constraints.get('underStaffingPenalty', 3)
-                
-                print(f"  Target per day: {target_per_day:.2f}", file=sys.stderr)
-                print(f"  Tolerance: {tolerance*100}%", file=sys.stderr)
-                print(f"  Over-staffing penalty: {over_penalty}", file=sys.stderr)
-                print(f"  Under-staffing penalty: {under_penalty}", file=sys.stderr)
-                
-                for day, day_shifts in shifts_by_day.items():
-                    # Count assignments for this day
-                    day_assignment_vars = []
-                    for shift in day_shifts:
-                        shift_id = shift['id']
-                        shift_assignment_vars = [
-                            var for (emp_id, s_id, slot_idx), var in self.assignment_vars.items()
-                            if s_id == shift_id
-                        ]
-                        day_assignment_vars.extend(shift_assignment_vars)
-                    
-                    # FIX: Check if list has elements using len()
-                    if len(day_assignment_vars) > 0:
-                        day_total = sum(day_assignment_vars)
-                        
-                        # Create slack variables for over/under staffing
-                        over_slack = self.model.NewIntVar(0, 100, f"over_slack_day_{day}")
-                        under_slack = self.model.NewIntVar(0, 100, f"under_slack_day_{day}")
-                        
-                        # day_total - target_per_day = over_slack - under_slack
-                        self.model.Add(day_total - target_per_day == over_slack - under_slack)
-                        
-                        # Add penalties to objective
-                        objective_terms.append(-over_penalty * over_slack)
-                        objective_terms.append(-under_penalty * under_slack)
-
-            # 10. Objective: Maximize assignments to preferred shifts
-            print(f"\nSetting up objective function...", file=sys.stderr)
-            PREF1_WEIGHT = 100  # Preferred
-            PREF2_WEIGHT = 50   # Available
-            
-            for (emp_id, shift_id, slot_idx), var in self.assignment_vars.items():
-                pref_level = pref_lookup.get((emp_id, shift_id), 3)
-                
-                if pref_level == 1:  # Preferred
-                    objective_terms.append(PREF1_WEIGHT * var)
-                elif pref_level == 2:  # Available
-                    objective_terms.append(PREF2_WEIGHT * var)
-                # Level 3 already excluded by hard constraints
-            
-            print(f"Objective function has {len(objective_terms)} terms", file=sys.stderr)
-
-            # Set objective: maximize
-            if len(objective_terms) > 0:
-                self.model.Maximize(sum(objective_terms))
-                print(f"Set maximization objective", file=sys.stderr)
-            else:
-                print(f"WARNING: No objective terms set!", file=sys.stderr)
-
-            # Solve
-            print(f"\nStarting solver...", file=sys.stderr)
-            callback = ShiftSchedulingSolutionCallback()
-            status = self.solver.Solve(self.model, callback)
-
-            solve_time = time.time() - start_time
-            print(f"Solver finished in {solve_time:.2f}s with status: {self._status_string(status)}", file=sys.stderr)
-
-            # Extract solution
-            assignments = []
-            violations = []
-
-            if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
-                # Extract assignments
-                for (emp_id, shift_id, slot_idx), var in self.assignment_vars.items():
-                    if self.solver.Value(var) == 1:
-                        assignments.append({
-                            'shiftId': shift_id,
-                            'employeeId': emp_id,
-                            'assignmentIndex': slot_idx
-                        })
-                
-                # Add manager assignments (fixed)
-                for avail in availabilities:
-                    emp_id = avail['employeeId']
-                    shift_id = avail['shiftId']
-                    
-                    emp = employee_lookup.get(emp_id)
-                    if emp and emp.get('employeeType') == 'manager' and avail['preferenceLevel'] == 1:
-                        # Find next available slot
-                        shift = shift_lookup.get(shift_id)
-                        if shift:
-                            # Check how many assignments already for this shift
-                            existing_for_shift = [a for a in assignments if a['shiftId'] == shift_id]
-                            next_slot = len(existing_for_shift) + 1
-                            
-                            if next_slot <= shift.get('requiredEmployees', 2):
-                                assignments.append({
-                                    'shiftId': shift_id,
-                                    'employeeId': emp_id,
-                                    'assignmentIndex': next_slot
-                                })
-
-                # Validate and detect violations
-                violations = self._detect_violations(
-                    assignments, employees, shifts, availabilities, constraints
-                )
-
-            else:
-                # Provide detailed infeasibility analysis
-                violations.append(f"SOLVER_FAILED: No feasible solution found (status: {self._status_string(status)})")
-                
-                # Analyze why it's infeasible
-                violations.extend(self._analyze_infeasibility(
-                    schedulable_employees, shifts, availabilities, constraints
-                ))
-
-            success = status in [cp_model.OPTIMAL, cp_model.FEASIBLE] and len(violations) == 0
-
-            return {
-                'success': success,
-                'assignments': assignments,
-                'violations': violations,
-                'progress': callback.solutions,
-                'metadata': {
-                    'solveTime': self.solver.WallTime(),
-                    'variablesCreated': len(self.assignment_vars),
-                    'constraintsAdded': self.model.Proto().constraints.__len__(),
-                    'optimal': status == cp_model.OPTIMAL,
-                    'status': self._status_string(status),
-                    'solutionsFound': callback.solution_count,
-                    'objectiveValue': self.solver.ObjectiveValue() if status in [cp_model.OPTIMAL, cp_model.FEASIBLE] else 0
-                }
-            }
-
-        except Exception as e:
-            logger.error(f"Solver error: {e}", exc_info=True)
-            return {
-                'success': False,
-                'assignments': [],
-                'violations': [f'ERROR: {str(e)}'],
-                'progress': [],
-                'metadata': {
-                    'solveTime': time.time() - start_time,
-                    'variablesCreated': 0,
-                    'constraintsAdded': 0,
-                    'optimal': False,
-                    'status': 'ERROR'
-                }
-            }
-
-    def _analyze_infeasibility(
-        self,
-        employees: List[Dict],
-        shifts: List[Dict],
-        availabilities: List[Dict],
-        constraints: Dict
-    ) -> List[str]:
-        """Analyze why the problem is infeasible and provide detailed feedback"""
+                assignments.append({
+                    'shiftId': shift_id,
+                    'employeeId': emp_id,
+                    'assignmentIndex': assignment_slots[shift_id],
+                    'isManager': False
+                })
+        
+        return assignments
+    
+    def verify_solution(self, assignments: List[Dict]) -> List[str]:
+        """Verify solution satisfies all hard constraints"""
         violations = []
-        
-        # Build preference lookup
-        pref_lookup = {}
-        for avail in availabilities:
-            key = (avail['employeeId'], avail['shiftId'])
-            pref_lookup[key] = avail['preferenceLevel']
-        
-        # Check per-shift feasibility
-        for shift in shifts:
-            shift_id = shift['id']
-            min_emp = shift.get('minEmployees', 1)
-            
-            # Count how many employees are available for this shift
-            available_count = 0
-            for emp in employees:
-                emp_id = emp['id']
-                pref_level = pref_lookup.get((emp_id, shift_id), 3)
-                if pref_level in [1, 2]:  # Preferred or available
-                    available_count += 1
-            
-            if available_count < min_emp:
-                violations.append(
-                    f"SHIFT_UNDERSTAFFED: Shift {shift_id} (Day {shift.get('dayOfWeek')}) "
-                    f"requires minimum {min_emp} employees but only {available_count} are available. "
-                    f"Add more employee availability for this shift."
-                )
-        
-        # Check contract type feasibility
-        small_contract = [emp for emp in employees if emp.get('contractType') == 'small']
-        large_contract = [emp for emp in employees if emp.get('contractType') == 'large']
-        
-        # For small contract employees, check if they have enough available shifts
-        for emp in small_contract:
-            emp_id = emp['id']
-            available_shifts = sum(
-                1 for shift in shifts
-                if pref_lookup.get((emp_id, shift['id']), 3) in [1, 2]
-            )
-            
-            if available_shifts < 1:
-                violations.append(
-                    f"CONTRACT_UNFULFILLABLE: {emp.get('firstname', 'Unknown')} {emp.get('lastname', 'Employee')} "
-                    f"has small contract (requires 1 shift) but is only available for {available_shifts} shifts."
-                )
-        
-        # For large contract employees
-        for emp in large_contract:
-            emp_id = emp['id']
-            available_shifts = sum(
-                1 for shift in shifts
-                if pref_lookup.get((emp_id, shift['id']), 3) in [1, 2]
-            )
-            
-            if available_shifts < 2:
-                violations.append(
-                    f"CONTRACT_UNFULFILLABLE: {emp.get('firstname', 'Unknown')} {emp.get('lastname', 'Employee')} "
-                    f"has large contract (requires 2 shifts) but is only available for {available_shifts} shifts."
-                )
-        
-        return violations
-
-    def _detect_violations(
-        self,
-        assignments: List[Dict],
-        employees: List[Dict],
-        shifts: List[Dict],
-        availabilities: List[Dict],
-        constraints: Dict
-    ) -> List[str]:
-        """Detect any constraint violations in the solution"""
-        violations = []
-        
-        # Build lookup dictionaries
-        emp_lookup = {e['id']: e for e in employees}
-        shift_lookup = {s['id']: s for s in shifts}
-        pref_lookup = {}
-        for avail in availabilities:
-            key = (avail['employeeId'], avail['shiftId'])
-            pref_lookup[key] = avail['preferenceLevel']
-        
-        # Group assignments by shift
-        assignments_by_shift: Dict[str, List[Dict]] = defaultdict(list)
-        for assignment in assignments:
-            assignments_by_shift[assignment['shiftId']].append(assignment)
         
         # Group assignments by employee
-        assignments_by_employee: Dict[str, List[Dict]] = defaultdict(list)
-        for assignment in assignments:
-            assignments_by_employee[assignment['employeeId']].append(assignment)
+        emp_assignments = {}
+        for assign in assignments:
+            emp_assignments.setdefault(assign['employeeId'], []).append(assign['shiftId'])
         
-        # Group assignments by employee and day
-        assignments_by_employee_day: Dict[Tuple[str, int], List[Dict]] = defaultdict(list)
-        for assignment in assignments:
-            shift = shift_lookup.get(assignment['shiftId'])
-            if shift:
-                key = (assignment['employeeId'], shift['dayOfWeek'])
-                assignments_by_employee_day[key].append(assignment)
-        
-        # 1. Check shift staffing requirements
-        for shift_id, shift_assignments in assignments_by_shift.items():
-            shift = shift_lookup.get(shift_id)
-            if shift:
-                count = len(shift_assignments)
-                
-                if count < shift.get('minEmployees', 1):
-                    violations.append(
-                        f"UNDERSTAFFED: Shift {shift_id} (Day {shift.get('dayOfWeek')}) "
-                        f"has {count} employees but requires minimum {shift.get('minEmployees')}"
-                    )
-                
-                if count > shift.get('maxEmployees', 2):
-                    violations.append(
-                        f"OVERSTAFFED: Shift {shift_id} (Day {shift.get('dayOfWeek')}) "
-                        f"has {count} employees but maximum is {shift.get('maxEmployees')}"
-                    )
-                
-                # Check if exactly requiredEmployees slots are filled
-                if count != shift.get('requiredEmployees', 2):
-                    violations.append(
-                        f"SLOT_COUNT_MISMATCH: Shift {shift_id} has {count} assignments "
-                        f"but requires {shift.get('requiredEmployees')}"
-                    )
-        
-        # 2. Check max 1 shift per day
-        for (emp_id, day), day_assignments in assignments_by_employee_day.items():
-            if len(day_assignments) > 1:
-                emp = emp_lookup.get(emp_id, {})
-                violations.append(
-                    f"MULTIPLE_SHIFTS_PER_DAY: {emp.get('firstname', 'Unknown')} "
-                    f"{emp.get('lastname', 'Employee')} assigned to {len(day_assignments)} shifts on day {day}"
-                )
-        
-        # 3. Check trainee supervision
-        if constraints.get('traineeSupervision', True):
-            for shift_id, shift_assignments in assignments_by_shift.items():
-                has_trainee = False
-                has_experienced = False
-                
-                for assignment in shift_assignments:
-                    emp = emp_lookup.get(assignment['employeeId'])
-                    if emp:
-                        if emp.get('isTrainee', False):
-                            has_trainee = True
-                        elif emp.get('employeeType') == 'personell':
-                            has_experienced = True
-                
-                if has_trainee and not has_experienced:
-                    shift = shift_lookup.get(shift_id, {})
-                    violations.append(
-                        f"TRAINEE_UNSUPERVISED: Shift {shift_id} (Day {shift.get('dayOfWeek')}) "
-                        f"has trainee but no experienced employee"
-                    )
-        
-        # 4. Check employees who cannot work alone
-        for emp in employees:
-            if not emp.get('canWorkAlone', True):
-                emp_id = emp['id']
-                
-                for assignment in assignments_by_employee.get(emp_id, []):
-                    shift_id = assignment['shiftId']
-                    shift_assignments = assignments_by_shift.get(shift_id, [])
-                    
-                    # Count other employees in the same shift
-                    other_count = len([a for a in shift_assignments if a['employeeId'] != emp_id])
-                    
-                    if other_count == 0:
-                        shift = shift_lookup.get(shift_id, {})
-                        violations.append(
-                            f"EMPLOYEE_ALONE: {emp.get('firstname', emp.get('firstname', 'Unknown'))} "
-                            f"{emp.get('lastname', 'Employee')} (cannot work alone) is the only employee in shift {shift_id} (Day {shift.get('dayOfWeek')})"
-                        )
-        
-        # 5. Check contract type requirements
-        if constraints.get('enforceContractHours', True):
-            for emp in employees:
-                emp_id = emp['id']
-                contract_type = emp.get('contractType')
-                assigned_count = len(assignments_by_employee.get(emp_id, []))
-                
-                if contract_type == 'small' and assigned_count != 1:
-                    violations.append(
-                        f"CONTRACT_VIOLATION: {emp.get('firstname', 'Unknown')} {emp.get('lastname', 'Employee')} "
-                        f"has small contract (requires 1 shift) but assigned to {assigned_count} shifts"
-                    )
-                
-                elif contract_type == 'large' and assigned_count != 2:
-                    violations.append(
-                        f"CONTRACT_VIOLATION: {emp.get('firstname', 'Unknown')} {emp.get('lastname', 'Employee')} "
-                        f"has large contract (requires 2 shifts) but assigned to {assigned_count} shifts"
-                    )
-        
-        # 6. Check availability violations
-        for assignment in assignments:
-            emp_id = assignment['employeeId']
-            shift_id = assignment['shiftId']
+        # Check each employee
+        for emp_id, assigned_shifts in emp_assignments.items():
+            emp = self.employees.get(emp_id)
+            if not emp:
+                continue
             
-            pref_level = pref_lookup.get((emp_id, shift_id), 3)
-            if pref_level == 3:
-                emp = emp_lookup.get(emp_id, {})
-                shift = shift_lookup.get(shift_id, {})
+            # Skip managers for certain checks
+            if emp.is_manager:
+                continue
+            
+            # 1. Check max 1 shift per day (only for schedulable employees)
+            shifts_by_day = {}
+            for shift_id in assigned_shifts:
+                shift = self.shifts.get(shift_id)
+                if shift:
+                    shifts_by_day.setdefault(shift.day_of_week, []).append(shift_id)
+            
+            for day, day_shifts in shifts_by_day.items():
+                if len(day_shifts) > 1:
+                    violations.append(
+                        f'MULTIPLE_SHIFTS_PER_DAY: {emp.name} assigned to {len(day_shifts)} shifts on day {day}'
+                    )
+            
+            # 2. Check contract constraints (for personnel only)
+            if emp.is_schedulable:
+                if emp.contract_type == 'small' and len(assigned_shifts) != 1:
+                    violations.append(
+                        f'CONTRACT_VIOLATION: {emp.name} has small contract (requires 1 shift) '
+                        f'but assigned to {len(assigned_shifts)} shifts'
+                    )
+                elif emp.contract_type == 'large' and len(assigned_shifts) != 2:
+                    violations.append(
+                        f'CONTRACT_VIOLATION: {emp.name} has large contract (requires 2 shifts) '
+                        f'but assigned to {len(assigned_shifts)} shifts'
+                    )
+            
+            # 3. Check availability
+            for shift_id in assigned_shifts:
+                # Find availability record
+                available = False
+                for avail in self.availabilities:
+                    if avail.employee_id == emp_id and avail.shift_id == shift_id:
+                        if avail.preference_level == 3:
+                            violations.append(
+                                f'AVAILABILITY_VIOLATION: {emp.name} assigned to shift '
+                                f'{shift_id} but marked as unavailable'
+                            )
+                        available = True
+                        break
+                
+                if not available:
+                    # No availability record found
+                    violations.append(
+                        f'AVAILABILITY_VIOLATION: {emp.name} assigned to shift '
+                        f'{shift_id} but no availability set'
+                    )
+        
+        # 4. Check shift staffing (including managers)
+        for shift_id, shift in self.shifts.items():
+            assigned_to_shift = [a for a in assignments if a['shiftId'] == shift_id]
+            
+            if len(assigned_to_shift) < shift.min_employees:
                 violations.append(
-                    f"UNAVAILABLE_ASSIGNED: {emp.get('firstname', 'Unknown')} "
-                    f"{emp.get('lastname', 'Employee')} assigned to shift {shift_id} "
-                    f"(Day {shift.get('dayOfWeek')}) but marked unavailable"
+                    f'MIN_STAFFING_VIOLATION: Shift {shift_id} has {len(assigned_to_shift)} '
+                    f'assignments but requires at least {shift.min_employees}'
                 )
+            
+            if len(assigned_to_shift) > shift.max_employees:
+                violations.append(
+                    f'MAX_STAFFING_VIOLATION: Shift {shift_id} has {len(assigned_to_shift)} '
+                    f'assignments but maximum is {shift.max_employees}'
+                )
+        
+        # 5. Check trainee supervision (only for schedulable employees)
+        trainees = [emp for emp in self.schedulable_employees if emp.is_trainee]
+        if trainees:
+            for shift_id, shift in self.shifts.items():
+                # Count trainees and experienced in this shift
+                trainee_count = 0
+                experienced_count = 0
+                
+                for assign in assignments:
+                    if assign['shiftId'] == shift_id:
+                        emp = self.employees.get(assign['employeeId'])
+                        if emp and emp.is_schedulable:  # Only check schedulable employees
+                            if emp.is_trainee:
+                                trainee_count += 1
+                            elif not emp.is_trainee:
+                                experienced_count += 1
+                
+                if trainee_count > 0 and experienced_count == 0:
+                    violations.append(
+                        f'TRAINEE_SUPERVISION_VIOLATION: Shift {shift_id} has '
+                        f'{trainee_count} trainee(s) but no experienced employee'
+                    )
+        
+        # 6. Check "cannot work alone" (only for schedulable employees)
+        cannot_work_alone = [emp for emp in self.schedulable_employees if not emp.can_work_alone]
+        for emp in cannot_work_alone:
+            for assign in assignments:
+                if assign['employeeId'] == emp.id:
+                    shift_id = assign['shiftId']
+                    # Count total schedulable assignments for this shift
+                    total_in_shift = len([
+                        a for a in assignments 
+                        if a['shiftId'] == shift_id 
+                        and self.employees.get(a['employeeId'], Employee({'id': '', 'employeeType': '', 'contractType': ''})).is_schedulable
+                    ])
+                    if total_in_shift < 2:
+                        violations.append(
+                            f'CANNOT_WORK_ALONE_VIOLATION: {emp.name} assigned to '
+                            f'shift {shift_id} with only {total_in_shift} schedulable employee(s)'
+                        )
         
         return violations
 
-    def _status_string(self, status: int) -> str:
-        """Convert solver status to string"""
-        status_map = {
-            cp_model.OPTIMAL: 'OPTIMAL',
-            cp_model.FEASIBLE: 'FEASIBLE',
-            cp_model.INFEASIBLE: 'INFEASIBLE',
-            cp_model.MODEL_INVALID: 'MODEL_INVALID',
-            cp_model.UNKNOWN: 'UNKNOWN'
-        }
-        return status_map.get(status, f'UNKNOWN_{status}')
+# ============================================================================
+# MAIN ENTRY POINT
+# ============================================================================
 
-
-# Main execution
-if __name__ == "__main__":
+def main():
+    """Main entry point for the Python solver"""
     try:
-        # Read input from stdin
-        input_data = sys.stdin.read().strip()
-        if not input_data:
-            raise ValueError("No input data provided")
-
-        data = json.loads(input_data)
-
-        # Extract solver options
-        solver_options = data.get('solverOptions', {})
-        max_time = solver_options.get('maxTimeInSeconds', 120)
-        num_workers = solver_options.get('numSearchWorkers', 8)
-
-        # Create solver and solve
-        solver = ShiftSchedulingSolver(
-            max_time_seconds=max_time,
-            num_workers=num_workers
-        )
-
-        result = solver.solve(data)
-
-        # Output ONLY JSON to stdout
-        print(json.dumps(result))
-
-    except Exception as e:
+        # Read input data from stdin
+        input_data = json.load(sys.stdin)
+        
+        # Create solver instance
+        solver = ShiftSchedulingSolver(input_data)
+        
+        # Check feasibility first
+        is_feasible, feasibility_issues = solver.check_feasibility()
+        
+        if not is_feasible:           
+            result = {
+                'success': False,
+                'assignments': [],
+                'violations': feasibility_issues,
+                'metadata': {
+                    'solveTime': 0,
+                    'variablesCreated': 0,
+                    'constraintsAdded': 0,
+                    'status': 'INFEASIBLE',
+                    'optimal': False,
+                    'feasible': False,
+                    'infeasible': True,
+                    'objectiveValue': None
+                }
+            }
+        else:
+            # Solve the problem
+            result = solver.solve()
+        
+        # Output result as JSON
+        print(json.dumps(result, indent=2))
+        
+    except json.JSONDecodeError as e:
         error_result = {
             'success': False,
             'assignments': [],
-            'violations': [f'ERROR: {str(e)}'],
-            'progress': [],
+            'violations': [f'JSON parse error: {str(e)}'],
             'metadata': {
                 'solveTime': 0,
                 'variablesCreated': 0,
                 'constraintsAdded': 0,
+                'status': 'ERROR',
                 'optimal': False,
-                'status': 'ERROR'
+                'feasible': False,
+                'infeasible': False,
+                'objectiveValue': None
             }
         }
         print(json.dumps(error_result))
-        sys.exit(1)
+    except Exception as e:
+        error_result = {
+            'success': False,
+            'assignments': [],
+            'violations': [f'Solver error: {str(e)}'],
+            'metadata': {
+                'solveTime': 0,
+                'variablesCreated': 0,
+                'constraintsAdded': 0,
+                'status': 'ERROR',
+                'optimal': False,
+                'feasible': False,
+                'infeasible': False,
+                'objectiveValue': None
+            }
+        }
+        print(json.dumps(error_result))
+        import traceback
+        traceback.print_exc()
+
+if __name__ == '__main__':
+    main()

@@ -112,20 +112,16 @@ export const getShiftPlan = async (req: Request, res: Response): Promise<void> =
     }
 
     // Lade Zeit-Slots
-    const timeSlots = await db.all<any>(`
-      SELECT * FROM time_slots 
-      WHERE plan_id = ? 
-      ORDER BY start_time
-    `, [id]);
-
-    // Lade Schichten
-    const shifts = await db.all<any>(`
+    const [timeSlots, shifts] = await Promise.all([
+      db.all<any>(`SELECT * FROM time_slots WHERE plan_id = ? ORDER BY start_time`, [id]),
+      db.all<any>(`
       SELECT s.*, ts.name as time_slot_name, ts.start_time, ts.end_time
       FROM shifts s
       LEFT JOIN time_slots ts ON s.time_slot_id = ts.id
       WHERE s.plan_id = ? 
       ORDER BY s.day_of_week, ts.start_time
-    `, [id]);
+    `, [id])
+    ]);
 
     // Lade Mitarbeiter-Zuweisungen (nur für nicht-Template Pläne)
     let shiftAssignments: any[] = [];
@@ -192,7 +188,6 @@ export const getShiftPlan = async (req: Request, res: Response): Promise<void> =
     res.status(500).json({ error: 'Internal server error' });
   }
 };
-
 
 export const createDefaultTemplate = async (userId: string): Promise<string> => {
   try {
@@ -868,21 +863,16 @@ async function getShiftPlanById(planId: string): Promise<any> {
     return null;
   }
 
-  // Lade Zeit-Slots
-  const timeSlots = await db.all<any>(`
-    SELECT * FROM time_slots 
-    WHERE plan_id = ? 
-    ORDER BY start_time
-  `, [planId]);
-
-  // Lade Schichten
-  const shifts = await db.all<any>(`
-    SELECT s.*, ts.name as time_slot_name, ts.start_time, ts.end_time
-    FROM shifts s
-    LEFT JOIN time_slots ts ON s.time_slot_id = ts.id
-    WHERE s.plan_id = ? 
-    ORDER BY s.day_of_week, ts.start_time
-  `, [planId]);
+  const [timeSlots, shifts] = await Promise.all([
+    db.all<any>(`SELECT * FROM time_slots WHERE plan_id = ? ORDER BY start_time`, [planId]),
+    db.all<any>(`
+      SELECT s.*, ts.name as time_slot_name, ts.start_time, ts.end_time
+      FROM shifts s
+      LEFT JOIN time_slots ts ON s.time_slot_id = ts.id
+      WHERE s.plan_id = ? 
+      ORDER BY s.day_of_week, ts.start_time
+    `, [planId])
+  ]);
 
   // Lade Mitarbeiter-Zuweisungen (nur für nicht-Template Pläne)
   let shiftAssignments: any[] = [];

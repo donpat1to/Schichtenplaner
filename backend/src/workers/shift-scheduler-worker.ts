@@ -172,8 +172,20 @@ async function runPythonSolver(data: WorkerData): Promise<PythonSolverResult> {
         return;
       }
 
+      // Clean up stdout - remove any non-JSON content
+      const jsonStart = stdout.indexOf('{');
+      const jsonEnd = stdout.lastIndexOf('}');
+
+      if (jsonStart === -1 || jsonEnd === -1) {
+        console.error('No JSON found in Python output:', stdout.substring(0, 500));
+        reject(new Error(`No valid JSON output from Python solver`));
+        return;
+      }
+
+      const jsonStr = stdout.substring(jsonStart, jsonEnd + 1);
+
       try {
-        const result = JSON.parse(stdout);
+        const result = JSON.parse(jsonStr);
         resolve(result);
       } catch (parseError) {
         console.error('Failed to parse Python output:', stdout.substring(0, 500));
@@ -305,8 +317,8 @@ async function runShiftScheduling() {
     console.log(`  Total employee capacity: ${totalEmployeeCapacity}`);
 
     // Feasibility check
-    if (totalEmployeeCapacity < totalRequiredSlots) {
-      console.log(`⚠️ WARNING: Employee capacity (${totalEmployeeCapacity}) < Required slots (${totalRequiredSlots})`);
+    if (totalEmployeeCapacity > totalRequiredSlots) {
+      console.log(`⚠️ WARNING: Employee capacity (${totalEmployeeCapacity}) > Required slots (${totalRequiredSlots})`);
     }
 
     // Get manager pre-assignments (managers with preference level 1)

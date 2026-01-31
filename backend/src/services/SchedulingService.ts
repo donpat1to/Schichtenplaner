@@ -102,7 +102,7 @@ export class SchedulingService {
     console.log('===== END ENHANCED DATA VALIDATION =====\n');
 
     return {
-      shiftPlan: {
+      plan: {
         id: shiftPlan.id,
         name: shiftPlan.name,
         startDate: shiftPlan.startDate,
@@ -123,22 +123,39 @@ export class SchedulingService {
       shifts: shifts,
       availabilities: workerAvailabilities,
       constraints: this.prepareConstraints(constraints),
-      totalAssignmentSlots: shifts.reduce((sum, shift) => sum + shift.requiredEmployees, 0)
+      //totalAssignmentSlots: shifts.reduce((sum, shift) => sum + shift.requiredEmployees, 0)
     };
   }
 
   private prepareShifts(shiftPlan: ShiftPlan): any[] {
     // Map shifts with their timeSlot information
-    return shiftPlan.shifts.map(shift => ({
-      id: shift.id,
-      planId: shift.planId,
-      timeSlotId: shift.timeSlotId,
-      dayOfWeek: shift.dayOfWeek,
-      requiredEmployees: shift.requiredEmployees,
-      minEmployees: shift.minEmployees || 1,
-      maxEmployees: shift.maxEmployees || 2,
-    }));
-  }
+    return shiftPlan.shifts.map(shift => {
+      // Find the timeSlot for this shift
+      const timeSlot = shiftPlan.timeSlots.find(ts => ts.id === shift.timeSlotId);
+
+      if (timeSlot === undefined) {
+        console.log('❌ UNMATCHED TimeSlot:');
+        return;
+      }
+
+      return {
+        id: shift.id,
+        planId: shift.planId,
+        timeSlotId: shift.timeSlotId,
+        dayOfWeek: shift.dayOfWeek,
+        requiredEmployees: shift.requiredEmployees,
+        minEmployees: shift.minEmployees || 1,
+        maxEmployees: shift.maxEmployees || 2,
+        timeSlot: {
+          id: timeSlot.id,
+          name: timeSlot.name,
+          startTime: timeSlot.startTime,
+          endTime: timeSlot.endTime
+        }
+      };
+    });
+  };
+
 
   private prepareAvailabilities(availabilities: Availability[], shiftPlan: ShiftPlan): any[] {
     console.log('🔄 Preparing availabilities for worker...');
