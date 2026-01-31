@@ -172,20 +172,8 @@ async function runPythonSolver(data: WorkerData): Promise<PythonSolverResult> {
         return;
       }
 
-      // Clean up stdout - remove any non-JSON content
-      const jsonStart = stdout.indexOf('{');
-      const jsonEnd = stdout.lastIndexOf('}');
-
-      if (jsonStart === -1 || jsonEnd === -1) {
-        console.error('No JSON found in Python output:', stdout.substring(0, 500));
-        reject(new Error(`No valid JSON output from Python solver`));
-        return;
-      }
-
-      const jsonStr = stdout.substring(jsonStart, jsonEnd + 1);
-
       try {
-        const result = JSON.parse(jsonStr);
+        const result = JSON.parse(stdout);
         resolve(result);
       } catch (parseError) {
         console.error('Failed to parse Python output:', stdout.substring(0, 500));
@@ -416,17 +404,11 @@ async function runShiftScheduling() {
     });
 
     parentPort?.postMessage({
+      success: solution.success,
       assignments: solution.assignments,
       violations: solution.violations,
-      success: solution.success,
       resolutionReport,
       processingTime,
-      statistics: {
-        totalAssignments: solution.assignments.length,
-        employeesAssigned: Object.keys(assignmentsPerEmployee).length,
-        assignmentsPerEmployee,
-        shiftsPerDay
-      }
     });
 
   } catch (error) {
