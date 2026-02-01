@@ -7,7 +7,7 @@ import { useBackendValidation } from '../../hooks/useBackendValidation';
 import { shiftPlanService } from '../../services/shiftPlanService';
 import { weeklyPlanService } from '../../services/weeklyPlanService';
 import { employeeService } from '../../services/employeeService';
-import { ShiftPlanWithData } from '../../models/ShiftPlan';
+import { ShiftPlanWithData, ShiftAssignment } from '../../models/ShiftPlan';
 import { WeeklyPlanWithDetails, formatWeekRange } from '../../models/WeeklyPlan';
 import { Employee, EmployeeAvailability } from '../../models/Employee';
 import { formatDate } from '../../utils/formatters';
@@ -15,6 +15,7 @@ import { saveAs } from 'file-saver';
 import { backTextButton } from '@/utils/buttonStyles';
 import Timetable from '../../components/Timetable/Timetable';
 import Calendar from '../../components/Calendar/Calendar';
+import { SwapModeOverlay } from '../../components/SwapMode';
 import styles from './PlanView.module.css';
 
 // Remove the local GenerateResult interface since it's now imported from shiftPlanService
@@ -45,7 +46,7 @@ const PlanView: React.FC = () => {
   const [weeklyPlan, setWeeklyPlan] = useState<WeeklyPlanWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Shift plan specific state - REMOVED scheduledShifts as it's no longer needed
+  // Shift plan specific state
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [availabilities, setAvailabilities] = useState<EmployeeAvailability[]>([]);
   const [solverResult, setSolverResult] = useState<any>(null); // Changed from assignmentResult to solverResult for consistency
@@ -65,6 +66,10 @@ const PlanView: React.FC = () => {
   const [exportFormat, setExportFormat] = useState<'pdf' | 'excel' | null>(null);
   const [dropdownWidth, setDropdownWidth] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Swap mode state
+  const [swapModeActive, setSwapModeActive] = useState(false);
+  const [localAssignments, setLocalAssignments] = useState<ShiftAssignment[]>([]);
 
   const isAdmin = hasRole(['admin', 'maintenance']);
 
@@ -466,6 +471,35 @@ const PlanView: React.FC = () => {
     setCurrentMonth(new Date(year, month, 1));
   };
 
+  // Handle swap mode
+  const handleOpenSwapMode = () => {
+    if (shiftPlan) {
+      // Initialize local assignments from current shift plan data
+      const currentAssignments = shiftPlan.shifts.flatMap(shift => shift.assignments);
+      setLocalAssignments(currentAssignments);
+      setSwapModeActive(true);
+    }
+  };
+
+  const handleSwapComplete = (newAssignments: ShiftAssignment[]) => {
+    setLocalAssignments(newAssignments);
+    // Update the shift plan with new assignments locally
+    if (shiftPlan) {
+      const updatedShifts = shiftPlan.shifts.map(shift => ({
+        ...shift,
+        assignments: newAssignments.filter(a => a.shiftId === shift.id)
+      }));
+      setShiftPlan({
+        ...shiftPlan,
+        shifts: updatedShifts
+      });
+    }
+  };
+
+  const handleCloseSwapMode = () => {
+    setSwapModeActive(false);
+  };
+
   // Render status badge
   const renderStatusBadge = (status: string) => {
     const config = {
@@ -677,6 +711,14 @@ const PlanView: React.FC = () => {
                 <p>Zuweisungen wurden generiert. Der {planType === 'shift' ? 'Schichtplan' : 'Wochenplan'} kann veröffentlicht werden.</p>
               </div>
               <div className={styles.assignmentActions}>
+                {planType === 'shift' && (
+                  <button
+                    onClick={handleOpenSwapMode}
+                    className={styles.secondaryButton}
+                  >
+                    Manuelle Zuweisung
+                  </button>
+                )}
                 <button
                   onClick={planType === 'shift' ? handlePublishShiftPlan : handlePublishWeeklyPlan}
                   disabled={isPublishing || (planType === 'weekly' && isSubmitting)}
@@ -780,6 +822,20 @@ const PlanView: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Swap Mode Overlay */}
+      {swapModeActive && shiftPlan && (
+        <SwapModeOverlay
+          shifts={shiftPlan.shifts}
+          timeSlots={shiftPlan.timeSlots}
+          days={days}
+          employees={employees}
+          availabilities={availabilities}
+          assignments={localAssignments}
+          onClose={handleCloseSwapMode}
+          onSwapComplete={handleSwapComplete}
+        />
+      )}
     </div>
   );
 };

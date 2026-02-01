@@ -6,6 +6,7 @@ import { AssignmentResult } from '../../models/scheduling';
 import TimeSlotEditor from './TimeSlotEditor';
 import ShiftCell from './ShiftCell';
 import AddDayButton from './AddDayButton';
+import SwapableEmployeeBox from '../SwapMode/SwapableEmployeeBox';
 import { formatTime } from '../../utils/formatters';
 import { ICONS, BUTTON_COLORS, smallDeleteButton } from '../../utils/buttonStyles';
 import styles from './Timetable.module.css';
@@ -45,6 +46,12 @@ export interface TimetableProps {
     headerTitle?: string;
     showLegend?: boolean;
     compactMode?: boolean;
+
+    // Swap mode props
+    swapModeActive?: boolean;
+    sourceSelection?: { employeeId: string; shiftId: string } | null;
+    eligibleTargets?: Map<string, 'direct' | 'two-step'>;
+    onEmployeeClick?: (employeeId: string, shiftId: string) => void;
 }
 
 const DEFAULT_DAYS: DayInfo[] = [
@@ -79,6 +86,10 @@ const Timetable: React.FC<TimetableProps> = ({
     headerTitle = 'Schichtplan',
     showLegend = true,
     compactMode = false,
+    swapModeActive = false,
+    sourceSelection = null,
+    eligibleTargets = new Map(),
+    onEmployeeClick,
 }) => {
     const [showAddTimeSlot, setShowAddTimeSlot] = useState(false);
     const [newTimeSlot, setNewTimeSlot] = useState({
@@ -251,10 +262,28 @@ const Timetable: React.FC<TimetableProps> = ({
     };
 
     // Render employee boxes for view mode
-    const renderEmployeeBoxes = (employeeIds: string[]) => {
+    const renderEmployeeBoxes = (employeeIds: string[], shiftId: string) => {
         return employeeIds.map(empId => {
             const employee = employees.find(emp => emp.id === empId);
             if (!employee) return null;
+
+            // In swap mode, use SwapableEmployeeBox
+            if (swapModeActive) {
+                const isSource = sourceSelection?.employeeId === empId && sourceSelection?.shiftId === shiftId;
+                const key = `${empId}-${shiftId}`;
+                const eligibility = eligibleTargets.get(key) || null;
+
+                return (
+                    <SwapableEmployeeBox
+                        key={`${empId}-${shiftId}`}
+                        employee={employee}
+                        shiftId={shiftId}
+                        isSource={isSource}
+                        eligibility={eligibility}
+                        onSelect={onEmployeeClick}
+                    />
+                );
+            }
 
             // Determine background color based on employee role
             let backgroundColor = '#642ab5'; // Default: non-trainee personnel (purple)
@@ -287,14 +316,14 @@ const Timetable: React.FC<TimetableProps> = ({
         }
 
         // View mode
-        if (shiftPlanStatus === 'published' || assignmentResult) {
+        if (shiftPlanStatus === 'published' || assignmentResult || swapModeActive) {
             // Get assigned employees for this shift
             const assignedEmployees = shift ? getAssignmentsForShift(shift.id) : [];
 
             if (assignedEmployees.length > 0) {
                 return (
                     <div className={styles.employeeContainer}>
-                        {renderEmployeeBoxes(assignedEmployees)}
+                        {renderEmployeeBoxes(assignedEmployees, shift?.id || '')}
                     </div>
                 );
             }

@@ -52,6 +52,10 @@ export interface WeeklyAssignment {
   assignedBy: string;
 }
 
+export interface CreateAssignmentsRequest {
+  assignments: Omit<WeeklyAssignment, 'id' | 'assignedAt' | 'assignedBy' | 'planId'>[];
+}
+
 // Request/Response DTOs
 export interface CreateWeeklyPlanRequest {
   name: string;

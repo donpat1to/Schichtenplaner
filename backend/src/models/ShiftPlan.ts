@@ -27,6 +27,15 @@ export interface ShiftWithData extends Shift {
   assignments: ShiftAssignment[];
 }
 
+export interface ShiftAssignment {
+  id: string;
+  planId: string;
+  shiftId: string;
+  employeeId: string;
+  assignedAt: string;
+  assignedBy: string;
+}
+
 export interface TimeSlot {
   id: string;
   planId: string;
@@ -89,15 +98,6 @@ export interface ShiftPlanStatistics {
   };
 }
 
-export interface ShiftAssignment {
-  id: string;
-  planId: string;
-  shiftId: string;
-  employeeId: string;
-  assignedAt: string;
-  assignedBy: string;
-}
-
 // Request/Response DTOs
 export interface CreateShiftPlanRequest {
   name: string;
@@ -107,6 +107,10 @@ export interface CreateShiftPlanRequest {
   isTemplate: boolean;
   timeSlots: Omit<TimeSlot, 'id' | 'planId'>[];
   shifts: Omit<Shift, 'id' | 'planId'>[];
+}
+
+export interface CreateAssignmentsRequest {
+  assignments: Omit<ShiftAssignment, 'id' | 'assignedAt' | 'assignedBy' | 'planId'>[];
 }
 
 export interface UpdateShiftPlanRequest {

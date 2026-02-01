@@ -1,0 +1,55 @@
+/* frontend/src/components/SwapMode/ShiverAnimation.module.css */
+
+@keyframes shiver {
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
+    transform: translateX(-1px);
+  }
+
+  20%,
+  40%,
+  60%,
+  80% {
+    transform: translateX(1px);
+  }
+}
+
+@keyframes shiverStrong {
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
+    transform: translateX(-2px);
+  }
+
+  20%,
+  40%,
+  60%,
+  80% {
+    transform: translateX(2px);
+  }
+}
+
+.shiveringLight {
+  animation: shiver 0.3s ease-in-out infinite;
+}
+
+.shiveringStrong {
+  animation: shiverStrong 0.6s ease-in-out infinite;
+}

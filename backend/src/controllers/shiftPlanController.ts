@@ -8,6 +8,7 @@ import {
   ShiftPlan,
   Shift,
   ShiftAssignment,
+  CreateAssignmentsRequest
 } from '../models/ShiftPlan.js';
 import { Employee } from '../models/Employee.js';
 import { AuthRequest } from '../middleware/auth.js';
@@ -1174,6 +1175,140 @@ export const generateAssignments = async (req: Request, res: Response): Promise<
     console.error('❌ Error generating assignments:', error);
     res.status(500).json({
       error: 'Internal server error during assignment generation',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};
+
+export const createAssignments = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { assignments }: CreateAssignmentsRequest = req.body;
+    const userId = (req as AuthRequest).user?.userId;
+
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    console.log(`🔄 Creating ${assignments.length} assignments for shift plan:`, id);
+
+    // First, clear existing assignments by calling the clearAssignments logic
+    const plan = await getShiftPlanById(id);
+    if (!plan) {
+      res.status(404).json({ error: 'Shift plan not found' });
+      return;
+    }
+
+    await db.run('BEGIN TRANSACTION');
+
+    try {
+      // Clear existing assignments (replicating clearAssignments logic)
+      await db.run('DELETE FROM shift_assignments WHERE plan_id = ?', [id]);
+      console.log(`✅ Cleared existing assignments for plan ${id}`);
+
+      // Validate and insert new assignments
+      let insertedCount = 0;
+      const validationErrors: string[] = [];
+
+      // Get all shifts in this plan for validation
+      const planShiftIds = new Set(plan.shifts.map((s: Shift) => s.id));
+
+      // Get all active employees for validation
+      const activeEmployees: Employee[] = await db.all('SELECT id FROM employees WHERE is_active = 1', []);
+      const activeEmployeeIds = new Set(activeEmployees.map((e: Employee) => e.id));
+
+      // Track assigned employees per shift for uniqueness validation
+      const shiftEmployeeMap = new Map<string, Set<string>>();
+
+      for (const assignment of assignments) {
+        // Validate shift exists in plan
+        if (!planShiftIds.has(assignment.shiftId)) {
+          validationErrors.push(`Shift ${assignment.shiftId} does not exist in plan ${id}`);
+          continue;
+        }
+
+        // Validate employee exists and is active
+        if (!activeEmployeeIds.has(assignment.employeeId)) {
+          validationErrors.push(`Employee ${assignment.employeeId} is not active or does not exist`);
+          continue;
+        }
+
+        // Check for duplicate assignment (same employee to same shift)
+        if (!shiftEmployeeMap.has(assignment.shiftId)) {
+          shiftEmployeeMap.set(assignment.shiftId, new Set());
+        }
+
+        const shiftEmployees = shiftEmployeeMap.get(assignment.shiftId)!;
+        if (shiftEmployees.has(assignment.employeeId)) {
+          validationErrors.push(`Employee ${assignment.employeeId} is already assigned to shift ${assignment.shiftId}`);
+          continue;
+        }
+
+        shiftEmployees.add(assignment.employeeId);
+
+        // Insert assignment
+        const assignmentId = uuidv4();
+        await db.run(
+          `INSERT INTO shift_assignments (id, plan_id, shift_id, employee_id, assigned_by)
+           VALUES (?, ?, ?, ?, ?)`,
+          [assignmentId, id, assignment.shiftId, assignment.employeeId, userId]
+        );
+        insertedCount++;
+      }
+
+      if (validationErrors.length > 0) {
+        console.warn(`⚠️ Validation errors found:`, validationErrors);
+      }
+
+      await db.run('COMMIT');
+
+      console.log(`✅ Successfully created ${insertedCount} assignments for plan ${id}`);
+
+      // Fetch the updated plan with assignments
+      const updatedPlan = await getShiftPlanById(id);
+
+      // Transform assignments to match the ShiftAssignment interface
+      const createdAssignments: ShiftAssignment[] = [];
+      const dbAssignments = await db.all(
+        `SELECT id, plan_id as planId, shift_id as shiftId, 
+                employee_id as employeeId, assigned_at as assignedAt,
+                assigned_by as assignedBy
+         FROM shift_assignments 
+         WHERE plan_id = ?`,
+        [id]
+      );
+
+      // Format to match ShiftAssignment interface
+      dbAssignments.forEach((assignment: any) => {
+        createdAssignments.push({
+          id: assignment.id,
+          planId: assignment.planId,
+          shiftId: assignment.shiftId,
+          employeeId: assignment.employeeId,
+          assignedAt: assignment.assignedAt,
+          assignedBy: assignment.assignedBy
+        });
+      });
+
+      res.json({
+        success: true,
+        message: `Created ${insertedCount} assignments`,
+        assignments: createdAssignments,
+        validationErrors: validationErrors.length > 0 ? validationErrors : undefined,
+        plan: updatedPlan
+      });
+
+    } catch (error) {
+      await db.run('ROLLBACK');
+      console.error('❌ Transaction error:', error);
+      throw error;
+    }
+
+  } catch (error) {
+    console.error('❌ Error creating assignments:', error);
+    res.status(500).json({
+      error: 'Internal server error during assignment creation',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }

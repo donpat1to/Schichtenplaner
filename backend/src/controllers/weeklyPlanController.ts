@@ -12,7 +12,8 @@ import {
   WeeklyPlanWithDetails,
   PlanWeek,
   EmployeeWithPreferences,
-  WeeklyPlan,
+  WeeklyAssignment,
+  CreateAssignmentsRequest
 } from '../models/WeeklyPlan.js';
 import { AuthRequest } from '../middleware/auth.js';
 import ExcelJS from 'exceljs';
@@ -832,6 +833,108 @@ export const generateAssignments = async (req: Request, res: Response): Promise<
     });
   } catch (error) {
     console.error('Error generating assignments:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const createAssignments = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { assignments }: CreateAssignmentsRequest = req.body;
+    const userId = (req as AuthRequest).user?.userId;
+
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    if (!assignments || !Array.isArray(assignments)) {
+      res.status(400).json({ error: 'Assignments array is required' });
+      return;
+    }
+
+    // Validate the plan exists
+    const plan = await db.get('SELECT * FROM weekly_plans WHERE id = ?', [id]);
+    if (!plan) {
+      res.status(404).json({ error: 'Weekly plan not found' });
+      return;
+    }
+
+    // Validate each assignment
+    const errors: string[] = [];
+
+    for (const assignment of assignments) {
+      // Check week exists in this plan
+      const week = await db.get(
+        'SELECT * FROM plan_weeks WHERE id = ? AND plan_id = ?',
+        [assignment.weekId, id]
+      );
+      if (!week) {
+        errors.push(`Week ${assignment.weekId} not found in plan ${id}`);
+        continue;
+      }
+
+      // Check employee exists and is active
+      const employee = await db.get(
+        'SELECT * FROM employees WHERE id = ? AND is_active = 1',
+        [assignment.employeeId]
+      );
+      if (!employee) {
+        errors.push(`Employee ${assignment.employeeId} not found or not active`);
+        continue;
+      }
+    }
+
+    if (errors.length > 0) {
+      res.status(400).json({
+        error: 'Validation failed',
+        details: errors
+      });
+      return;
+    }
+
+    await db.run('BEGIN TRANSACTION');
+
+    try {
+      // Delete existing assignments for this plan
+      await db.run('DELETE FROM weekly_assignments WHERE plan_id = ?', [id]);
+
+      // Insert new assignments
+      const insertedAssignments: WeeklyAssignment[] = [];
+
+      for (const assignment of assignments) {
+        const assignmentId = uuidv4();
+        const assignedAt = new Date().toISOString();
+
+        await db.run(
+          `INSERT INTO weekly_assignments (id, plan_id, week_id, employee_id, assigned_at, assigned_by)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [assignmentId, id, assignment.weekId, assignment.employeeId, assignedAt, userId]
+        );
+
+        insertedAssignments.push({
+          id: assignmentId,
+          planId: id,
+          weekId: assignment.weekId,
+          employeeId: assignment.employeeId,
+          assignedAt,
+          assignedBy: userId,
+        });
+      }
+
+      await db.run('COMMIT');
+
+      res.status(201).json({
+        message: 'Assignments created successfully',
+        count: insertedAssignments.length,
+        assignments: insertedAssignments,
+      });
+    } catch (error) {
+      await db.run('ROLLBACK');
+      throw error;
+    }
+  } catch (error) {
+    console.error('Error creating assignments:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
