@@ -235,7 +235,7 @@ const WeeklySwapModeOverlay: React.FC<WeeklySwapModeOverlayProps> = ({
   }, [weeks]);
 
   // Dummy handler for onMonthChange (not used since navigation is hidden)
-  const handleMonthChange = useCallback(() => {}, []);
+  const handleMonthChange = useCallback(() => { }, []);
 
   return (
     <div className={styles.overlay}>
@@ -254,9 +254,6 @@ const WeeklySwapModeOverlay: React.FC<WeeklySwapModeOverlayProps> = ({
         <div className={styles.calendarsContainer}>
           {monthsToRender.map(({ year, month }) => (
             <div key={`${year}-${month}`} className={styles.monthSection}>
-              <h3 className={styles.monthTitle}>
-                {new Date(year, month, 1).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}
-              </h3>
               <Calendar
                 year={year}
                 month={month}
@@ -264,7 +261,7 @@ const WeeklySwapModeOverlay: React.FC<WeeklySwapModeOverlayProps> = ({
                 employees={localEmployees}
                 onMonthChange={handleMonthChange}
                 hideNavigation={true}
-                swapModeActive={!!sourceSelection}
+                swapModeActive={true}
                 sourceSelection={sourceSelection}
                 eligibleTargets={eligibilityMap}
                 onEmployeeClick={handleEmployeeClick}

@@ -1,6 +1,7 @@
 /* frontend/src/pages/Plans/PlanView.module.css */
 
 .container {
+  position: relative;
   padding: 20px;
   max-width: 100%;
 }

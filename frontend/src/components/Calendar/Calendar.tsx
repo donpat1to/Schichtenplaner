@@ -182,7 +182,7 @@ const Calendar: React.FC<CalendarProps> = ({
                 const key = `${employee.id}-${weekId}`;
                 const isSource = sourceSelection?.employeeId === employee.id &&
                     sourceSelection?.weekId === weekId;
-                const eligibility = !isSource ? eligibleTargets.get(key) || null : null;
+                const eligibility = eligibleTargets.get(key) || null;
 
                 return (
                     <SwapableEmployeeBox
