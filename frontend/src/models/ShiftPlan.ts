@@ -109,6 +109,10 @@ export interface CreateShiftPlanRequest {
   shifts: Omit<Shift, 'id' | 'planId'>[];
 }
 
+export interface CreateAssignmentsRequest {
+  assignments: Omit<ShiftAssignment, 'id' | 'assignedAt' | 'assignedBy' | 'planId'>[];
+}
+
 export interface UpdateShiftPlanRequest {
   name?: string;
   description?: string;

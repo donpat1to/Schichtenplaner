@@ -496,7 +496,28 @@ const PlanView: React.FC = () => {
     }
   };
 
-  const handleCloseSwapMode = () => {
+  const handleCloseSwapMode = async () => {
+    if (id && localAssignments.length > 0) {
+      try {
+        // Format assignments for the API
+        const assignmentsRequest = {
+          assignments: localAssignments.map(a => ({
+            shiftId: a.shiftId,
+            employeeId: a.employeeId
+          }))
+        };
+        await shiftPlanService.createAssignments(id, assignmentsRequest);
+        // Reload the plan data to get fresh assignments from backend
+        await loadPlanData();
+      } catch (error) {
+        console.error('Error saving assignments:', error);
+        showNotification({
+          type: 'error',
+          title: 'Fehler',
+          message: 'Zuweisungen konnten nicht gespeichert werden'
+        });
+      }
+    }
     setSwapModeActive(false);
   };
 

@@ -1,4 +1,13 @@
-import { ShiftPlan, CreateShiftPlanRequest, TimeSlot, Shift, GenerateResult, ShiftPlanStatistics, ShiftPlanWithData } from '../models/ShiftPlan';
+import {
+  ShiftPlan,
+  CreateShiftPlanRequest,
+  TimeSlot,
+  Shift,
+  GenerateResult,
+  ShiftPlanStatistics,
+  ShiftPlanWithData,
+  CreateAssignmentsRequest
+} from '../models/ShiftPlan';
 import { TEMPLATE_PRESETS } from '../models/defaults/shiftPlanDefaults';
 import { apiClient } from './apiClient';
 
@@ -136,6 +145,25 @@ export const shiftPlanService = {
   async generateAssignments(planId: string): Promise<GenerateResult> {
     try {
       return await apiClient.post<GenerateResult>(`/shift-plans/${planId}/generate`);
+    } catch (error: any) {
+      if (error.statusCode === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('employee');
+        throw new Error('Nicht autorisiert - bitte erneut anmelden');
+      }
+      if (error.statusCode === 404) {
+        throw new Error('Wochenplan nicht gefunden');
+      }
+      if (error.statusCode === 500) {
+        throw new Error('Fehler beim Generieren der Zuweisungen. Bitte überprüfen Sie die Präferenzen.');
+      }
+      throw new Error('Fehler bei der Generierung der Zuweisungen');
+    }
+  },
+
+  async createAssignments(planId: string, assignments: CreateAssignmentsRequest): Promise<void> {
+    try {
+      await apiClient.post<CreateAssignmentsRequest>(`/shift-plans/${planId}/create`, assignments);
     } catch (error: any) {
       if (error.statusCode === 401) {
         localStorage.removeItem('token');

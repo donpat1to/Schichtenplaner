@@ -18,7 +18,8 @@ import {
   deleteShift,
   generateAssignments,
   publishPlan,
-  getPlanStatistics
+  getPlanStatistics,
+  createAssignments
 } from '../controllers/shiftPlanController.js';
 import {
   validateShiftPlan,
@@ -61,6 +62,7 @@ router.delete('/:id/shifts/:shiftId', validateId, validateShiftId, handleValidat
 router.post('/:id/generate', validateId, handleValidationErrors, requireRole(['admin', 'maintenance']), generateAssignments);
 router.post('/:id/clear-assignments', validateId, handleValidationErrors, requireRole(['admin', 'maintenance']), clearAssignments);
 router.post('/:id/publish', validateId, handleValidationErrors, requireRole(['admin', 'maintenance']), publishPlan);
+router.post('/:id/create', validateId, handleValidationErrors, requireRole(['admin', 'maintenance']), createAssignments);
 
 // Statistics route
 router.get('/:id/statistics', validateId, handleValidationErrors, getPlanStatistics);
