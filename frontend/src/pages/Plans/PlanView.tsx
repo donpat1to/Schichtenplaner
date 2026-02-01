@@ -15,7 +15,7 @@ import { saveAs } from 'file-saver';
 import { backTextButton } from '@/utils/buttonStyles';
 import Timetable from '../../components/Timetable/Timetable';
 import Calendar from '../../components/Calendar/Calendar';
-import { SwapModeOverlay } from '../../components/SwapMode';
+import { SwapModeOverlay, WeeklySwapModeOverlay } from '../../components/SwapMode';
 import styles from './PlanView.module.css';
 
 // Remove the local GenerateResult interface since it's now imported from shiftPlanService
@@ -70,6 +70,9 @@ const PlanView: React.FC = () => {
   // Swap mode state
   const [swapModeActive, setSwapModeActive] = useState(false);
   const [localAssignments, setLocalAssignments] = useState<ShiftAssignment[]>([]);
+
+  // Weekly swap mode state
+  const [weeklySwapModeActive, setWeeklySwapModeActive] = useState(false);
 
   const isAdmin = hasRole(['admin', 'maintenance']);
 
@@ -481,27 +484,12 @@ const PlanView: React.FC = () => {
     }
   };
 
-  const handleSwapComplete = (newAssignments: ShiftAssignment[]) => {
-    setLocalAssignments(newAssignments);
-    // Update the shift plan with new assignments locally
-    if (shiftPlan) {
-      const updatedShifts = shiftPlan.shifts.map(shift => ({
-        ...shift,
-        assignments: newAssignments.filter(a => a.shiftId === shift.id)
-      }));
-      setShiftPlan({
-        ...shiftPlan,
-        shifts: updatedShifts
-      });
-    }
-  };
-
-  const handleCloseSwapMode = async () => {
-    if (id && localAssignments.length > 0) {
+  const handleSwapComplete = async (newAssignments: ShiftAssignment[]) => {
+    // Save assignments to backend
+    if (id && newAssignments.length > 0) {
       try {
-        // Format assignments for the API
         const assignmentsRequest = {
-          assignments: localAssignments.map(a => ({
+          assignments: newAssignments.map(a => ({
             shiftId: a.shiftId,
             employeeId: a.employeeId
           }))
@@ -509,6 +497,11 @@ const PlanView: React.FC = () => {
         await shiftPlanService.createAssignments(id, assignmentsRequest);
         // Reload the plan data to get fresh assignments from backend
         await loadPlanData();
+        showNotification({
+          type: 'success',
+          title: 'Gespeichert',
+          message: 'Zuweisungen wurden erfolgreich gespeichert'
+        });
       } catch (error) {
         console.error('Error saving assignments:', error);
         showNotification({
@@ -518,7 +511,32 @@ const PlanView: React.FC = () => {
         });
       }
     }
+  };
+
+  const handleCloseSwapMode = () => {
     setSwapModeActive(false);
+  };
+
+  // Weekly swap mode handlers
+  const handleWeeklySwapComplete = async (newAssignments: { weekId: string; employeeId: string }[]) => {
+    if (id) {
+      try {
+        await weeklyPlanService.createAssignments(id, { assignments: newAssignments });
+        await loadPlanData();
+        showNotification({
+          type: 'success',
+          title: 'Gespeichert',
+          message: 'Zuweisungen wurden erfolgreich gespeichert'
+        });
+      } catch (error) {
+        console.error('Error saving weekly assignments:', error);
+        showNotification({
+          type: 'error',
+          title: 'Fehler',
+          message: 'Zuweisungen konnten nicht gespeichert werden'
+        });
+      }
+    }
   };
 
   // Render status badge
@@ -740,6 +758,14 @@ const PlanView: React.FC = () => {
                     Manuelle Zuweisung
                   </button>
                 )}
+                {planType === 'weekly' && (
+                  <button
+                    onClick={() => setWeeklySwapModeActive(true)}
+                    className={styles.secondaryButton}
+                  >
+                    Manuelle Zuweisung
+                  </button>
+                )}
                 <button
                   onClick={planType === 'shift' ? handlePublishShiftPlan : handlePublishWeeklyPlan}
                   disabled={isPublishing || (planType === 'weekly' && isSubmitting)}
@@ -855,6 +881,16 @@ const PlanView: React.FC = () => {
           assignments={localAssignments}
           onClose={handleCloseSwapMode}
           onSwapComplete={handleSwapComplete}
+        />
+      )}
+
+      {/* Weekly Swap Mode Overlay */}
+      {weeklySwapModeActive && weeklyPlan && (
+        <WeeklySwapModeOverlay
+          weeks={weeklyPlan.weeks}
+          employees={weeklyPlan.employees || []}
+          onClose={() => setWeeklySwapModeActive(false)}
+          onSwapComplete={handleWeeklySwapComplete}
         />
       )}
     </div>

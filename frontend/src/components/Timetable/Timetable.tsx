@@ -277,7 +277,7 @@ const Timetable: React.FC<TimetableProps> = ({
                     <SwapableEmployeeBox
                         key={`${empId}-${shiftId}`}
                         employee={employee}
-                        shiftId={shiftId}
+                        contextId={shiftId}
                         isSource={isSource}
                         eligibility={eligibility}
                         onSelect={onEmployeeClick}

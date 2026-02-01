@@ -1,27 +1,37 @@
 // frontend/src/components/SwapMode/SwapableEmployeeBox.tsx
 import React from 'react';
-import { Employee } from '../../models/Employee';
 import ShiverAnimation from './ShiverAnimation';
 import styles from './SwapableEmployeeBox.module.css';
 
 export type SwapEligibility = 'direct' | 'two-step' | null;
 
+// Generic employee interface that works with both Employee and EmployeeWithPreferences
+interface SwapableEmployee {
+  id: string;
+  firstname?: string | null;
+  lastname?: string | null;
+  employeeType?: string | null;
+  isTrainee?: boolean | null;
+}
+
 interface SwapableEmployeeBoxProps {
-  employee: Employee;
-  shiftId: string;
+  employee: SwapableEmployee;
+  contextId: string; // Can be shiftId or weekId
   isSource: boolean;
   eligibility: SwapEligibility;
-  onSelect?: (employeeId: string, shiftId: string) => void;
+  onSelect?: (employeeId: string, contextId: string) => void;
 }
 
 const SwapableEmployeeBox: React.FC<SwapableEmployeeBoxProps> = ({
   employee,
-  shiftId,
+  contextId,
   isSource,
   eligibility,
   onSelect
 }) => {
   const isManagerType = employee.employeeType === 'manager';
+  const isTrainee = employee.isTrainee === true;
+  const displayName = `${employee.firstname || ''} ${employee.lastname || ''}`.trim() || 'Unbekannt';
 
   // Determine styling based on state
   const getBackgroundColor = (): string => {
@@ -29,14 +39,14 @@ const SwapableEmployeeBox: React.FC<SwapableEmployeeBoxProps> = ({
     if (eligibility === 'direct') return '#27ae60'; // Green for direct swap
     if (eligibility === 'two-step') return 'rgba(230, 126, 34, 0.5)'; // Orange 50% opacity
     if (isManagerType) return '#CC0000'; // Manager red
-    if (employee.isTrainee) return '#cda8f0'; // Trainee purple
+    if (isTrainee) return '#cda8f0'; // Trainee purple
     return '#642ab5'; // Default purple
   };
 
   const handleClick = () => {
     if (isManagerType) return; // Managers are non-interactive
     if (onSelect) {
-      onSelect(employee.id, shiftId);
+      onSelect(employee.id, contextId);
     }
   };
 
@@ -45,9 +55,9 @@ const SwapableEmployeeBox: React.FC<SwapableEmployeeBoxProps> = ({
       className={`${styles.employeeBox} ${isManagerType ? styles.nonInteractive : styles.interactive}`}
       style={{ backgroundColor: getBackgroundColor() }}
       onClick={handleClick}
-      title={`${employee.firstname} ${employee.lastname}${employee.isTrainee ? ' (Azubi)' : ''}${isManagerType ? ' (Manager)' : ''}`}
+      title={`${displayName}${isTrainee ? ' (Azubi)' : ''}${isManagerType ? ' (Manager)' : ''}`}
     >
-      {employee.firstname} {employee.lastname}
+      {displayName}
       {isSource && <span className={styles.sourceIndicator}>*</span>}
     </div>
   );

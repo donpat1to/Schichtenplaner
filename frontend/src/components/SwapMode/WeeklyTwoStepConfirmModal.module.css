@@ -1,0 +1,147 @@
+/* frontend/src/components/SwapMode/WeeklyTwoStepConfirmModal.module.css */
+
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+}
+
+.modal {
+  background-color: white;
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 500px;
+  width: 90%;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.title {
+  margin: 0 0 12px 0;
+  font-size: 20px;
+  color: #2c3e50;
+}
+
+.description {
+  margin: 0 0 20px 0;
+  color: #7f8c8d;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.swapSteps {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.swapStep {
+  background-color: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 16px;
+}
+
+.stepNumber {
+  font-size: 12px;
+  font-weight: 600;
+  color: #51258f;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.swapDetails {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.swapParty {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  text-align: center;
+}
+
+.employeeName {
+  font-weight: 600;
+  color: #2c3e50;
+  font-size: 14px;
+}
+
+.weekInfo {
+  font-size: 12px;
+  color: #7f8c8d;
+}
+
+.swapArrow {
+  font-size: 24px;
+  color: #51258f;
+  flex-shrink: 0;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.cancelButton {
+  padding: 10px 20px;
+  background-color: #95a5a6;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.cancelButton:hover {
+  background-color: #7f8c8d;
+}
+
+.confirmButton {
+  padding: 10px 20px;
+  background-color: #27ae60;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.confirmButton:hover {
+  background-color: #229954;
+}
+
+@media (max-width: 480px) {
+  .swapDetails {
+    flex-direction: column;
+  }
+
+  .swapArrow {
+    transform: rotate(90deg);
+  }
+
+  .actions {
+    flex-direction: column;
+  }
+
+  .cancelButton,
+  .confirmButton {
+    width: 100%;
+  }
+}

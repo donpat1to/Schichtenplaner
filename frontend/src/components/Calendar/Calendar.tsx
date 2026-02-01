@@ -1,6 +1,7 @@
 // frontend/src/components/Calendar/Calendar.tsx
 import React from 'react';
 import { EmployeeWithPreferences, PlanWeek } from '../../models/WeeklyPlan';
+import SwapableEmployeeBox from '../SwapMode/SwapableEmployeeBox';
 import styles from './Calendar.module.css';
 
 export interface CalendarProps {
@@ -22,6 +23,15 @@ export interface CalendarProps {
     weekPreferences?: Record<string, 1 | 2 | 3>;
     onPreferenceChange?: (weekId: string) => void;
     disabled?: boolean;
+
+    // Swap mode props
+    swapModeActive?: boolean;
+    sourceSelection?: { employeeId: string; weekId: string } | null;
+    eligibleTargets?: Map<string, 'direct' | 'two-step'>;
+    onEmployeeClick?: (employeeId: string, weekId: string) => void;
+
+    // Layout props
+    hideNavigation?: boolean;
 }
 
 const Calendar: React.FC<CalendarProps> = ({
@@ -36,6 +46,11 @@ const Calendar: React.FC<CalendarProps> = ({
     weekPreferences = {},
     onPreferenceChange,
     disabled = false,
+    swapModeActive = false,
+    sourceSelection = null,
+    eligibleTargets = new Map(),
+    onEmployeeClick,
+    hideNavigation = false,
 }) => {
     const monthNames = [
         'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
@@ -153,7 +168,7 @@ const Calendar: React.FC<CalendarProps> = ({
         return displays[level];
     };
 
-    // Render employee boxes for a week (view mode)
+    // Render employee boxes for a week (view mode or swap mode)
     const renderEmployeeBoxes = (weekId: string) => {
         const assignedEmployees = getAssignedEmployeesForWeek(weekId);
 
@@ -161,6 +176,28 @@ const Calendar: React.FC<CalendarProps> = ({
             return null;
         }
 
+        // If swap mode is active, use SwapableEmployeeBox
+        if (swapModeActive) {
+            return assignedEmployees.map(employee => {
+                const key = `${employee.id}-${weekId}`;
+                const isSource = sourceSelection?.employeeId === employee.id &&
+                    sourceSelection?.weekId === weekId;
+                const eligibility = !isSource ? eligibleTargets.get(key) || null : null;
+
+                return (
+                    <SwapableEmployeeBox
+                        key={key}
+                        employee={employee}
+                        contextId={weekId}
+                        isSource={isSource}
+                        eligibility={eligibility}
+                        onSelect={onEmployeeClick}
+                    />
+                );
+            });
+        }
+
+        // Standard view mode
         return assignedEmployees.map(employee => {
             // Determine background color based on employee role
             let backgroundColor = '#642ab5'; // Default: non-trainee personnel (purple)
@@ -211,23 +248,25 @@ const Calendar: React.FC<CalendarProps> = ({
 
     return (
         <div className={styles.calendar}>
-            <div className={styles.calendarHeader}>
-                <button onClick={handlePrevMonth} className={styles.navButton}>
-                    &lt;
-                </button>
+            {!hideNavigation && (
+                <div className={styles.calendarHeader}>
+                    <button onClick={handlePrevMonth} className={styles.navButton}>
+                        &lt;
+                    </button>
 
-                <div className={styles.monthYear}>
-                    <span className={styles.monthName}>{monthNames[month]}</span>
-                    <span className={styles.year}>{year}</span>
-                    <button onClick={handleToday} className={styles.todayButton}>
-                        Heute
+                    <div className={styles.monthYear}>
+                        <span className={styles.monthName}>{monthNames[month]}</span>
+                        <span className={styles.year}>{year}</span>
+                        <button onClick={handleToday} className={styles.todayButton}>
+                            Heute
+                        </button>
+                    </div>
+
+                    <button onClick={handleNextMonth} className={styles.navButton}>
+                        &gt;
                     </button>
                 </div>
-
-                <button onClick={handleNextMonth} className={styles.navButton}>
-                    &gt;
-                </button>
-            </div>
+            )}
 
             <div className={styles.calendarGrid}>
                 {/* Day names header */}

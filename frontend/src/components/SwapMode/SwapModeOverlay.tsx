@@ -22,7 +22,7 @@ interface SwapModeOverlayProps {
   availabilities: EmployeeAvailability[];
   assignments: ShiftAssignment[];
   onClose: () => void;
-  onSwapComplete: (newAssignments: ShiftAssignment[]) => void;
+  onSwapComplete: (newAssignments: ShiftAssignment[]) => Promise<void>;
 }
 
 const SwapModeOverlay: React.FC<SwapModeOverlayProps> = ({
@@ -40,6 +40,9 @@ const SwapModeOverlay: React.FC<SwapModeOverlayProps> = ({
 
   // Source selection state
   const [sourceSelection, setSourceSelection] = useState<SourceSelection | null>(null);
+
+  // Saving state
+  const [isSaving, setIsSaving] = useState(false);
 
   // Two-step confirmation modal state
   const [twoStepModal, setTwoStepModal] = useState<{
@@ -172,10 +175,15 @@ const SwapModeOverlay: React.FC<SwapModeOverlayProps> = ({
   }, []);
 
   // Handle close overlay
-  const handleClose = useCallback(() => {
-    // Pass the modified assignments back
-    onSwapComplete(localAssignments);
-    onClose();
+  const handleClose = useCallback(async () => {
+    setIsSaving(true);
+    try {
+      // Pass the modified assignments back and wait for save
+      await onSwapComplete(localAssignments);
+      onClose();
+    } finally {
+      setIsSaving(false);
+    }
   }, [localAssignments, onSwapComplete, onClose]);
 
   // Convert eligibleTargets map to the format expected by Timetable
@@ -193,8 +201,12 @@ const SwapModeOverlay: React.FC<SwapModeOverlayProps> = ({
     <div className={styles.overlay}>
       <div className={styles.header}>
         <h2 className={styles.title}>Manuelle Zuweisung</h2>
-        <button className={styles.closeButton} onClick={handleClose}>
-          Beenden
+        <button
+          className={styles.closeButton}
+          onClick={handleClose}
+          disabled={isSaving}
+        >
+          {isSaving ? 'Speichert...' : 'Beenden'}
         </button>
       </div>
 
