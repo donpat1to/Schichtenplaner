@@ -252,22 +252,18 @@ const WeeklySwapModeOverlay: React.FC<WeeklySwapModeOverlayProps> = ({
 
       <div className={styles.content}>
         <div className={styles.calendarsContainer}>
-          {monthsToRender.map(({ year, month }) => (
-            <div key={`${year}-${month}`} className={styles.monthSection}>
-              <Calendar
-                year={year}
-                month={month}
-                weeks={weeks}
-                employees={localEmployees}
-                onMonthChange={handleMonthChange}
-                hideNavigation={true}
-                swapModeActive={true}
-                sourceSelection={sourceSelection}
-                eligibleTargets={eligibilityMap}
-                onEmployeeClick={handleEmployeeClick}
-              />
-            </div>
-          ))}
+          <Calendar
+            year={0}
+            month={0}
+            weeks={weeks}
+            employees={localEmployees}
+            onMonthChange={handleMonthChange}
+            hideNavigation={true}
+            swapModeActive={true}
+            sourceSelection={sourceSelection}
+            eligibleTargets={eligibilityMap}
+            onEmployeeClick={handleEmployeeClick}
+          />
         </div>
       </div>
 

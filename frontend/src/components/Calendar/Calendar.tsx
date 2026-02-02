@@ -59,22 +59,46 @@ const Calendar: React.FC<CalendarProps> = ({
 
     const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
-    // Get first day of month and last day of month
-    const firstDayOfMonth = new Date(year, month, 1);
-    const lastDayOfMonth = new Date(year, month + 1, 0);
+    // Determine calendar boundaries based on mode
+    let firstDayOfCalendar: Date;
+    let lastDayOfCalendar: Date;
 
-    // Get the Monday of the week containing the 1st of the month
-    const firstDayOfCalendar = new Date(firstDayOfMonth);
-    const dayOfWeek = firstDayOfMonth.getDay();
-    // Adjust for Monday-first week (0 = Sunday, 1 = Monday, ... 6 = Saturday)
-    const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    firstDayOfCalendar.setDate(firstDayOfCalendar.getDate() - diffToMonday);
+    if (mode === 'view' && weeks.length > 0) {
+        // Sort weeks by start date
+        const sortedWeeks = [...weeks].sort((a, b) =>
+            new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+        );
 
-    // Get the Sunday of the week containing the last day of the month
-    const lastDayOfCalendar = new Date(lastDayOfMonth);
-    const lastDayOfWeek = lastDayOfMonth.getDay();
-    const diffToSunday = lastDayOfWeek === 0 ? 0 : 7 - lastDayOfWeek;
-    lastDayOfCalendar.setDate(lastDayOfCalendar.getDate() + diffToSunday);
+        // Get first day from earliest week, adjusted to Monday
+        const firstWeekStart = new Date(sortedWeeks[0].startDate);
+        const firstDayOfWeek = firstWeekStart.getDay();
+        const diffToMonday = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
+        firstDayOfCalendar = new Date(firstWeekStart);
+        firstDayOfCalendar.setDate(firstDayOfCalendar.getDate() - diffToMonday);
+
+        // Get last day from latest week, adjusted to Sunday
+        const lastWeekEnd = new Date(sortedWeeks[sortedWeeks.length - 1].endDate);
+        const lastDayOfWeek = lastWeekEnd.getDay();
+        const diffToSunday = lastDayOfWeek === 0 ? 0 : 7 - lastDayOfWeek;
+        lastDayOfCalendar = new Date(lastWeekEnd);
+        lastDayOfCalendar.setDate(lastDayOfCalendar.getDate() + diffToSunday);
+    } else {
+        // Original monthly logic
+        const firstDayOfMonth = new Date(year, month, 1);
+        const lastDayOfMonth = new Date(year, month + 1, 0);
+
+        // Monday of week containing 1st of month
+        firstDayOfCalendar = new Date(firstDayOfMonth);
+        const dayOfWeek = firstDayOfMonth.getDay();
+        const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+        firstDayOfCalendar.setDate(firstDayOfCalendar.getDate() - diffToMonday);
+
+        // Sunday of week containing last day of month
+        lastDayOfCalendar = new Date(lastDayOfMonth);
+        const lastDayOfWeek = lastDayOfMonth.getDay();
+        const diffToSunday = lastDayOfWeek === 0 ? 0 : 7 - lastDayOfWeek;
+        lastDayOfCalendar.setDate(lastDayOfCalendar.getDate() + diffToSunday);
+    }
 
     // Generate calendar grid
     const generateCalendarGrid = () => {
@@ -95,7 +119,8 @@ const Calendar: React.FC<CalendarProps> = ({
 
             for (let i = 0; i < 7; i++) {
                 const date = new Date(currentDate);
-                const isCurrentMonth = date.getMonth() === month;
+                // In swap mode, all days are considered "current" (no graying out)
+                const isCurrentMonth = mode === 'view' ? true : date.getMonth() === month;
 
                 const dayInfo = getDayInfo ? getDayInfo(date) : undefined;
 
