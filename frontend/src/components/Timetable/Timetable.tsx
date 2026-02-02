@@ -6,7 +6,7 @@ import { AssignmentResult } from '../../models/scheduling';
 import TimeSlotEditor from './TimeSlotEditor';
 import ShiftCell from './ShiftCell';
 import AddDayButton from './AddDayButton';
-import SwapableEmployeeBox from '../SwapMode/SwapableEmployeeBox';
+import DraggableEmployeeBox from '../SwapMode/DraggableEmployeeBox';
 import { formatTime } from '../../utils/formatters';
 import { ICONS, BUTTON_COLORS, smallDeleteButton } from '../../utils/buttonStyles';
 import styles from './Timetable.module.css';
@@ -47,11 +47,10 @@ export interface TimetableProps {
     showLegend?: boolean;
     compactMode?: boolean;
 
-    // Swap mode props
+    // Swap mode props (drag-and-drop based)
     swapModeActive?: boolean;
     sourceSelection?: { employeeId: string; shiftId: string } | null;
     eligibleTargets?: Map<string, 'direct' | 'two-step'>;
-    onEmployeeClick?: (employeeId: string, shiftId: string) => void;
 }
 
 const DEFAULT_DAYS: DayInfo[] = [
@@ -89,7 +88,6 @@ const Timetable: React.FC<TimetableProps> = ({
     swapModeActive = false,
     sourceSelection = null,
     eligibleTargets = new Map(),
-    onEmployeeClick,
 }) => {
     const [showAddTimeSlot, setShowAddTimeSlot] = useState(false);
     const [newTimeSlot, setNewTimeSlot] = useState({
@@ -267,20 +265,19 @@ const Timetable: React.FC<TimetableProps> = ({
             const employee = employees.find(emp => emp.id === empId);
             if (!employee) return null;
 
-            // In swap mode, use SwapableEmployeeBox
+            // In swap mode, use DraggableEmployeeBox (drag-and-drop)
             if (swapModeActive) {
                 const isSource = sourceSelection?.employeeId === empId && sourceSelection?.shiftId === shiftId;
                 const key = `${empId}-${shiftId}`;
                 const eligibility = eligibleTargets.get(key) || null;
 
                 return (
-                    <SwapableEmployeeBox
+                    <DraggableEmployeeBox
                         key={`${empId}-${shiftId}`}
                         employee={employee}
                         contextId={shiftId}
                         isSource={isSource}
                         eligibility={eligibility}
-                        onSelect={onEmployeeClick}
                     />
                 );
             }

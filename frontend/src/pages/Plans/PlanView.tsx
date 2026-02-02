@@ -1,21 +1,37 @@
 // frontend/src/pages/Plans/PlanView.tsx
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import {
+  DndContext,
+  DragOverlay,
+  DragStartEvent,
+  DragEndEvent,
+  PointerSensor,
+  TouchSensor,
+  useSensors,
+  useSensor
+} from '@dnd-kit/core';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
 import { useBackendValidation } from '../../hooks/useBackendValidation';
+import { useWeeklySwapValidation, WeeklySwapTarget } from '../../hooks/useWeeklySwapValidation';
+import { useSwapValidation, SwapTarget } from '../../hooks/useSwapValidation';
 import { shiftPlanService } from '../../services/shiftPlanService';
 import { weeklyPlanService } from '../../services/weeklyPlanService';
 import { employeeService } from '../../services/employeeService';
 import { ShiftPlanWithData, ShiftAssignment } from '../../models/ShiftPlan';
-import { WeeklyPlanWithDetails, formatWeekRange } from '../../models/WeeklyPlan';
+import { WeeklyPlanWithDetails, formatWeekRange, EmployeeWithPreferences } from '../../models/WeeklyPlan';
+import { WeeklySwapStep } from '../../utils/weeklySwapConstraints';
+import { SwapStep } from '../../utils/swapConstraints';
 import { Employee, EmployeeAvailability } from '../../models/Employee';
 import { formatDate } from '../../utils/formatters';
 import { saveAs } from 'file-saver';
 import { backTextButton } from '@/utils/buttonStyles';
 import Timetable from '../../components/Timetable/Timetable';
 import Calendar from '../../components/Calendar/Calendar';
-import { SwapModeOverlay, WeeklySwapModeOverlay } from '../../components/SwapMode';
+import TwoStepConfirmModal from '../../components/SwapMode/TwoStepConfirmModal';
+import WeeklyTwoStepConfirmModal from '../../components/SwapMode/WeeklyTwoStepConfirmModal';
+import { DragData } from '../../components/SwapMode/DraggableEmployeeBox';
 import styles from './PlanView.module.css';
 
 // Remove the local GenerateResult interface since it's now imported from shiftPlanService
@@ -67,14 +83,102 @@ const PlanView: React.FC = () => {
   const [dropdownWidth, setDropdownWidth] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Swap mode state
-  const [swapModeActive, setSwapModeActive] = useState(false);
-  const [localAssignments, setLocalAssignments] = useState<ShiftAssignment[]>([]);
+  // Shift swap mode state (drag-and-drop, inline)
+  const [shiftSwapModeActive, setShiftSwapModeActive] = useState(false);
+  const [localShiftAssignments, setLocalShiftAssignments] = useState<ShiftAssignment[]>([]);
+  const [shiftSourceSelection, setShiftSourceSelection] = useState<{ employeeId: string; shiftId: string } | null>(null);
+  const [shiftActiveDrag, setShiftActiveDrag] = useState<DragData | null>(null);
+  const [shiftTwoStepModal, setShiftTwoStepModal] = useState<{
+    visible: boolean;
+    swapPath: SwapStep[];
+    targetEmpId: string;
+    targetShiftId: string;
+  } | null>(null);
+  const [isSavingShiftSwap, setIsSavingShiftSwap] = useState(false);
 
-  // Weekly swap mode state
+  // Weekly swap mode state (inline)
   const [weeklySwapModeActive, setWeeklySwapModeActive] = useState(false);
+  const [localWeeklyEmployees, setLocalWeeklyEmployees] = useState<EmployeeWithPreferences[]>([]);
+  const [sourceSelection, setSourceSelection] = useState<{ employeeId: string; weekId: string } | null>(null);
+  const [activeDrag, setActiveDrag] = useState<DragData | null>(null);
+  const [twoStepModal, setTwoStepModal] = useState<{
+    visible: boolean;
+    swapPath: WeeklySwapStep[];
+    targetEmpId: string;
+    targetWeekId: string;
+  } | null>(null);
+  const [isSavingSwap, setIsSavingSwap] = useState(false);
 
   const isAdmin = hasRole(['admin', 'maintenance']);
+
+  // DnD sensors for swap mode
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 150,
+        tolerance: 5,
+      },
+    })
+  );
+
+  // Use swap validation hook (only when weeklyPlan exists)
+  const {
+    getEligibleWeeklySwapTargets,
+    isEmployeeManager
+  } = useWeeklySwapValidation(
+    weeklyPlan?.weeks || [],
+    localWeeklyEmployees
+  );
+
+  // Use swap validation hook for shift plans
+  const {
+    getEligibleSwapTargets,
+    isEmployeeManager: isShiftEmployeeManager
+  } = useSwapValidation(
+    shiftPlan?.shifts || [],
+    employees,
+    availabilities,
+    localShiftAssignments
+  );
+
+  // Get eligible targets when source is selected (shift swap)
+  const shiftEligibleTargets = useMemo<Map<string, SwapTarget>>(() => {
+    if (!shiftSourceSelection) return new Map();
+    return getEligibleSwapTargets(shiftSourceSelection.employeeId, shiftSourceSelection.shiftId);
+  }, [shiftSourceSelection, getEligibleSwapTargets]);
+
+  // Convert shiftEligibleTargets map to the format expected by Timetable
+  const shiftEligibilityMap = useMemo<Map<string, 'direct' | 'two-step'>>(() => {
+    const map = new Map<string, 'direct' | 'two-step'>();
+    shiftEligibleTargets.forEach((target, key) => {
+      if (target.eligibility) {
+        map.set(key, target.eligibility);
+      }
+    });
+    return map;
+  }, [shiftEligibleTargets]);
+
+  // Get eligible targets when source is selected (weekly swap)
+  const eligibleTargets = useMemo<Map<string, WeeklySwapTarget>>(() => {
+    if (!sourceSelection) return new Map();
+    return getEligibleWeeklySwapTargets(sourceSelection.employeeId, sourceSelection.weekId);
+  }, [sourceSelection, getEligibleWeeklySwapTargets]);
+
+  // Convert eligibleTargets map to the format expected by Calendar
+  const eligibilityMap = useMemo<Map<string, 'direct' | 'two-step'>>(() => {
+    const map = new Map<string, 'direct' | 'two-step'>();
+    eligibleTargets.forEach((target, key) => {
+      if (target.eligibility) {
+        map.set(key, target.eligibility);
+      }
+    });
+    return map;
+  }, [eligibleTargets]);
 
   // Get unified plan data
   const plan = planType === 'shift' ? shiftPlan : weeklyPlan;
@@ -474,70 +578,365 @@ const PlanView: React.FC = () => {
     setCurrentMonth(new Date(year, month, 1));
   };
 
-  // Handle swap mode
-  const handleOpenSwapMode = () => {
+  // Shift swap mode handlers (inline, drag-and-drop)
+  const handleOpenShiftSwapMode = useCallback(() => {
     if (shiftPlan) {
       // Initialize local assignments from current shift plan data
       const currentAssignments = shiftPlan.shifts.flatMap(shift => shift.assignments);
-      setLocalAssignments(currentAssignments);
-      setSwapModeActive(true);
+      setLocalShiftAssignments(currentAssignments);
+      setShiftSwapModeActive(true);
     }
-  };
+  }, [shiftPlan]);
 
-  const handleSwapComplete = async (newAssignments: ShiftAssignment[]) => {
-    // Save assignments to backend
-    if (id && newAssignments.length > 0) {
-      try {
-        const assignmentsRequest = {
-          assignments: newAssignments.map(a => ({
-            shiftId: a.shiftId,
-            employeeId: a.employeeId
-          }))
+  const handleCancelShiftSwapMode = useCallback(() => {
+    setShiftSwapModeActive(false);
+    setLocalShiftAssignments([]);
+    setShiftSourceSelection(null);
+    setShiftActiveDrag(null);
+    setShiftTwoStepModal(null);
+  }, []);
+
+  // Execute a single shift swap - updates localShiftAssignments
+  const executeShiftSwap = useCallback((
+    empAId: string,
+    shiftAId: string,
+    empBId: string,
+    shiftBId: string
+  ): ShiftAssignment[] => {
+    return localShiftAssignments.map(a => {
+      if (a.shiftId === shiftAId && a.employeeId === empAId) {
+        return { ...a, employeeId: empBId };
+      }
+      if (a.shiftId === shiftBId && a.employeeId === empBId) {
+        return { ...a, employeeId: empAId };
+      }
+      return a;
+    });
+  }, [localShiftAssignments]);
+
+  // Handle shift drag start
+  const handleShiftDragStart = useCallback((event: DragStartEvent) => {
+    const data = event.active.data.current as DragData;
+    if (!data) return;
+
+    // Don't allow managers to be dragged
+    if (isShiftEmployeeManager(data.employeeId)) return;
+
+    setShiftSourceSelection({
+      employeeId: data.employeeId,
+      shiftId: data.contextId
+    });
+    setShiftActiveDrag(data);
+  }, [isShiftEmployeeManager]);
+
+  // Handle shift drag end
+  const handleShiftDragEnd = useCallback((event: DragEndEvent) => {
+    const { over } = event;
+
+    if (!shiftSourceSelection || !shiftActiveDrag) {
+      setShiftSourceSelection(null);
+      setShiftActiveDrag(null);
+      return;
+    }
+
+    // Check if dropped over a valid target
+    if (over) {
+      const overId = over.id.toString();
+      const [targetEmpId, targetShiftId] = overId.split('-');
+
+      if (targetEmpId && targetShiftId) {
+        const key = `${targetEmpId}-${targetShiftId}`;
+        const target = shiftEligibleTargets.get(key);
+
+        if (target) {
+          if (target.eligibility === 'direct') {
+            // Execute direct swap immediately
+            const newAssignments = executeShiftSwap(
+              shiftSourceSelection.employeeId,
+              shiftSourceSelection.shiftId,
+              targetEmpId,
+              targetShiftId
+            );
+            setLocalShiftAssignments(newAssignments);
+          } else if (target.eligibility === 'two-step' && target.twoStepPath) {
+            // Show confirmation modal
+            setShiftTwoStepModal({
+              visible: true,
+              swapPath: target.twoStepPath,
+              targetEmpId,
+              targetShiftId
+            });
+          }
+        }
+      }
+    }
+
+    // Reset drag state (unless modal is shown)
+    if (!shiftTwoStepModal) {
+      setShiftSourceSelection(null);
+    }
+    setShiftActiveDrag(null);
+  }, [shiftSourceSelection, shiftActiveDrag, shiftEligibleTargets, executeShiftSwap, shiftTwoStepModal]);
+
+  // Handle shift drag cancel
+  const handleShiftDragCancel = useCallback(() => {
+    setShiftSourceSelection(null);
+    setShiftActiveDrag(null);
+  }, []);
+
+  // Handle shift two-step swap confirmation
+  const handleShiftTwoStepConfirm = useCallback(() => {
+    if (!shiftTwoStepModal || !shiftTwoStepModal.swapPath) return;
+
+    let currentAssignments = [...localShiftAssignments];
+
+    // Execute each step in sequence
+    for (const step of shiftTwoStepModal.swapPath) {
+      currentAssignments = currentAssignments.map(a => {
+        if (a.shiftId === step.shiftA && a.employeeId === step.employeeA) {
+          return { ...a, employeeId: step.employeeB };
+        }
+        if (a.shiftId === step.shiftB && a.employeeId === step.employeeB) {
+          return { ...a, employeeId: step.employeeA };
+        }
+        return a;
+      });
+    }
+
+    setLocalShiftAssignments(currentAssignments);
+    setShiftSourceSelection(null);
+    setShiftTwoStepModal(null);
+  }, [shiftTwoStepModal, localShiftAssignments]);
+
+  // Handle save shift swap changes
+  const handleSaveShiftSwap = useCallback(async () => {
+    if (!id) return;
+
+    setIsSavingShiftSwap(true);
+    try {
+      const assignmentsRequest = {
+        assignments: localShiftAssignments.map(a => ({
+          shiftId: a.shiftId,
+          employeeId: a.employeeId
+        }))
+      };
+      await shiftPlanService.createAssignments(id, assignmentsRequest);
+      await loadPlanData();
+      showNotification({
+        type: 'success',
+        title: 'Gespeichert',
+        message: 'Zuweisungen wurden erfolgreich gespeichert'
+      });
+
+      // Reset swap mode
+      setShiftSwapModeActive(false);
+      setLocalShiftAssignments([]);
+      setShiftSourceSelection(null);
+      setShiftActiveDrag(null);
+      setShiftTwoStepModal(null);
+    } catch (error) {
+      console.error('Error saving shift assignments:', error);
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: 'Zuweisungen konnten nicht gespeichert werden'
+      });
+    } finally {
+      setIsSavingShiftSwap(false);
+    }
+  }, [id, localShiftAssignments, loadPlanData, showNotification]);
+
+  // Weekly swap mode handlers - inline mode
+  const handleOpenWeeklySwapMode = useCallback(() => {
+    if (weeklyPlan?.employees) {
+      setLocalWeeklyEmployees([...weeklyPlan.employees]);
+      setWeeklySwapModeActive(true);
+    }
+  }, [weeklyPlan?.employees]);
+
+  const handleCancelWeeklySwapMode = useCallback(() => {
+    setWeeklySwapModeActive(false);
+    setLocalWeeklyEmployees([]);
+    setSourceSelection(null);
+    setActiveDrag(null);
+    setTwoStepModal(null);
+  }, []);
+
+  // Execute a single swap - updates localWeeklyEmployees
+  const executeSwap = useCallback((
+    empAId: string,
+    weekAId: string,
+    empBId: string,
+    weekBId: string
+  ): EmployeeWithPreferences[] => {
+    return localWeeklyEmployees.map(emp => {
+      if (emp.id === empAId) {
+        return {
+          ...emp,
+          assignedWeeks: emp.assignedWeeks
+            .filter(w => w !== weekAId)
+            .concat(weekBId)
         };
-        await shiftPlanService.createAssignments(id, assignmentsRequest);
-        // Reload the plan data to get fresh assignments from backend
-        await loadPlanData();
-        showNotification({
-          type: 'success',
-          title: 'Gespeichert',
-          message: 'Zuweisungen wurden erfolgreich gespeichert'
-        });
-      } catch (error) {
-        console.error('Error saving assignments:', error);
-        showNotification({
-          type: 'error',
-          title: 'Fehler',
-          message: 'Zuweisungen konnten nicht gespeichert werden'
-        });
+      }
+      if (emp.id === empBId) {
+        return {
+          ...emp,
+          assignedWeeks: emp.assignedWeeks
+            .filter(w => w !== weekBId)
+            .concat(weekAId)
+        };
+      }
+      return emp;
+    });
+  }, [localWeeklyEmployees]);
+
+  // Handle drag start (weekly)
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    const data = event.active.data.current as DragData;
+    if (!data) return;
+
+    // Don't allow managers to be dragged
+    if (isEmployeeManager(data.employeeId)) return;
+
+    setSourceSelection({
+      employeeId: data.employeeId,
+      weekId: data.contextId
+    });
+    setActiveDrag(data);
+  }, [isEmployeeManager]);
+
+  // Handle drag end
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { over } = event;
+
+    if (!sourceSelection || !activeDrag) {
+      setSourceSelection(null);
+      setActiveDrag(null);
+      return;
+    }
+
+    // Check if dropped over a valid target
+    if (over) {
+      const overId = over.id.toString();
+
+      // Check if it's a direct drop on an employee box
+      if (!overId.startsWith('week-')) {
+        const [targetEmpId, targetWeekId] = overId.split('-');
+
+        if (targetEmpId && targetWeekId) {
+          const key = `${targetEmpId}-${targetWeekId}`;
+          const target = eligibleTargets.get(key);
+
+          if (target) {
+            if (target.eligibility === 'direct') {
+              // Execute direct swap immediately
+              const newEmployees = executeSwap(
+                sourceSelection.employeeId,
+                sourceSelection.weekId,
+                targetEmpId,
+                targetWeekId
+              );
+              setLocalWeeklyEmployees(newEmployees);
+            } else if (target.eligibility === 'two-step' && target.twoStepPath) {
+              // Show confirmation modal
+              setTwoStepModal({
+                visible: true,
+                swapPath: target.twoStepPath,
+                targetEmpId,
+                targetWeekId
+              });
+            }
+          }
+        }
       }
     }
-  };
 
-  const handleCloseSwapMode = () => {
-    setSwapModeActive(false);
-  };
-
-  // Weekly swap mode handlers
-  const handleWeeklySwapComplete = async (newAssignments: { weekId: string; employeeId: string }[]) => {
-    if (id) {
-      try {
-        await weeklyPlanService.createAssignments(id, { assignments: newAssignments });
-        await loadPlanData();
-        showNotification({
-          type: 'success',
-          title: 'Gespeichert',
-          message: 'Zuweisungen wurden erfolgreich gespeichert'
-        });
-      } catch (error) {
-        console.error('Error saving weekly assignments:', error);
-        showNotification({
-          type: 'error',
-          title: 'Fehler',
-          message: 'Zuweisungen konnten nicht gespeichert werden'
-        });
-      }
+    // Reset drag state (unless modal is shown)
+    if (!twoStepModal) {
+      setSourceSelection(null);
     }
-  };
+    setActiveDrag(null);
+  }, [sourceSelection, activeDrag, eligibleTargets, executeSwap, twoStepModal]);
+
+  // Handle drag cancel
+  const handleDragCancel = useCallback(() => {
+    setSourceSelection(null);
+    setActiveDrag(null);
+  }, []);
+
+  // Handle two-step swap confirmation
+  const handleTwoStepConfirm = useCallback(() => {
+    if (!twoStepModal || !twoStepModal.swapPath) return;
+
+    let currentEmployees = [...localWeeklyEmployees];
+
+    // Execute each step in sequence
+    for (const step of twoStepModal.swapPath) {
+      currentEmployees = currentEmployees.map(emp => {
+        if (emp.id === step.employeeA) {
+          return {
+            ...emp,
+            assignedWeeks: emp.assignedWeeks
+              .filter(w => w !== step.weekA)
+              .concat(step.weekB)
+          };
+        }
+        if (emp.id === step.employeeB) {
+          return {
+            ...emp,
+            assignedWeeks: emp.assignedWeeks
+              .filter(w => w !== step.weekB)
+              .concat(step.weekA)
+          };
+        }
+        return emp;
+      });
+    }
+
+    setLocalWeeklyEmployees(currentEmployees);
+    setSourceSelection(null);
+    setTwoStepModal(null);
+  }, [twoStepModal, localWeeklyEmployees]);
+
+  // Handle save weekly swap changes
+  const handleSaveWeeklySwap = useCallback(async () => {
+    if (!id) return;
+
+    setIsSavingSwap(true);
+    try {
+      // Convert localWeeklyEmployees to assignment format
+      const assignments: { weekId: string; employeeId: string }[] = [];
+      for (const emp of localWeeklyEmployees) {
+        for (const weekId of emp.assignedWeeks) {
+          assignments.push({ weekId, employeeId: emp.id });
+        }
+      }
+
+      await weeklyPlanService.createAssignments(id, { assignments });
+      await loadPlanData();
+      showNotification({
+        type: 'success',
+        title: 'Gespeichert',
+        message: 'Zuweisungen wurden erfolgreich gespeichert'
+      });
+
+      // Reset swap mode
+      setWeeklySwapModeActive(false);
+      setLocalWeeklyEmployees([]);
+      setSourceSelection(null);
+      setActiveDrag(null);
+      setTwoStepModal(null);
+    } catch (error) {
+      console.error('Error saving weekly assignments:', error);
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: 'Zuweisungen konnten nicht gespeichert werden'
+      });
+    } finally {
+      setIsSavingSwap(false);
+    }
+  }, [id, localWeeklyEmployees, loadPlanData, showNotification]);
 
   // Render status badge
   const renderStatusBadge = (status: string) => {
@@ -750,29 +1149,67 @@ const PlanView: React.FC = () => {
                 <p>Zuweisungen wurden generiert. Der {planType === 'shift' ? 'Schichtplan' : 'Wochenplan'} kann veröffentlicht werden.</p>
               </div>
               <div className={styles.assignmentActions}>
-                {planType === 'shift' && (
+                {planType === 'shift' && !shiftSwapModeActive && (
                   <button
-                    onClick={handleOpenSwapMode}
+                    onClick={handleOpenShiftSwapMode}
                     className={styles.secondaryButton}
                   >
                     Manuelle Zuweisung
                   </button>
                 )}
-                {planType === 'weekly' && (
+                {planType === 'shift' && shiftSwapModeActive && (
+                  <>
+                    <button
+                      onClick={handleSaveShiftSwap}
+                      disabled={isSavingShiftSwap}
+                      className={styles.successButton}
+                    >
+                      {isSavingShiftSwap ? 'Speichert...' : 'Manuelle Zuweisung speichern'}
+                    </button>
+                    <button
+                      onClick={handleCancelShiftSwapMode}
+                      disabled={isSavingShiftSwap}
+                      className={styles.secondaryButton}
+                    >
+                      Abbrechen
+                    </button>
+                  </>
+                )}
+                {planType === 'weekly' && !weeklySwapModeActive && (
                   <button
-                    onClick={() => setWeeklySwapModeActive(true)}
+                    onClick={handleOpenWeeklySwapMode}
                     className={styles.secondaryButton}
                   >
                     Manuelle Zuweisung
                   </button>
                 )}
-                <button
-                  onClick={planType === 'shift' ? handlePublishShiftPlan : handlePublishWeeklyPlan}
-                  disabled={isPublishing || (planType === 'weekly' && isSubmitting)}
-                  className={styles.successButton}
-                >
-                  {isPublishing ? 'Veröffentliche...' : `${planType === 'shift' ? 'Schichtplan' : 'Wochenplan'} veröffentlichen`}
-                </button>
+                {planType === 'weekly' && weeklySwapModeActive && (
+                  <>
+                    <button
+                      onClick={handleSaveWeeklySwap}
+                      disabled={isSavingSwap}
+                      className={styles.successButton}
+                    >
+                      {isSavingSwap ? 'Speichert...' : 'Manuelle Zuweisung speichern'}
+                    </button>
+                    <button
+                      onClick={handleCancelWeeklySwapMode}
+                      disabled={isSavingSwap}
+                      className={styles.secondaryButton}
+                    >
+                      Abbrechen
+                    </button>
+                  </>
+                )}
+                {!weeklySwapModeActive && !shiftSwapModeActive && (
+                  <button
+                    onClick={planType === 'shift' ? handlePublishShiftPlan : handlePublishWeeklyPlan}
+                    disabled={isPublishing || (planType === 'weekly' && isSubmitting)}
+                    className={styles.successButton}
+                  >
+                    {isPublishing ? 'Veröffentliche...' : `${planType === 'shift' ? 'Schichtplan' : 'Wochenplan'} veröffentlichen`}
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -828,31 +1265,75 @@ const PlanView: React.FC = () => {
         {/* Timetable for shift plans */}
         {planType === 'shift' && shiftPlan && (
           <div className={styles.timetableContainer}>
-            <Timetable
-              mode="view"
-              shifts={shiftPlan.shifts || []}
-              timeSlots={shiftPlan.timeSlots || []}
-              days={days}
-              shiftAssignments={shiftPlan.shifts.flatMap(shift => shift.assignments) || []}
-              employees={employees}
-              shiftPlanStatus={shiftPlan.status}
-              headerTitle="Schichtplan"
-              showLegend={false}
-            />
+            {shiftSwapModeActive ? (
+              <DndContext
+                sensors={sensors}
+                onDragStart={handleShiftDragStart}
+                onDragEnd={handleShiftDragEnd}
+                onDragCancel={handleShiftDragCancel}
+              >
+                <Timetable
+                  mode="view"
+                  shifts={shiftPlan.shifts || []}
+                  timeSlots={shiftPlan.timeSlots || []}
+                  days={days}
+                  shiftAssignments={localShiftAssignments}
+                  employees={employees}
+                  shiftPlanStatus={shiftPlan.status}
+                  headerTitle="Schichtplan - Bearbeitungsmodus"
+                  showLegend={false}
+                  swapModeActive={true}
+                  sourceSelection={shiftSourceSelection}
+                  eligibleTargets={shiftEligibilityMap}
+                />
+              </DndContext>
+            ) : (
+              <Timetable
+                mode="view"
+                shifts={shiftPlan.shifts || []}
+                timeSlots={shiftPlan.timeSlots || []}
+                days={days}
+                shiftAssignments={shiftPlan.shifts.flatMap(shift => shift.assignments) || []}
+                employees={employees}
+                shiftPlanStatus={shiftPlan.status}
+                headerTitle="Schichtplan"
+                showLegend={false}
+              />
+            )}
           </div>
         )}
 
         {/* Calendar for weekly plans */}
         {planType === 'weekly' && weeklyPlan && (
           <div className={styles.calendarContainer}>
-            <h2>Kalenderansicht</h2>
-            <Calendar
-              year={currentMonth.getFullYear()}
-              month={currentMonth.getMonth()}
-              weeks={weeklyPlan.weeks}
-              employees={weeklyPlan.employees}
-              onMonthChange={handleMonthChange}
-            />
+            <h2>Kalenderansicht{weeklySwapModeActive && ' - Bearbeitungsmodus'}</h2>
+            {weeklySwapModeActive ? (
+              <DndContext
+                sensors={sensors}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                onDragCancel={handleDragCancel}
+              >
+                <Calendar
+                  year={currentMonth.getFullYear()}
+                  month={currentMonth.getMonth()}
+                  weeks={weeklyPlan.weeks}
+                  employees={localWeeklyEmployees}
+                  onMonthChange={handleMonthChange}
+                  swapModeActive={true}
+                  sourceSelection={sourceSelection}
+                  eligibleTargets={eligibilityMap}
+                />
+              </DndContext>
+            ) : (
+              <Calendar
+                year={currentMonth.getFullYear()}
+                month={currentMonth.getMonth()}
+                weeks={weeklyPlan.weeks}
+                employees={weeklyPlan.employees}
+                onMonthChange={handleMonthChange}
+              />
+            )}
           </div>
         )}
 
@@ -870,27 +1351,31 @@ const PlanView: React.FC = () => {
         )}
       </div>
 
-      {/* Swap Mode Overlay */}
-      {swapModeActive && shiftPlan && (
-        <SwapModeOverlay
-          shifts={shiftPlan.shifts}
-          timeSlots={shiftPlan.timeSlots}
-          days={days}
+      {/* Two-Step Confirm Modal (for shift inline swap mode) */}
+      {shiftTwoStepModal && shiftTwoStepModal.visible && shiftPlan && (
+        <TwoStepConfirmModal
+          swapPath={shiftTwoStepModal.swapPath}
           employees={employees}
-          availabilities={availabilities}
-          assignments={localAssignments}
-          onClose={handleCloseSwapMode}
-          onSwapComplete={handleSwapComplete}
+          shifts={shiftPlan.shifts}
+          onConfirm={handleShiftTwoStepConfirm}
+          onCancel={() => {
+            setShiftTwoStepModal(null);
+            setShiftSourceSelection(null);
+          }}
         />
       )}
 
-      {/* Weekly Swap Mode Overlay */}
-      {weeklySwapModeActive && weeklyPlan && (
-        <WeeklySwapModeOverlay
+      {/* Two-Step Confirm Modal (for weekly inline swap mode) */}
+      {twoStepModal && twoStepModal.visible && weeklyPlan && (
+        <WeeklyTwoStepConfirmModal
+          swapPath={twoStepModal.swapPath}
+          employees={localWeeklyEmployees}
           weeks={weeklyPlan.weeks}
-          employees={weeklyPlan.employees || []}
-          onClose={() => setWeeklySwapModeActive(false)}
-          onSwapComplete={handleWeeklySwapComplete}
+          onConfirm={handleTwoStepConfirm}
+          onCancel={() => {
+            setTwoStepModal(null);
+            setSourceSelection(null);
+          }}
         />
       )}
     </div>

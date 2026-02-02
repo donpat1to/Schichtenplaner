@@ -1,7 +1,7 @@
 // frontend/src/components/Calendar/Calendar.tsx
 import React from 'react';
 import { EmployeeWithPreferences, PlanWeek } from '../../models/WeeklyPlan';
-import SwapableEmployeeBox from '../SwapMode/SwapableEmployeeBox';
+import DraggableEmployeeBox from '../SwapMode/DraggableEmployeeBox';
 import styles from './Calendar.module.css';
 
 export interface CalendarProps {
@@ -28,7 +28,6 @@ export interface CalendarProps {
     swapModeActive?: boolean;
     sourceSelection?: { employeeId: string; weekId: string } | null;
     eligibleTargets?: Map<string, 'direct' | 'two-step'>;
-    onEmployeeClick?: (employeeId: string, weekId: string) => void;
 
     // Layout props
     hideNavigation?: boolean;
@@ -49,7 +48,6 @@ const Calendar: React.FC<CalendarProps> = ({
     swapModeActive = false,
     sourceSelection = null,
     eligibleTargets = new Map(),
-    onEmployeeClick,
     hideNavigation = false,
 }) => {
     const monthNames = [
@@ -201,7 +199,7 @@ const Calendar: React.FC<CalendarProps> = ({
             return null;
         }
 
-        // If swap mode is active, use SwapableEmployeeBox
+        // If swap mode is active, use DraggableEmployeeBox
         if (swapModeActive) {
             return assignedEmployees.map(employee => {
                 const key = `${employee.id}-${weekId}`;
@@ -210,13 +208,12 @@ const Calendar: React.FC<CalendarProps> = ({
                 const eligibility = eligibleTargets.get(key) || null;
 
                 return (
-                    <SwapableEmployeeBox
+                    <DraggableEmployeeBox
                         key={key}
                         employee={employee}
                         contextId={weekId}
                         isSource={isSource}
                         eligibility={eligibility}
-                        onSelect={onEmployeeClick}
                     />
                 );
             });

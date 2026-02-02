@@ -1,0 +1,35 @@
+/* frontend/src/components/SwapMode/DroppableWeekZone.module.css */
+
+.droppableZone {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 32px;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dragOver {
+  background-color: rgba(52, 152, 219, 0.1);
+}
+
+.validDirect {
+  background-color: rgba(39, 174, 96, 0.15);
+  box-shadow: inset 0 0 0 2px rgba(39, 174, 96, 0.4);
+}
+
+.validDirect.dragOver {
+  background-color: rgba(39, 174, 96, 0.25);
+  box-shadow: inset 0 0 0 2px rgba(39, 174, 96, 0.7);
+}
+
+.validTwoStep {
+  background-color: rgba(230, 126, 34, 0.1);
+  box-shadow: inset 0 0 0 2px rgba(230, 126, 34, 0.3);
+}
+
+.validTwoStep.dragOver {
+  background-color: rgba(230, 126, 34, 0.2);
+  box-shadow: inset 0 0 0 2px rgba(254, 119, 2, 0.6);
+}
