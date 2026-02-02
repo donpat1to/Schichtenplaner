@@ -47,7 +47,8 @@ const DraggableEmployeeBox: React.FC<DraggableEmployeeBoxProps> = ({
     isTrainee
   };
 
-  const boxId = `${employee.id}-${contextId}`;
+  // Use :: as separator to avoid conflicts with UUIDs that contain dashes
+  const boxId = `${employee.id}::${contextId}`;
 
   // Only use drag/drop hooks for non-overlay items
   const {

@@ -3,7 +3,6 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   DndContext,
-  DragOverlay,
   DragStartEvent,
   DragEndEvent,
   PointerSensor,
@@ -642,9 +641,13 @@ const PlanView: React.FC = () => {
     // Check if dropped over a valid target
     if (over) {
       const overId = over.id.toString();
-      const [targetEmpId, targetShiftId] = overId.split('-');
+      // Split by :: separator (used to avoid conflicts with UUIDs)
+      const parts = overId.split('::');
+      const targetEmpId = parts[0];
+      const targetShiftId = parts[1];
 
       if (targetEmpId && targetShiftId) {
+        // Key format must match shiftEligibleTargets which uses employeeId-shiftId
         const key = `${targetEmpId}-${targetShiftId}`;
         const target = shiftEligibleTargets.get(key);
 
@@ -819,11 +822,14 @@ const PlanView: React.FC = () => {
     if (over) {
       const overId = over.id.toString();
 
-      // Check if it's a direct drop on an employee box
+      // Check if it's a direct drop on an employee box (uses :: separator)
       if (!overId.startsWith('week-')) {
-        const [targetEmpId, targetWeekId] = overId.split('-');
+        const parts = overId.split('::');
+        const targetEmpId = parts[0];
+        const targetWeekId = parts[1];
 
         if (targetEmpId && targetWeekId) {
+          // Key format must match eligibleTargets which uses employeeId-weekId
           const key = `${targetEmpId}-${targetWeekId}`;
           const target = eligibleTargets.get(key);
 
