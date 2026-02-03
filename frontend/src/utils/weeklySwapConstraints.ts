@@ -60,11 +60,17 @@ export function weekWouldHaveTraineeSupervision(
     .filter((e): e is EmployeeWithPreferences => e !== undefined);
 
   // If no trainees on the week, supervision is not needed
-  const hasTrainee = weekEmployees.some(e => e.isTrainee);
+  // A trainee is: employeeType === 'personell' AND isTrainee === true
+  const hasTrainee = weekEmployees.some(
+    e => e.employeeType === 'personell' && e.isTrainee
+  );
   if (!hasTrainee) return true;
 
-  // If there are trainees, check for at least one experienced (non-trainee) employee
-  const hasExperienced = weekEmployees.some(e => !e.isTrainee);
+  // If there are trainees, check for at least one experienced (non-trainee) personell employee
+  // An experienced employee is: employeeType === 'personell' AND isTrainee === false
+  const hasExperienced = weekEmployees.some(
+    e => e.employeeType === 'personell' && !e.isTrainee
+  );
   return hasExperienced;
 }
 
@@ -127,6 +133,16 @@ export function validateWeeklyDirectSwap(
   }
   if (isManager(empB)) {
     return { valid: false, reason: 'Manager können nicht getauscht werden' };
+  }
+
+  // A must not already be assigned to B's week (swap would be pointless)
+  if (empA.assignedWeeks.includes(weekBId)) {
+    return { valid: false, reason: `${empA.firstname} ist bereits dieser Woche zugewiesen` };
+  }
+
+  // B must not already be assigned to A's week (swap would be pointless)
+  if (empB.assignedWeeks.includes(weekAId)) {
+    return { valid: false, reason: `${empB.firstname} ist bereits dieser Woche zugewiesen` };
   }
 
   // A must be available for B's week

@@ -94,11 +94,17 @@ export function wouldHaveTraineeSupervision(
     .filter((e): e is Employee => e !== undefined);
 
   // If no trainees on the shift, supervision is not needed
-  const hasTrainee = shiftEmployees.some(e => e.isTrainee);
+  // A trainee is: employeeType === 'personell' AND isTrainee === true
+  const hasTrainee = shiftEmployees.some(
+    e => e.employeeType === 'personell' && e.isTrainee
+  );
   if (!hasTrainee) return true;
 
-  // If there are trainees, check for at least one experienced (non-trainee) employee
-  const hasExperienced = shiftEmployees.some(e => !e.isTrainee);
+  // If there are trainees, check for at least one experienced (non-trainee) personell employee
+  // An experienced employee is: employeeType === 'personell' AND isTrainee === false
+  const hasExperienced = shiftEmployees.some(
+    e => e.employeeType === 'personell' && !e.isTrainee
+  );
   return hasExperienced;
 }
 
@@ -199,6 +205,22 @@ export function validateDirectSwap(
     return { valid: false, reason: 'Manager können nicht getauscht werden' };
   }
 
+  // A must not already be assigned to B's shift (swap would be pointless)
+  const aAlreadyHasShiftB = ctx.assignments.some(
+    a => a.shiftId === shiftBId && a.employeeId === empAId
+  );
+  if (aAlreadyHasShiftB) {
+    return { valid: false, reason: `${empA.firstname} ist bereits dieser Schicht zugewiesen` };
+  }
+
+  // B must not already be assigned to A's shift (swap would be pointless)
+  const bAlreadyHasShiftA = ctx.assignments.some(
+    a => a.shiftId === shiftAId && a.employeeId === empBId
+  );
+  if (bAlreadyHasShiftA) {
+    return { valid: false, reason: `${empB.firstname} ist bereits dieser Schicht zugewiesen` };
+  }
+
   // A must be available for B's shift
   if (!isEmployeeAvailable(empAId, shiftBId, ctx)) {
     return { valid: false, reason: `${empA.firstname} ist nicht verfügbar für diese Schicht` };
@@ -211,12 +233,12 @@ export function validateDirectSwap(
 
   // A must not have another shift on B's day (excluding A's current shift)
   if (!hasNoOtherShiftOnDay(empAId, shiftBId, shiftAId, ctx)) {
-    return { valid: false, reason: `${empA.firstname} hat bereits eine Schicht an diesem Tag` };
+    return { valid: false, reason: `${empA.firstname} hat bereits eine andere Schicht an diesem Tag` };
   }
 
   // B must not have another shift on A's day (excluding B's current shift)
   if (!hasNoOtherShiftOnDay(empBId, shiftAId, shiftBId, ctx)) {
-    return { valid: false, reason: `${empB.firstname} hat bereits eine Schicht an diesem Tag` };
+    return { valid: false, reason: `${empB.firstname} hat bereits eine andere Schicht an diesem Tag` };
   }
 
   // Both resulting shifts must maintain trainee supervision
