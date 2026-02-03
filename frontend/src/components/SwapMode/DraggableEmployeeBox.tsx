@@ -112,7 +112,7 @@ const DraggableEmployeeBox: React.FC<DraggableEmployeeBoxProps> = ({
       ref={isOverlay ? undefined : setNodeRef}
       className={boxClasses}
       style={{ ...style, backgroundColor: getBackgroundColor() }}
-      title={isOverlay ? undefined : `${displayName}${isTrainee ? ' (Azubi)' : ''}${isManagerType ? ' (Manager)' : ''}`}
+      title={isOverlay ? undefined : `${displayName}${isTrainee ? ' (Neuling)' : ''}${isManagerType ? ' (Manager)' : ''}`}
       {...(isOverlay || isManagerType ? {} : { ...attributes, ...listeners })}
     >
       {displayName}

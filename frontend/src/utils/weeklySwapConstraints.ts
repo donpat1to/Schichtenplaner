@@ -1,5 +1,6 @@
 // frontend/src/utils/weeklySwapConstraints.ts
 import { EmployeeWithPreferences, PlanWeek } from '../models/WeeklyPlan';
+import { validateDirectSwap } from './swapConstraints';
 
 export interface WeeklySwapConstraintContext {
   employees: EmployeeWithPreferences[];
@@ -158,12 +159,12 @@ export function validateWeeklyDirectSwap(
   // Both resulting weeks must maintain trainee supervision
   // Week A after swap: remove A, add B
   if (!weekWouldHaveTraineeSupervision(weekAId, empBId, empAId, ctx)) {
-    return { valid: false, reason: 'Azubi-Betreuung wäre nach dem Tausch nicht gewährleistet' };
+    return { valid: false, reason: 'Neuling-Betreuung wäre nach dem Tausch nicht gewährleistet' };
   }
 
   // Week B after swap: remove B, add A
   if (!weekWouldHaveTraineeSupervision(weekBId, empAId, empBId, ctx)) {
-    return { valid: false, reason: 'Azubi-Betreuung wäre nach dem Tausch nicht gewährleistet' };
+    return { valid: false, reason: 'Neuling-Betreuung wäre nach dem Tausch nicht gewährleistet' };
   }
 
   // For a direct swap, employee counts stay the same, so limits are maintained
@@ -197,6 +198,11 @@ export function findWeeklyTwoStepSwapPath(
     isEligibleForScheduling(e) &&
     !isManager(e)
   );
+
+  const directTest = validateWeeklyDirectSwap(sourceEmpId, sourceWeekId, targetEmpId, targetWeekId, ctx);
+  if (directTest.valid === false) {
+    return null
+  }
 
   // Get all weeks where these intermediates are currently assigned
   for (const intermediate of potentialIntermediates) {

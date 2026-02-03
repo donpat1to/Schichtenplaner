@@ -244,12 +244,12 @@ export function validateDirectSwap(
   // Both resulting shifts must maintain trainee supervision
   // Shift A after swap: remove A, add B
   if (!wouldHaveTraineeSupervision(shiftAId, empBId, empAId, ctx)) {
-    return { valid: false, reason: 'Azubi-Betreuung wäre nach dem Tausch nicht gewährleistet' };
+    return { valid: false, reason: 'Neuling-Betreuung wäre nach dem Tausch nicht gewährleistet' };
   }
 
   // Shift B after swap: remove B, add A
   if (!wouldHaveTraineeSupervision(shiftBId, empAId, empBId, ctx)) {
-    return { valid: false, reason: 'Azubi-Betreuung wäre nach dem Tausch nicht gewährleistet' };
+    return { valid: false, reason: 'Neuling-Betreuung wäre nach dem Tausch nicht gewährleistet' };
   }
 
   // Both employees must be able to work on their new shifts (alone or with coworkers)
@@ -292,6 +292,11 @@ export function findTwoStepSwapPath(
     isEligibleForScheduling(e) &&
     !isManager(e)
   );
+
+  const directTest = validateDirectSwap(sourceEmpId, sourceShiftId, targetEmpId, targetShiftId, ctx);
+  if (directTest.valid === false) {
+    return null
+  }
 
   // Get all shifts where these intermediates are currently assigned
   for (const intermediate of potentialIntermediates) {
