@@ -7,13 +7,14 @@ import styles from './DraggableEmployeeBox.module.css';
 export type SwapEligibility = 'direct' | 'two-step' | null;
 
 export interface DragData {
+  type?: 'employee-token' | 'swap';
   employeeId: string;
-  contextId: string; // Can be weekId or shiftId
+  contextId: string; // Can be weekId, shiftId, or tokenIndex
   employeeName: string;
   isTrainee: boolean;
 }
 
-interface SwapableEmployee {
+export interface SwapableEmployee {
   id: string;
   firstname?: string | null;
   lastname?: string | null;
@@ -23,10 +24,12 @@ interface SwapableEmployee {
 
 interface DraggableEmployeeBoxProps {
   employee: SwapableEmployee;
-  contextId: string; // Can be weekId or shiftId
+  contextId: string; // Can be weekId, shiftId, or tokenIndex
   isSource: boolean;
   eligibility: SwapEligibility;
   isOverlay?: boolean;
+  dragDataOverride?: DragData; // Override default drag data (used for token mode)
+  useDragOverlay?: boolean;
 }
 
 const DraggableEmployeeBox: React.FC<DraggableEmployeeBoxProps> = ({
@@ -34,13 +37,15 @@ const DraggableEmployeeBox: React.FC<DraggableEmployeeBoxProps> = ({
   contextId,
   isSource,
   eligibility,
-  isOverlay = false
+  isOverlay = false,
+  dragDataOverride,
+  useDragOverlay = false
 }) => {
   const isManagerType = employee.employeeType === 'manager';
   const isTrainee = employee.isTrainee === true;
   const displayName = `${employee.firstname || ''} ${employee.lastname || ''}`.trim() || 'Unbekannt';
 
-  const dragData: DragData = {
+  const dragData: DragData = dragDataOverride || {
     employeeId: employee.id,
     contextId,
     employeeName: displayName,
@@ -79,10 +84,18 @@ const DraggableEmployeeBox: React.FC<DraggableEmployeeBoxProps> = ({
     }
   };
 
-  const style = transform && !isOverlay ? {
-    transform: CSS.Translate.toString(transform),
-    transition: isDragging ? 'none' : 'transform 0.2s ease',
-  } : undefined;
+  const style = !isOverlay ? (() => {
+    if (useDragOverlay && isDragging) {
+      return { transform: 'none', transition: 'none' };
+    }
+    if (transform) {
+      return {
+        transform: CSS.Translate.toString(transform),
+        transition: isDragging ? 'none' : 'transform 0.2s ease',
+      };
+    }
+    return undefined;
+  })() : undefined;
 
   // Determine styling based on state
   const getBackgroundColor = (): string => {

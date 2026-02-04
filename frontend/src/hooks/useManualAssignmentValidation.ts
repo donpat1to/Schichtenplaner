@@ -37,12 +37,11 @@ export function useManualAssignmentValidation({
     return employees
       .filter(emp =>
         emp.employeeType === 'personell' &&
-        emp.isActive &&
-        !emp.isTrainee
+        emp.isActive
       )
       .map(emp => {
         const requiredShifts = emp.contractType === 'small' ? 1 :
-                               emp.contractType === 'large' ? 2 : 2; // flexible defaults to 2
+          emp.contractType === 'large' ? 2 : 2; // flexible defaults to 2
         const assignedShifts = assignments.filter(a => a.employeeId === emp.id).length;
 
         return {
@@ -87,7 +86,7 @@ export function useManualAssignmentValidation({
 
   // Get current assignment count for a shift
   const getShiftAssignmentCount = useCallback((shiftId: string): number => {
-    return assignments.filter(a => a.shiftId === shiftId).length;
+    return assignments.filter(a => a.shiftId === shiftId && (employees.find(e => e.id == a.employeeId && e.employeeType === 'personell'))).length;
   }, [assignments]);
 
   // Check if shift has reached max capacity

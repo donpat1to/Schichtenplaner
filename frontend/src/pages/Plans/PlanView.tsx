@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   DndContext,
+  DragOverlay,
   DragStartEvent,
   DragEndEvent,
   PointerSensor,
@@ -31,8 +32,8 @@ import Timetable from '../../components/Timetable/Timetable';
 import Calendar from '../../components/Calendar/Calendar';
 import TwoStepConfirmModal from '../../components/SwapMode/TwoStepConfirmModal';
 import WeeklyTwoStepConfirmModal from '../../components/SwapMode/WeeklyTwoStepConfirmModal';
-import { DragData } from '../../components/SwapMode/DraggableEmployeeBox';
-import { EmployeeTokenPool, TokenDragData } from '../../components/ManualAssignment';
+import DraggableEmployeeBox, { DragData } from '../../components/SwapMode/DraggableEmployeeBox';
+import { EmployeeTokenPool } from '../../components/ManualAssignment';
 import { DropTarget } from '../../hooks/useManualAssignmentValidation';
 import styles from './PlanView.module.css';
 
@@ -814,7 +815,7 @@ const PlanView: React.FC = () => {
 
   // Handle manual assignment drag start
   const handleManualDragStart = useCallback((event: DragStartEvent) => {
-    const data = event.active.data.current as TokenDragData;
+    const data = event.active.data.current as DragData;
     if (!data || data.type !== 'employee-token') return;
 
     setDraggedEmployeeId(data.employeeId);
@@ -1516,6 +1517,28 @@ const PlanView: React.FC = () => {
                   validDropTargets={draggedEmployeeId ? getValidDropTargets(draggedEmployeeId) : undefined}
                   onRemoveAssignment={handleRemoveManualAssignment}
                 />
+                <DragOverlay>
+                  {draggedEmployeeId ? (() => {
+                    const emp = schedulableEmployees.find(e => e.id === draggedEmployeeId);
+                    if (!emp) return null;
+                    const [firstname, ...lastnameParts] = emp.name.split(' ');
+                    return (
+                      <DraggableEmployeeBox
+                        employee={{
+                          id: emp.id,
+                          firstname,
+                          lastname: lastnameParts.join(' ') || null,
+                          employeeType: null,
+                          isTrainee: null
+                        }}
+                        contextId="overlay"
+                        isSource={false}
+                        eligibility={null}
+                        isOverlay={false}
+                      />
+                    );
+                  })() : null}
+                </DragOverlay>
               </DndContext>
             ) : shiftSwapModeActive ? (
               <DndContext

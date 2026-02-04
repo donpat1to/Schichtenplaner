@@ -52,10 +52,12 @@
 .employeeList {
   display: flex;
   gap: 12px;
+  overflow-y: hidden;
   overflow-x: auto;
   padding-bottom: 8px;
   scrollbar-width: thin;
   scrollbar-color: #ccc #f8f9fa;
+  overscroll-behavior-y: none;
 }
 
 .employeeList::-webkit-scrollbar {
@@ -155,50 +157,65 @@
   transition: width 0.3s ease;
 }
 
-/* Tokens */
-.tokensContainer {
+/* Deck Container */
+.deckContainer {
+  position: relative;
+  min-height: 36px;
   display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  min-height: 28px;
+  align-items: center;
 }
 
-.token {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background-color: #51258f;
+.deckShadows {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.deckShadow2 {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  right: -3px;
+  bottom: -3px;
+  background-color: #8b6baf;
+  border-radius: 6px;
+  opacity: 0.6;
+}
+
+.deckShadow3 {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  right: -6px;
+  bottom: -6px;
+  background-color: #a890c4;
+  border-radius: 6px;
+  opacity: 0.4;
+}
+
+.topCard {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+}
+
+.remainingBadge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  z-index: 2;
+  background-color: #f39c12;
   color: white;
   font-size: 10px;
   font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: grab;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  user-select: none;
-  touch-action: none;
-}
-
-.token:hover {
-  transform: scale(1.1);
-  box-shadow: 0 3px 8px rgba(81, 37, 143, 0.4);
-}
-
-.token:active {
-  cursor: grabbing;
-}
-
-.tokenDragging {
-  cursor: grabbing;
-  transform: scale(1.15);
-  box-shadow: 0 4px 12px rgba(81, 37, 143, 0.5);
-  opacity: 0.9;
-  z-index: 1000;
-}
-
-.tokenHidden {
-  opacity: 0.3;
+  padding: 2px 5px;
+  border-radius: 8px;
+  min-width: 18px;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 /* Complete Badge */

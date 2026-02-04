@@ -5,6 +5,7 @@
     border-radius: 8px;
     overflow: hidden;
     background-color: white;
+    overflow: none;
 }
 
 .header {
@@ -58,6 +59,7 @@
     width: 100%;
     border-collapse: collapse;
     background-color: white;
+    overflow: none;
 }
 
 .timeSlotHeader,

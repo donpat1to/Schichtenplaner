@@ -1,70 +1,11 @@
 // frontend/src/components/ManualAssignment/EmployeeTokenPool.tsx
 import React from 'react';
-import { useDraggable } from '@dnd-kit/core';
-import { CSS } from '@dnd-kit/utilities';
 import { SchedulableEmployee } from '../../hooks/useManualAssignmentValidation';
+import DraggableEmployeeBox from '../SwapMode/DraggableEmployeeBox';
 import styles from './EmployeeTokenPool.module.css';
 
-export interface TokenDragData {
-  type: 'employee-token';
-  employeeId: string;
-  employeeName: string;
-}
-
-interface DraggableTokenProps {
-  employee: SchedulableEmployee;
-  tokenIndex: number;
-  isBeingDragged: boolean;
-}
-
-const DraggableToken: React.FC<DraggableTokenProps> = ({
-  employee,
-  tokenIndex,
-  isBeingDragged
-}) => {
-  const dragData: TokenDragData = {
-    type: 'employee-token',
-    employeeId: employee.id,
-    employeeName: employee.name
-  };
-
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    isDragging
-  } = useDraggable({
-    id: `token::${employee.id}::${tokenIndex}`,
-    data: dragData
-  });
-
-  const style = transform ? {
-    transform: CSS.Translate.toString(transform),
-    transition: isDragging ? 'none' : 'transform 0.1s ease',
-  } : undefined;
-
-  // Get initials for the token
-  const initials = employee.name
-    .split(' ')
-    .map(n => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
-
-  return (
-    <div
-      ref={setNodeRef}
-      className={`${styles.token} ${isDragging ? styles.tokenDragging : ''} ${isBeingDragged ? styles.tokenHidden : ''}`}
-      style={style}
-      title={`${employee.name} - Schicht ${tokenIndex + 1} zuweisen`}
-      {...attributes}
-      {...listeners}
-    >
-      {initials}
-    </div>
-  );
-};
+// Re-export DragData for consumers
+export type { DragData } from '../SwapMode/DraggableEmployeeBox';
 
 interface EmployeeCardProps {
   employee: SchedulableEmployee;
@@ -77,10 +18,10 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee, draggedEmployeeId
 
   // Contract badge text
   const contractBadge = employee.contractType === 'small' ? 'K' :
-                        employee.contractType === 'large' ? 'G' : 'F';
+    employee.contractType === 'large' ? 'G' : 'F';
   const contractTitle = employee.contractType === 'small' ? 'Kleiner Vertrag (1 Schicht)' :
-                        employee.contractType === 'large' ? 'Grosser Vertrag (2 Schichten)' :
-                        'Flexibler Vertrag';
+    employee.contractType === 'large' ? 'Grosser Vertrag (2 Schichten)' :
+      'Flexibler Vertrag';
 
   // Progress bar width
   const progressWidth = employee.requiredShifts > 0
@@ -115,15 +56,51 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee, draggedEmployeeId
           Vollst.
         </div>
       ) : (
-        <div className={styles.tokensContainer}>
-          {Array.from({ length: employee.remainingShifts }).map((_, index) => (
-            <DraggableToken
-              key={`${employee.id}-token-${index}`}
-              employee={employee}
-              tokenIndex={employee.assignedShifts + index}
-              isBeingDragged={isBeingDragged}
-            />
-          ))}
+        <div className={styles.deckContainer}>
+          {/* Stacked card shadows for deck effect */}
+          {employee.remainingShifts > 1 && (
+            <div className={styles.deckShadows}>
+              {employee.remainingShifts > 2 && <div className={styles.deckShadow3} />}
+              <div className={styles.deckShadow2} />
+            </div>
+          )}
+          {/* Top card - the only draggable one */}
+          <div className={styles.topCard}>
+            {(() => {
+              const tokenIndex = employee.assignedShifts;
+              const [firstname, ...lastnameParts] = employee.name.split(' ');
+              const swapableEmployee = {
+                id: employee.id,
+                firstname,
+                lastname: lastnameParts.join(' ') || null,
+                employeeType: null,
+                isTrainee: null
+              };
+              return (
+                <DraggableEmployeeBox
+                  key={`${employee.id}-token-${tokenIndex}`}
+                  employee={swapableEmployee}
+                  contextId={`token::${tokenIndex}`}
+                  isSource={isBeingDragged}
+                  eligibility={null}
+                  useDragOverlay={true}
+                  dragDataOverride={{
+                    type: 'employee-token',
+                    employeeId: employee.id,
+                    contextId: `token::${tokenIndex}`,
+                    employeeName: employee.name,
+                    isTrainee: false
+                  }}
+                />
+              );
+            })()}
+          </div>
+          {/* Remaining count badge */}
+          {/*{employee.remainingShifts > 1 && (
+            <div className={styles.remainingBadge}>
+              +{employee.remainingShifts - 1}
+            </div>
+          )}*/}
         </div>
       )}
     </div>
