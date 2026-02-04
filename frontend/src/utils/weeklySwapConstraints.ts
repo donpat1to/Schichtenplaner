@@ -1,6 +1,5 @@
 // frontend/src/utils/weeklySwapConstraints.ts
 import { EmployeeWithPreferences, PlanWeek } from '../models/WeeklyPlan';
-import { validateDirectSwap } from './swapConstraints';
 
 export interface WeeklySwapConstraintContext {
   employees: EmployeeWithPreferences[];
