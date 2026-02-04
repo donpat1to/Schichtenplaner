@@ -136,6 +136,13 @@
   cursor: not-allowed;
 }
 
+/* Button Group */
+.buttonGroup {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 /* Export Controls */
 .exportSelect {
   padding: 10px;

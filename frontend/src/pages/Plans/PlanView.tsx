@@ -15,6 +15,7 @@ import { useNotification } from '../../contexts/NotificationContext';
 import { useBackendValidation } from '../../hooks/useBackendValidation';
 import { useWeeklySwapValidation, WeeklySwapTarget } from '../../hooks/useWeeklySwapValidation';
 import { useSwapValidation, SwapTarget } from '../../hooks/useSwapValidation';
+import { useManualAssignmentValidation, SchedulableEmployee } from '../../hooks/useManualAssignmentValidation';
 import { shiftPlanService } from '../../services/shiftPlanService';
 import { weeklyPlanService } from '../../services/weeklyPlanService';
 import { employeeService } from '../../services/employeeService';
@@ -31,6 +32,8 @@ import Calendar from '../../components/Calendar/Calendar';
 import TwoStepConfirmModal from '../../components/SwapMode/TwoStepConfirmModal';
 import WeeklyTwoStepConfirmModal from '../../components/SwapMode/WeeklyTwoStepConfirmModal';
 import { DragData } from '../../components/SwapMode/DraggableEmployeeBox';
+import { EmployeeTokenPool, TokenDragData } from '../../components/ManualAssignment';
+import { DropTarget } from '../../hooks/useManualAssignmentValidation';
 import styles from './PlanView.module.css';
 
 // Remove the local GenerateResult interface since it's now imported from shiftPlanService
@@ -95,6 +98,12 @@ const PlanView: React.FC = () => {
   } | null>(null);
   const [isSavingShiftSwap, setIsSavingShiftSwap] = useState(false);
 
+  // Manual assignment mode state
+  const [manualAssignmentModeActive, setManualAssignmentModeActive] = useState(false);
+  const [manualAssignments, setManualAssignments] = useState<ShiftAssignment[]>([]);
+  const [draggedEmployeeId, setDraggedEmployeeId] = useState<string | null>(null);
+  const [isSavingManualAssignment, setIsSavingManualAssignment] = useState(false);
+
   // Weekly swap mode state (inline)
   const [weeklySwapModeActive, setWeeklySwapModeActive] = useState(false);
   const [localWeeklyEmployees, setLocalWeeklyEmployees] = useState<EmployeeWithPreferences[]>([]);
@@ -144,6 +153,21 @@ const PlanView: React.FC = () => {
     availabilities,
     localShiftAssignments
   );
+
+  // Use manual assignment validation hook
+  const {
+    schedulableEmployees,
+    managers,
+    getValidDropTargets,
+    canDropOnShift,
+    getShiftStatus,
+    validateSchedule,
+  } = useManualAssignmentValidation({
+    shifts: shiftPlan?.shifts || [],
+    employees,
+    availabilities,
+    assignments: manualAssignments,
+  });
 
   // Get eligible targets when source is selected (shift swap)
   const shiftEligibleTargets = useMemo<Map<string, SwapTarget>>(() => {
@@ -749,6 +773,170 @@ const PlanView: React.FC = () => {
     }
   }, [id, localShiftAssignments, loadPlanData, showNotification]);
 
+  // Manual assignment mode handlers
+  const handleOpenManualAssignmentMode = useCallback(() => {
+    if (!shiftPlan) return;
+
+    // Initialize with empty assignments
+    const initialAssignments: ShiftAssignment[] = [];
+
+    // Pre-assign managers based on their availability (preference level 1)
+    const managerEmployees = employees.filter(emp => emp.employeeType === 'manager' && emp.isActive);
+
+    managerEmployees.forEach(manager => {
+      // Find availabilities where this manager has preference level 1
+      const managerAvailabilities = availabilities.filter(
+        a => a.employeeId === manager.id && a.preferenceLevel === 1
+      );
+
+      managerAvailabilities.forEach(avail => {
+        // Create assignment for each available shift
+        initialAssignments.push({
+          id: `temp-${Date.now()}-${Math.random()}`,
+          planId: shiftPlan.id,
+          shiftId: avail.shiftId,
+          employeeId: manager.id,
+          assignedAt: new Date().toISOString(),
+          assignedBy: user?.id || ''
+        });
+      });
+    });
+
+    setManualAssignments(initialAssignments);
+    setManualAssignmentModeActive(true);
+  }, [shiftPlan, employees, availabilities, user]);
+
+  const handleCancelManualAssignmentMode = useCallback(() => {
+    setManualAssignmentModeActive(false);
+    setManualAssignments([]);
+    setDraggedEmployeeId(null);
+  }, []);
+
+  // Handle manual assignment drag start
+  const handleManualDragStart = useCallback((event: DragStartEvent) => {
+    const data = event.active.data.current as TokenDragData;
+    if (!data || data.type !== 'employee-token') return;
+
+    setDraggedEmployeeId(data.employeeId);
+  }, []);
+
+  // Handle manual assignment drag end
+  const handleManualDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (!over || !draggedEmployeeId) {
+      setDraggedEmployeeId(null);
+      return;
+    }
+
+    const overId = over.id.toString();
+
+    // Check if dropped on a shift cell (format: shift-drop::shiftId)
+    if (overId.startsWith('shift-drop::')) {
+      const shiftId = overId.replace('shift-drop::', '');
+      const employeeId = draggedEmployeeId;
+
+      // Validate the drop
+      const validation = canDropOnShift(employeeId, shiftId);
+
+      if (validation.valid) {
+        // Add the assignment
+        const newAssignment: ShiftAssignment = {
+          id: `temp-${Date.now()}-${Math.random()}`,
+          planId: shiftPlan?.id || '',
+          shiftId,
+          employeeId,
+          assignedAt: new Date().toISOString(),
+          assignedBy: user?.id || ''
+        };
+        setManualAssignments(prev => [...prev, newAssignment]);
+      } else {
+        showNotification({
+          type: 'warning',
+          title: 'Zuweisung nicht möglich',
+          message: validation.reason || 'Ungültige Zuweisung'
+        });
+      }
+    }
+
+    setDraggedEmployeeId(null);
+  }, [draggedEmployeeId, shiftPlan?.id, user?.id, canDropOnShift, showNotification]);
+
+  // Handle manual assignment drag cancel
+  const handleManualDragCancel = useCallback(() => {
+    setDraggedEmployeeId(null);
+  }, []);
+
+  // Handle remove assignment
+  const handleRemoveManualAssignment = useCallback((shiftId: string, employeeId: string) => {
+    // Check if this is a manager assignment (cannot be removed)
+    const employee = employees.find(e => e.id === employeeId);
+    if (employee?.employeeType === 'manager') {
+      showNotification({
+        type: 'warning',
+        title: 'Nicht möglich',
+        message: 'Manager-Zuweisungen können nicht entfernt werden'
+      });
+      return;
+    }
+
+    setManualAssignments(prev =>
+      prev.filter(a => !(a.shiftId === shiftId && a.employeeId === employeeId))
+    );
+  }, [employees, showNotification]);
+
+  // Handle save manual assignments
+  const handleSaveManualAssignments = useCallback(async () => {
+    if (!id || !shiftPlan) return;
+
+    // Validate the schedule
+    const validation = validateSchedule();
+
+    if (!validation.isValid) {
+      const confirmed = await confirmDialog({
+        title: 'Unvollständige Zuweisungen',
+        message: `Es gibt noch Probleme mit den Zuweisungen:\n\n${validation.errors.slice(0, 5).join('\n')}${validation.errors.length > 5 ? `\n...und ${validation.errors.length - 5} weitere` : ''}\n\nTrotzdem speichern?`,
+        confirmText: 'Trotzdem speichern',
+        cancelText: 'Abbrechen',
+        type: 'warning'
+      });
+
+      if (!confirmed) return;
+    }
+
+    setIsSavingManualAssignment(true);
+    try {
+      const assignmentsRequest = {
+        assignments: manualAssignments.map(a => ({
+          shiftId: a.shiftId,
+          employeeId: a.employeeId
+        }))
+      };
+      await shiftPlanService.createAssignments(id, assignmentsRequest);
+      await loadPlanData();
+
+      showNotification({
+        type: 'success',
+        title: 'Gespeichert',
+        message: `${manualAssignments.length} Zuweisungen wurden erfolgreich gespeichert`
+      });
+
+      // Reset manual assignment mode
+      setManualAssignmentModeActive(false);
+      setManualAssignments([]);
+      setDraggedEmployeeId(null);
+    } catch (error) {
+      console.error('Error saving manual assignments:', error);
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: 'Zuweisungen konnten nicht gespeichert werden'
+      });
+    } finally {
+      setIsSavingManualAssignment(false);
+    }
+  }, [id, shiftPlan, manualAssignments, validateSchedule, confirmDialog, loadPlanData, showNotification]);
+
   // Weekly swap mode handlers - inline mode
   const handleOpenWeeklySwapMode = useCallback(() => {
     if (weeklyPlan?.employees) {
@@ -1114,15 +1302,44 @@ const PlanView: React.FC = () => {
 
             {isAdmin && (
               <div>
-                {/* Shift plan: Generate assignments button */}
-                {planType === 'shift' && !hasAssignments && (
-                  <button
-                    onClick={handleGenerateShiftAssignments}
-                    disabled={!availabilityStatus.canPublish || isGenerating}
-                    className={`${styles.primaryButton} ${!availabilityStatus.canPublish ? styles.disabledButton : ''}`}
-                  >
-                    {isGenerating ? 'Berechne...' : 'Zuweisungen generieren'}
-                  </button>
+                {/* Shift plan: Generate assignments / Manual assignment buttons */}
+                {planType === 'shift' && !hasAssignments && !manualAssignmentModeActive && (
+                  <div className={styles.buttonGroup}>
+                    <button
+                      onClick={handleGenerateShiftAssignments}
+                      disabled={!availabilityStatus.canPublish || isGenerating}
+                      className={`${styles.primaryButton} ${!availabilityStatus.canPublish ? styles.disabledButton : ''}`}
+                    >
+                      {isGenerating ? 'Berechne...' : 'Zuweisungen generieren'}
+                    </button>
+                    <button
+                      onClick={handleOpenManualAssignmentMode}
+                      disabled={!availabilityStatus.canPublish}
+                      className={`${styles.secondaryButton} ${!availabilityStatus.canPublish ? styles.disabledButton : ''}`}
+                    >
+                      Manuelle Zuweisung
+                    </button>
+                  </div>
+                )}
+
+                {/* Manual assignment mode active */}
+                {planType === 'shift' && manualAssignmentModeActive && (
+                  <div className={styles.buttonGroup}>
+                    <button
+                      onClick={handleSaveManualAssignments}
+                      disabled={isSavingManualAssignment}
+                      className={styles.successButton}
+                    >
+                      {isSavingManualAssignment ? 'Speichert...' : 'Zuweisungen speichern'}
+                    </button>
+                    <button
+                      onClick={handleCancelManualAssignmentMode}
+                      disabled={isSavingManualAssignment}
+                      className={styles.secondaryButton}
+                    >
+                      Abbrechen
+                    </button>
+                  </div>
                 )}
 
                 {/* Weekly plan: Generate assignments button */}
@@ -1134,6 +1351,7 @@ const PlanView: React.FC = () => {
                   >
                     {isGenerating ? 'Berechne...' : 'Zuweisungen generieren'}
                   </button>
+
                 )}
 
                 {!availabilityStatus.canPublish && (
@@ -1160,7 +1378,7 @@ const PlanView: React.FC = () => {
                     onClick={handleOpenShiftSwapMode}
                     className={styles.secondaryButton}
                   >
-                    Manuelle Zuweisung
+                    Manuelle Änderungen
                   </button>
                 )}
                 {planType === 'shift' && shiftSwapModeActive && (
@@ -1170,7 +1388,7 @@ const PlanView: React.FC = () => {
                       disabled={isSavingShiftSwap}
                       className={styles.successButton}
                     >
-                      {isSavingShiftSwap ? 'Speichert...' : 'Manuelle Zuweisung speichern'}
+                      {isSavingShiftSwap ? 'Speichert...' : 'Manuelle Änderungen speichern'}
                     </button>
                     <button
                       onClick={handleCancelShiftSwapMode}
@@ -1186,7 +1404,7 @@ const PlanView: React.FC = () => {
                     onClick={handleOpenWeeklySwapMode}
                     className={styles.secondaryButton}
                   >
-                    Manuelle Zuweisung
+                    Manuelle Änderungen
                   </button>
                 )}
                 {planType === 'weekly' && weeklySwapModeActive && (
@@ -1196,7 +1414,7 @@ const PlanView: React.FC = () => {
                       disabled={isSavingSwap}
                       className={styles.successButton}
                     >
-                      {isSavingSwap ? 'Speichert...' : 'Manuelle Zuweisung speichern'}
+                      {isSavingSwap ? 'Speichert...' : 'Manuelle Änderung speichern'}
                     </button>
                     <button
                       onClick={handleCancelWeeklySwapMode}
@@ -1271,7 +1489,35 @@ const PlanView: React.FC = () => {
         {/* Timetable for shift plans */}
         {planType === 'shift' && shiftPlan && (
           <div className={styles.timetableContainer}>
-            {shiftSwapModeActive ? (
+            {/* Manual assignment mode */}
+            {manualAssignmentModeActive ? (
+              <DndContext
+                sensors={sensors}
+                onDragStart={handleManualDragStart}
+                onDragEnd={handleManualDragEnd}
+                onDragCancel={handleManualDragCancel}
+              >
+                <EmployeeTokenPool
+                  employees={schedulableEmployees}
+                  draggedEmployeeId={draggedEmployeeId}
+                />
+                <Timetable
+                  mode="view"
+                  shifts={shiftPlan.shifts || []}
+                  timeSlots={shiftPlan.timeSlots || []}
+                  days={days}
+                  shiftAssignments={manualAssignments}
+                  employees={employees}
+                  shiftPlanStatus={shiftPlan.status}
+                  headerTitle="Schichtplan - Manuelle Zuweisung"
+                  showLegend={false}
+                  manualAssignmentMode={true}
+                  draggedEmployeeId={draggedEmployeeId}
+                  validDropTargets={draggedEmployeeId ? getValidDropTargets(draggedEmployeeId) : undefined}
+                  onRemoveAssignment={handleRemoveManualAssignment}
+                />
+              </DndContext>
+            ) : shiftSwapModeActive ? (
               <DndContext
                 sensors={sensors}
                 onDragStart={handleShiftDragStart}
@@ -1299,7 +1545,7 @@ const PlanView: React.FC = () => {
                 shifts={shiftPlan.shifts || []}
                 timeSlots={shiftPlan.timeSlots || []}
                 days={days}
-                shiftAssignments={shiftPlan.shifts.flatMap(shift => shift.assignments) || []}
+                shiftAssignments={shiftPlan.shifts.flatMap(shift => shift.assignments)}
                 employees={employees}
                 shiftPlanStatus={shiftPlan.status}
                 headerTitle="Schichtplan"

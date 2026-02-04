@@ -1,8 +1,10 @@
 // frontend/src/components/Timetable/Timetable.tsx
 import React, { useState, useMemo } from 'react';
-import { Shift, TimeSlot, ShiftAssignment } from '../../models/ShiftPlan'; // Updated import
+import { useDroppable } from '@dnd-kit/core';
+import { Shift, TimeSlot, ShiftAssignment } from '../../models/ShiftPlan';
 import { Employee } from '../../models/Employee';
 import { AssignmentResult } from '../../models/scheduling';
+import { DropTarget } from '../../hooks/useManualAssignmentValidation';
 import TimeSlotEditor from './TimeSlotEditor';
 import ShiftCell from './ShiftCell';
 import AddDayButton from './AddDayButton';
@@ -51,6 +53,12 @@ export interface TimetableProps {
     swapModeActive?: boolean;
     sourceSelection?: { employeeId: string; shiftId: string } | null;
     eligibleTargets?: Map<string, 'direct' | 'two-step'>;
+
+    // Manual assignment mode props
+    manualAssignmentMode?: boolean;
+    draggedEmployeeId?: string | null;
+    validDropTargets?: Map<string, DropTarget>;
+    onRemoveAssignment?: (shiftId: string, employeeId: string) => void;
 }
 
 const DEFAULT_DAYS: DayInfo[] = [
@@ -88,6 +96,10 @@ const Timetable: React.FC<TimetableProps> = ({
     swapModeActive = false,
     sourceSelection = null,
     eligibleTargets = new Map(),
+    manualAssignmentMode = false,
+    draggedEmployeeId = null,
+    validDropTargets,
+    onRemoveAssignment,
 }) => {
     const [showAddTimeSlot, setShowAddTimeSlot] = useState(false);
     const [newTimeSlot, setNewTimeSlot] = useState({
@@ -172,7 +184,7 @@ const Timetable: React.FC<TimetableProps> = ({
 
     // Function to calculate dynamic row height based on content
     const calculateRowHeight = (timeSlotId: string): string => {
-        if (mode === 'view' && shiftPlanStatus === 'published') {
+        if (mode === 'view' && (shiftPlanStatus === 'published' || shiftAssignments.length > 0)) {
             // Find the maximum number of employees in this time slot across all days
             let maxEmployees = 0;
 
@@ -284,11 +296,40 @@ const Timetable: React.FC<TimetableProps> = ({
 
             // Determine background color based on employee role
             let backgroundColor = '#642ab5'; // Default: non-trainee personnel (purple)
+            const isManager = employee.employeeType === 'manager';
 
             if (employee.isTrainee) {
                 backgroundColor = '#cda8f0'; // Trainee
-            } else if (employee.employeeType === 'manager') {
+            } else if (isManager) {
                 backgroundColor = '#CC0000'; // Manager
+            }
+
+            // In manual assignment mode, show remove button for non-managers
+            if (manualAssignmentMode && onRemoveAssignment) {
+                return (
+                    <div
+                        key={empId}
+                        className={`${styles.employeeBox} ${styles.employeeBoxWithRemove}`}
+                        style={{ backgroundColor }}
+                        title={`${employee.firstname} ${employee.lastname}${isManager ? ' (Manager - kann nicht entfernt werden)' : ''}`}
+                    >
+                        <span className={styles.employeeName}>
+                            {employee.firstname} {employee.lastname}
+                        </span>
+                        {!isManager && (
+                            <button
+                                className={styles.removeAssignmentButton}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onRemoveAssignment(shiftId, empId);
+                                }}
+                                title="Zuweisung entfernen"
+                            >
+                                {ICONS.delete}
+                            </button>
+                        )}
+                    </div>
+                );
             }
 
             return (
@@ -304,6 +345,52 @@ const Timetable: React.FC<TimetableProps> = ({
         }).filter(Boolean);
     };
 
+    // Droppable zone component for manual assignment mode
+    const DroppableShiftZone: React.FC<{
+        shiftId: string;
+        children: React.ReactNode;
+        isValidTarget: boolean;
+        invalidReason?: string;
+        currentCount: number;
+        maxCount: number;
+    }> = ({ shiftId, children, isValidTarget, invalidReason, currentCount, maxCount }) => {
+        const { setNodeRef, isOver } = useDroppable({
+            id: `shift-drop::${shiftId}`,
+        });
+
+        const isDragging = !!draggedEmployeeId;
+        const showDropFeedback = isDragging;
+
+        let borderStyle = '2px dashed #dee2e6';
+        let backgroundColor = 'transparent';
+
+        if (showDropFeedback) {
+            if (isValidTarget) {
+                borderStyle = '2px dashed #27ae60';
+                backgroundColor = isOver ? 'rgba(39, 174, 96, 0.15)' : 'rgba(39, 174, 96, 0.05)';
+            } else {
+                borderStyle = '2px dashed #e74c3c';
+                backgroundColor = 'rgba(231, 76, 60, 0.05)';
+            }
+        }
+
+        return (
+            <div
+                ref={setNodeRef}
+                className={styles.droppableZone}
+                style={{ border: borderStyle, backgroundColor }}
+                title={!isValidTarget && invalidReason ? invalidReason : `${currentCount}/${maxCount} zugewiesen`}
+            >
+                {children}
+                {showDropFeedback && (
+                    <div className={styles.dropIndicator}>
+                        <span className={styles.staffingCount}>{currentCount}/{maxCount}</span>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     // Render cell content based on mode
     const renderCellContent = (timeSlotId: string, dayId: number) => {
         const shift = getShift(timeSlotId, dayId);
@@ -312,8 +399,39 @@ const Timetable: React.FC<TimetableProps> = ({
             return null; // ShiftCell component will handle rendering
         }
 
-        // View mode
-        if (shiftPlanStatus === 'published' || assignmentResult || swapModeActive) {
+        // Manual assignment mode - show droppable zones
+        if (manualAssignmentMode && shift) {
+            const assignedEmployees = getAssignmentsForShift(shift.id);
+            const dropTarget = validDropTargets?.get(shift.id);
+            const isValidTarget = dropTarget?.isValid ?? false;
+            const invalidReason = dropTarget?.reason;
+
+            return (
+                <DroppableShiftZone
+                    shiftId={shift.id}
+                    isValidTarget={isValidTarget}
+                    invalidReason={invalidReason}
+                    currentCount={assignedEmployees.length}
+                    maxCount={shift.maxEmployees}
+                >
+                    {assignedEmployees.length > 0 ? (
+                        <div className={styles.employeeContainer}>
+                            {renderEmployeeBoxes(assignedEmployees, shift.id)}
+                        </div>
+                    ) : (
+                        <div className={styles.emptyShiftSlot}>
+                            <span className={styles.dropHint}>Mitarbeiter hierher ziehen</span>
+                            <span className={styles.shiftRequirement}>
+                                Benötigt: {shift.minEmployees}-{shift.maxEmployees}
+                            </span>
+                        </div>
+                    )}
+                </DroppableShiftZone>
+            );
+        }
+
+        // View mode - show assignments when available
+        if (shiftPlanStatus === 'published' || assignmentResult || swapModeActive || shiftAssignments.length > 0) {
             // Get assigned employees for this shift
             const assignedEmployees = shift ? getAssignmentsForShift(shift.id) : [];
 

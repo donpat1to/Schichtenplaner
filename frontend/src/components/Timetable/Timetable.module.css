@@ -590,3 +590,108 @@
     justify-content: center;
     align-items: center;
 }
+
+/* Manual Assignment Mode Styles */
+
+/* Droppable Zone */
+.droppableZone {
+    min-height: 80px;
+    border-radius: 6px;
+    padding: 8px;
+    transition: border-color 0.2s, background-color 0.2s;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: stretch;
+    position: relative;
+}
+
+/* Empty shift slot placeholder */
+.emptyShiftSlot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    color: #95a5a6;
+    min-height: 60px;
+}
+
+.dropHint {
+    font-size: 11px;
+    font-style: italic;
+}
+
+.shiftRequirement {
+    font-size: 10px;
+    color: #bdc3c7;
+}
+
+/* Drop indicator showing staffing count */
+.dropIndicator {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+}
+
+.staffingCount {
+    font-size: 10px;
+    font-weight: 600;
+    background-color: rgba(0, 0, 0, 0.1);
+    padding: 2px 6px;
+    border-radius: 10px;
+    color: #2c3e50;
+}
+
+/* Employee box with remove button */
+.employeeBoxWithRemove {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-right: 4px;
+}
+
+.employeeBoxWithRemove .employeeName {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-right: 4px;
+}
+
+.removeAssignmentButton {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 12px;
+    padding: 2px 4px;
+    border-radius: 3px;
+    transition: background-color 0.2s, color 0.2s;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.removeAssignmentButton:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+/* Responsive adjustments for manual assignment mode */
+@media (max-width: 768px) {
+    .droppableZone {
+        min-height: 60px;
+        padding: 4px;
+    }
+
+    .dropHint {
+        font-size: 9px;
+    }
+
+    .removeAssignmentButton {
+        font-size: 10px;
+        padding: 1px 3px;
+    }
+}
