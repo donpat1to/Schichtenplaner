@@ -1,31 +1,24 @@
-// frontend/src/components/ManualAssignment/EmployeeTokenPool.tsx
+// frontend/src/components/ManualAssignment/WeeklyEmployeePool.tsx
 import React from 'react';
-import { SchedulableEmployee } from '../../hooks/useManualAssignmentValidation';
+import { SchedulableWeeklyEmployee } from '../../hooks/useManualWeekAssignmentValidation';
 import DraggableEmployeeBox from '../SwapMode/DraggableEmployeeBox';
-import styles from './EmployeeTokenPool.module.css';
+import styles from './WeeklyEmployeePool.module.css';
 
 // Re-export DragData for consumers
 export type { DragData } from '../SwapMode/DraggableEmployeeBox';
 
 interface EmployeeCardProps {
-  employee: SchedulableEmployee;
+  employee: SchedulableWeeklyEmployee;
   draggedEmployeeId: string | null;
 }
 
 const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee, draggedEmployeeId }) => {
-  const isComplete = employee.remainingShifts === 0;
+  const isComplete = employee.remainingWeeks === 0;
   const isBeingDragged = draggedEmployeeId === employee.id;
 
-  // Contract badge text
-  const contractBadge = employee.contractType === 'small' ? 'K' :
-    employee.contractType === 'large' ? 'G' : 'F';
-  const contractTitle = employee.contractType === 'small' ? 'Kleiner Vertrag (1 Schicht)' :
-    employee.contractType === 'large' ? 'Grosser Vertrag (2 Schichten)' :
-      'Flexibler Vertrag';
-
   // Progress bar width
-  const progressWidth = employee.requiredShifts > 0
-    ? (employee.assignedShifts / employee.requiredShifts) * 100
+  const progressWidth = employee.requiredWeeks > 0
+    ? (employee.assignedWeeks / employee.requiredWeeks) * 100
     : 0;
 
   return (
@@ -34,14 +27,16 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee, draggedEmployeeId
         <span className={styles.employeeName} title={employee.name}>
           {employee.name}
         </span>
-        <span className={styles.contractBadge} title={contractTitle}>
-          {contractBadge}
-        </span>
+        {employee.isTrainee && (
+          <span className={styles.traineeBadge} title="Trainee">
+            T
+          </span>
+        )}
       </div>
 
       <div className={styles.progressInfo}>
-        <span className={styles.shiftCount}>
-          {employee.assignedShifts}/{employee.requiredShifts}
+        <span className={styles.weekCount}>
+          {employee.assignedWeeks}/{employee.requiredWeeks}
         </span>
         <div className={styles.progressBar}>
           <div
@@ -58,23 +53,23 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee, draggedEmployeeId
       ) : (
         <div className={styles.deckContainer}>
           {/* Stacked card shadows for deck effect */}
-          {employee.remainingShifts > 1 && (
+          {employee.remainingWeeks > 1 && (
             <div className={styles.deckShadows}>
-              {employee.remainingShifts > 2 && <div className={styles.deckShadow3} />}
+              {employee.remainingWeeks > 2 && <div className={styles.deckShadow3} />}
               <div className={styles.deckShadow2} />
             </div>
           )}
           {/* Top card - the only draggable one */}
           <div className={styles.topCard}>
             {(() => {
-              const tokenIndex = employee.assignedShifts;
+              const tokenIndex = employee.assignedWeeks;
               const [firstname, ...lastnameParts] = employee.name.split(' ');
               const swapableEmployee = {
                 id: employee.id,
                 firstname,
                 lastname: lastnameParts.join(' ') || null,
                 employeeType: null,
-                isTrainee: null
+                isTrainee: employee.isTrainee
               };
               return (
                 <DraggableEmployeeBox
@@ -89,41 +84,35 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee, draggedEmployeeId
                     employeeId: employee.id,
                     contextId: `token::${tokenIndex}`,
                     employeeName: employee.name,
-                    isTrainee: false
+                    isTrainee: employee.isTrainee
                   }}
                 />
               );
             })()}
           </div>
-          {/* Remaining count badge */}
-          {/*{employee.remainingShifts > 1 && (
-            <div className={styles.remainingBadge}>
-              +{employee.remainingShifts - 1}
-            </div>
-          )}*/}
         </div>
       )}
     </div>
   );
 };
 
-interface EmployeeTokenPoolProps {
-  employees: SchedulableEmployee[];
+interface WeeklyEmployeePoolProps {
+  employees: SchedulableWeeklyEmployee[];
   draggedEmployeeId: string | null;
 }
 
-const EmployeeTokenPool: React.FC<EmployeeTokenPoolProps> = ({
+const WeeklyEmployeePool: React.FC<WeeklyEmployeePoolProps> = ({
   employees,
   draggedEmployeeId
 }) => {
   // Calculate totals
-  const totalRequired = employees.reduce((sum, e) => sum + e.requiredShifts, 0);
-  const totalAssigned = employees.reduce((sum, e) => sum + e.assignedShifts, 0);
+  const totalRequired = employees.reduce((sum, e) => sum + e.requiredWeeks, 0);
+  const totalAssigned = employees.reduce((sum, e) => sum + e.assignedWeeks, 0);
 
   // Sort: incomplete first, then by name
   const sortedEmployees = [...employees].sort((a, b) => {
-    const aComplete = a.remainingShifts === 0;
-    const bComplete = b.remainingShifts === 0;
+    const aComplete = a.remainingWeeks === 0;
+    const bComplete = b.remainingWeeks === 0;
     if (aComplete !== bComplete) return aComplete ? 1 : -1;
     return a.name.localeCompare(b.name);
   });
@@ -133,10 +122,10 @@ const EmployeeTokenPool: React.FC<EmployeeTokenPoolProps> = ({
       <div className={styles.poolHeader}>
         <div className={styles.headerLeft}>
           <h3 className={styles.title}>Mitarbeiter zuweisen</h3>
-          <span className={styles.subtitle}>Ziehen Sie Tokens auf die Schichten</span>
+          <span className={styles.subtitle}>Ziehen Sie Tokens auf die Wochen</span>
         </div>
         <div className={styles.headerRight}>
-          <span className={styles.statsCount}>{totalAssigned}/{totalRequired} Schichten</span>
+          <span className={styles.statsCount}>{totalAssigned}/{totalRequired} Wochen</span>
         </div>
       </div>
 
@@ -153,4 +142,4 @@ const EmployeeTokenPool: React.FC<EmployeeTokenPoolProps> = ({
   );
 };
 
-export default EmployeeTokenPool;
+export default WeeklyEmployeePool;

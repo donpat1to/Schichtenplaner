@@ -17,6 +17,7 @@ import { useBackendValidation } from '../../hooks/useBackendValidation';
 import { useWeeklySwapValidation, WeeklySwapTarget } from '../../hooks/useWeeklySwapValidation';
 import { useSwapValidation, SwapTarget } from '../../hooks/useSwapValidation';
 import { useManualAssignmentValidation, SchedulableEmployee } from '../../hooks/useManualAssignmentValidation';
+import { useManualWeekAssignmentValidation, SchedulableWeeklyEmployee, WeekDropTarget } from '../../hooks/useManualWeekAssignmentValidation';
 import { shiftPlanService } from '../../services/shiftPlanService';
 import { weeklyPlanService } from '../../services/weeklyPlanService';
 import { employeeService } from '../../services/employeeService';
@@ -33,7 +34,7 @@ import Calendar from '../../components/Calendar/Calendar';
 import TwoStepConfirmModal from '../../components/SwapMode/TwoStepConfirmModal';
 import WeeklyTwoStepConfirmModal from '../../components/SwapMode/WeeklyTwoStepConfirmModal';
 import DraggableEmployeeBox, { DragData } from '../../components/SwapMode/DraggableEmployeeBox';
-import { EmployeeTokenPool } from '../../components/ManualAssignment';
+import { EmployeePool, WeeklyEmployeePool } from '../../components/ManualAssignment';
 import { DropTarget } from '../../hooks/useManualAssignmentValidation';
 import styles from './PlanView.module.css';
 
@@ -99,11 +100,17 @@ const PlanView: React.FC = () => {
   } | null>(null);
   const [isSavingShiftSwap, setIsSavingShiftSwap] = useState(false);
 
-  // Manual assignment mode state
+  // Manual assignment mode state (shift plans)
   const [manualAssignmentModeActive, setManualAssignmentModeActive] = useState(false);
   const [manualAssignments, setManualAssignments] = useState<ShiftAssignment[]>([]);
   const [draggedEmployeeId, setDraggedEmployeeId] = useState<string | null>(null);
   const [isSavingManualAssignment, setIsSavingManualAssignment] = useState(false);
+
+  // Weekly manual assignment mode state
+  const [weeklyManualModeActive, setWeeklyManualModeActive] = useState(false);
+  const [weeklyManualAssignments, setWeeklyManualAssignments] = useState<{ weekId: string; employeeId: string }[]>([]);
+  const [weeklyDraggedEmployeeId, setWeeklyDraggedEmployeeId] = useState<string | null>(null);
+  const [isSavingWeeklyManualAssignment, setIsSavingWeeklyManualAssignment] = useState(false);
 
   // Weekly swap mode state (inline)
   const [weeklySwapModeActive, setWeeklySwapModeActive] = useState(false);
@@ -155,7 +162,7 @@ const PlanView: React.FC = () => {
     localShiftAssignments
   );
 
-  // Use manual assignment validation hook
+  // Use manual assignment validation hook (shift plans)
   const {
     schedulableEmployees,
     managers,
@@ -168,6 +175,20 @@ const PlanView: React.FC = () => {
     employees,
     availabilities,
     assignments: manualAssignments,
+  });
+
+  // Use manual week assignment validation hook (weekly plans)
+  const {
+    schedulableEmployees: weeklySchedulableEmployees,
+    managers: weeklyManagers,
+    getValidDropTargets: getWeeklyValidDropTargets,
+    canDropOnWeek,
+    getWeekStatus,
+    validateSchedule: validateWeeklySchedule,
+  } = useManualWeekAssignmentValidation({
+    weeks: weeklyPlan?.weeks || [],
+    employees: weeklyPlan?.employees || [],
+    assignments: weeklyManualAssignments,
   });
 
   // Get eligible targets when source is selected (shift swap)
@@ -938,6 +959,149 @@ const PlanView: React.FC = () => {
     }
   }, [id, shiftPlan, manualAssignments, validateSchedule, confirmDialog, loadPlanData, showNotification]);
 
+  // Weekly manual assignment mode handlers
+  const handleOpenWeeklyManualMode = useCallback(() => {
+    if (!weeklyPlan?.employees) return;
+
+    // Initialize with empty assignments
+    const initialAssignments: { weekId: string; employeeId: string }[] = [];
+
+    // Pre-assign managers based on their preferences (preference level 1)
+    const managerEmployees = weeklyPlan.employees.filter(emp => emp.employeeType === 'manager');
+
+    managerEmployees.forEach(manager => {
+      // Find preferences where this manager has preference level 1
+      manager.preferences
+        .filter(p => p.preferenceLevel === 1)
+        .forEach(pref => {
+          initialAssignments.push({
+            weekId: pref.weekId,
+            employeeId: manager.id
+          });
+        });
+    });
+
+    setWeeklyManualAssignments(initialAssignments);
+    setWeeklyManualModeActive(true);
+  }, [weeklyPlan]);
+
+  const handleCancelWeeklyManualMode = useCallback(() => {
+    setWeeklyManualModeActive(false);
+    setWeeklyManualAssignments([]);
+    setWeeklyDraggedEmployeeId(null);
+  }, []);
+
+  // Handle weekly manual drag start
+  const handleWeeklyManualDragStart = useCallback((event: DragStartEvent) => {
+    const data = event.active.data.current as DragData;
+    if (!data || data.type !== 'employee-token') return;
+
+    setWeeklyDraggedEmployeeId(data.employeeId);
+  }, []);
+
+  // Handle weekly manual drag end
+  const handleWeeklyManualDragEnd = useCallback((event: DragEndEvent) => {
+    const { over } = event;
+
+    if (!over || !weeklyDraggedEmployeeId) {
+      setWeeklyDraggedEmployeeId(null);
+      return;
+    }
+
+    const overId = over.id.toString();
+
+    // Check if dropped on a week cell (format: week-drop::weekId)
+    if (overId.startsWith('week-drop::')) {
+      const weekId = overId.replace('week-drop::', '');
+      const employeeId = weeklyDraggedEmployeeId;
+
+      // Validate the drop
+      const validation = canDropOnWeek(employeeId, weekId);
+
+      if (validation.valid) {
+        // Add the assignment
+        setWeeklyManualAssignments(prev => [...prev, { weekId, employeeId }]);
+      } else {
+        showNotification({
+          type: 'warning',
+          title: 'Zuweisung nicht möglich',
+          message: validation.reason || 'Ungültige Zuweisung'
+        });
+      }
+    }
+
+    setWeeklyDraggedEmployeeId(null);
+  }, [weeklyDraggedEmployeeId, canDropOnWeek, showNotification]);
+
+  // Handle weekly manual drag cancel
+  const handleWeeklyManualDragCancel = useCallback(() => {
+    setWeeklyDraggedEmployeeId(null);
+  }, []);
+
+  // Handle remove weekly assignment
+  const handleRemoveWeeklyAssignment = useCallback((weekId: string, employeeId: string) => {
+    // Check if this is a manager assignment (cannot be removed)
+    const employee = weeklyPlan?.employees?.find(e => e.id === employeeId);
+    if (employee?.employeeType === 'manager') {
+      showNotification({
+        type: 'warning',
+        title: 'Nicht möglich',
+        message: 'Manager-Zuweisungen können nicht entfernt werden'
+      });
+      return;
+    }
+
+    setWeeklyManualAssignments(prev =>
+      prev.filter(a => !(a.weekId === weekId && a.employeeId === employeeId))
+    );
+  }, [weeklyPlan?.employees, showNotification]);
+
+  // Handle save weekly manual assignments
+  const handleSaveWeeklyManualAssignments = useCallback(async () => {
+    if (!id || !weeklyPlan) return;
+
+    // Validate the schedule
+    const validation = validateWeeklySchedule();
+
+    if (!validation.isValid) {
+      const confirmed = await confirmDialog({
+        title: 'Unvollständige Zuweisungen',
+        message: `Es gibt noch Probleme mit den Zuweisungen:\n\n${validation.errors.slice(0, 5).join('\n')}${validation.errors.length > 5 ? `\n...und ${validation.errors.length - 5} weitere` : ''}\n\nTrotzdem speichern?`,
+        confirmText: 'Trotzdem speichern',
+        cancelText: 'Abbrechen',
+        type: 'warning'
+      });
+
+      if (!confirmed) return;
+    }
+
+    setIsSavingWeeklyManualAssignment(true);
+    try {
+      await weeklyPlanService.createAssignments(id, { assignments: weeklyManualAssignments });
+      await loadPlanData();
+
+      showNotification({
+        type: 'success',
+        title: 'Gespeichert',
+        message: `${weeklyManualAssignments.length} Zuweisungen wurden erfolgreich gespeichert`
+      });
+
+      // Reset weekly manual assignment mode
+      setWeeklyManualModeActive(false);
+      setWeeklyManualAssignments([]);
+      setWeeklyDraggedEmployeeId(null);
+    } catch (error) {
+      console.error('Error saving weekly manual assignments:', error);
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: 'Zuweisungen konnten nicht gespeichert werden'
+      });
+    } finally {
+      setIsSavingWeeklyManualAssignment(false);
+    }
+  }, [id, weeklyPlan, weeklyManualAssignments, validateWeeklySchedule, confirmDialog, loadPlanData, showNotification]);
+
   // Weekly swap mode handlers - inline mode
   const handleOpenWeeklySwapMode = useCallback(() => {
     if (weeklyPlan?.employees) {
@@ -1343,16 +1507,44 @@ const PlanView: React.FC = () => {
                   </div>
                 )}
 
-                {/* Weekly plan: Generate assignments button */}
-                {planType === 'weekly' && !hasAssignments && (
-                  <button
-                    onClick={handleGenerateWeeklyAssignments}
-                    disabled={!availabilityStatus.canPublish || isGenerating}
-                    className={`${styles.primaryButton} ${!availabilityStatus.canPublish ? styles.disabledButton : ''}`}
-                  >
-                    {isGenerating ? 'Berechne...' : 'Zuweisungen generieren'}
-                  </button>
+                {/* Weekly plan: Generate assignments / Manual assignment buttons */}
+                {planType === 'weekly' && !hasAssignments && !weeklyManualModeActive && (
+                  <div className={styles.buttonGroup}>
+                    <button
+                      onClick={handleGenerateWeeklyAssignments}
+                      disabled={!availabilityStatus.canPublish || isGenerating}
+                      className={`${styles.primaryButton} ${!availabilityStatus.canPublish ? styles.disabledButton : ''}`}
+                    >
+                      {isGenerating ? 'Berechne...' : 'Zuweisungen generieren'}
+                    </button>
+                    <button
+                      onClick={handleOpenWeeklyManualMode}
+                      disabled={!availabilityStatus.canPublish}
+                      className={`${styles.secondaryButton} ${!availabilityStatus.canPublish ? styles.disabledButton : ''}`}
+                    >
+                      Manuelle Zuweisung
+                    </button>
+                  </div>
+                )}
 
+                {/* Weekly manual assignment mode active */}
+                {planType === 'weekly' && weeklyManualModeActive && (
+                  <div className={styles.buttonGroup}>
+                    <button
+                      onClick={handleSaveWeeklyManualAssignments}
+                      disabled={isSavingWeeklyManualAssignment}
+                      className={styles.successButton}
+                    >
+                      {isSavingWeeklyManualAssignment ? 'Speichert...' : 'Zuweisungen speichern'}
+                    </button>
+                    <button
+                      onClick={handleCancelWeeklyManualMode}
+                      disabled={isSavingWeeklyManualAssignment}
+                      className={styles.secondaryButton}
+                    >
+                      Abbrechen
+                    </button>
+                  </div>
                 )}
 
                 {!availabilityStatus.canPublish && (
@@ -1498,7 +1690,7 @@ const PlanView: React.FC = () => {
                 onDragEnd={handleManualDragEnd}
                 onDragCancel={handleManualDragCancel}
               >
-                <EmployeeTokenPool
+                <EmployeePool
                   employees={schedulableEmployees}
                   draggedEmployeeId={draggedEmployeeId}
                 />
@@ -1581,8 +1773,54 @@ const PlanView: React.FC = () => {
         {/* Calendar for weekly plans */}
         {planType === 'weekly' && weeklyPlan && (
           <div className={styles.calendarContainer}>
-            <h2>Kalenderansicht{weeklySwapModeActive && ' - Bearbeitungsmodus'}</h2>
-            {weeklySwapModeActive ? (
+            <h2>Kalenderansicht{weeklySwapModeActive && ' - Bearbeitungsmodus'}{weeklyManualModeActive && ' - Manuelle Zuweisung'}</h2>
+            {weeklyManualModeActive ? (
+              <DndContext
+                sensors={sensors}
+                onDragStart={handleWeeklyManualDragStart}
+                onDragEnd={handleWeeklyManualDragEnd}
+                onDragCancel={handleWeeklyManualDragCancel}
+              >
+                <WeeklyEmployeePool
+                  employees={weeklySchedulableEmployees}
+                  draggedEmployeeId={weeklyDraggedEmployeeId}
+                />
+                <Calendar
+                  year={currentMonth.getFullYear()}
+                  month={currentMonth.getMonth()}
+                  weeks={weeklyPlan.weeks}
+                  employees={weeklyPlan.employees}
+                  onMonthChange={handleMonthChange}
+                  manualAssignmentMode={true}
+                  draggedEmployeeId={weeklyDraggedEmployeeId}
+                  validDropTargets={weeklyDraggedEmployeeId ? getWeeklyValidDropTargets(weeklyDraggedEmployeeId) : undefined}
+                  onRemoveAssignment={handleRemoveWeeklyAssignment}
+                  manualAssignments={weeklyManualAssignments}
+                />
+                <DragOverlay>
+                  {weeklyDraggedEmployeeId ? (() => {
+                    const emp = weeklySchedulableEmployees.find(e => e.id === weeklyDraggedEmployeeId);
+                    if (!emp) return null;
+                    const [firstname, ...lastnameParts] = emp.name.split(' ');
+                    return (
+                      <DraggableEmployeeBox
+                        employee={{
+                          id: emp.id,
+                          firstname,
+                          lastname: lastnameParts.join(' ') || null,
+                          employeeType: null,
+                          isTrainee: emp.isTrainee
+                        }}
+                        contextId="overlay"
+                        isSource={false}
+                        eligibility={null}
+                        isOverlay={false}
+                      />
+                    );
+                  })() : null}
+                </DragOverlay>
+              </DndContext>
+            ) : weeklySwapModeActive ? (
               <DndContext
                 sensors={sensors}
                 onDragStart={handleDragStart}

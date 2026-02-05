@@ -173,6 +173,42 @@
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
 }
 
+/* Employee box with remove button for manual assignment mode */
+.employeeBoxWithRemove {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 6px 4px 10px;
+    border-radius: 4px;
+    color: white;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.removeButton {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background-color: rgba(255, 255, 255, 0.3);
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    line-height: 1;
+}
+
+.removeButton:hover {
+    background-color: rgba(255, 255, 255, 0.5);
+}
+
 /* Preference toggle for preferences mode */
 .preferenceToggle {
     width: 100%;

@@ -1,3 +1,4 @@
 // frontend/src/components/ManualAssignment/index.ts
-export { default as EmployeeTokenPool } from './EmployeeTokenPool';
-export type { DragData } from './EmployeeTokenPool';
+export { default as EmployeePool } from './EmployeePool';
+export { default as WeeklyEmployeePool } from './WeeklyEmployeePool';
+export type { DragData } from './EmployeePool';

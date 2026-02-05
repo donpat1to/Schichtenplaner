@@ -1,6 +1,8 @@
 // frontend/src/components/Calendar/Calendar.tsx
 import React from 'react';
+import { useDroppable } from '@dnd-kit/core';
 import { EmployeeWithPreferences, PlanWeek } from '../../models/WeeklyPlan';
+import { WeekDropTarget } from '../../hooks/useManualWeekAssignmentValidation';
 import DraggableEmployeeBox from '../SwapMode/DraggableEmployeeBox';
 import styles from './Calendar.module.css';
 
@@ -29,9 +31,60 @@ export interface CalendarProps {
     sourceSelection?: { employeeId: string; weekId: string } | null;
     eligibleTargets?: Map<string, 'direct' | 'two-step'>;
 
+    // Manual assignment mode props
+    manualAssignmentMode?: boolean;
+    draggedEmployeeId?: string | null;
+    validDropTargets?: Map<string, WeekDropTarget>;
+    onRemoveAssignment?: (weekId: string, employeeId: string) => void;
+    manualAssignments?: { weekId: string; employeeId: string }[];
+
     // Layout props
     hideNavigation?: boolean;
 }
+
+// Droppable week component for manual assignment mode
+interface DroppableWeekProps {
+    weekId: string;
+    isValid: boolean;
+    isDragActive: boolean;
+    children: React.ReactNode;
+}
+
+const DroppableWeek: React.FC<DroppableWeekProps> = ({ weekId, isValid, isDragActive, children }) => {
+    const { isOver, setNodeRef } = useDroppable({
+        id: `week-drop::${weekId}`,
+    });
+
+    const getDropStyle = (): React.CSSProperties => {
+        if (!isDragActive) return {};
+
+        if (isOver) {
+            return {
+                backgroundColor: isValid ? 'rgba(39, 174, 96, 0.2)' : 'rgba(231, 76, 60, 0.2)',
+                borderColor: isValid ? '#27ae60' : '#e74c3c',
+                borderWidth: '2px',
+                borderStyle: 'dashed',
+            };
+        }
+
+        return {
+            backgroundColor: isValid ? 'rgba(39, 174, 96, 0.05)' : 'rgba(231, 76, 60, 0.05)',
+            borderColor: isValid ? '#27ae60' : '#e74c3c',
+            borderWidth: '1px',
+            borderStyle: 'dashed',
+        };
+    };
+
+    return (
+        <div
+            ref={setNodeRef}
+            className={styles.employeesRow}
+            style={getDropStyle()}
+        >
+            {children}
+        </div>
+    );
+};
 
 const Calendar: React.FC<CalendarProps> = ({
     year,
@@ -48,6 +101,11 @@ const Calendar: React.FC<CalendarProps> = ({
     swapModeActive = false,
     sourceSelection = null,
     eligibleTargets = new Map(),
+    manualAssignmentMode = false,
+    draggedEmployeeId = null,
+    validDropTargets,
+    onRemoveAssignment,
+    manualAssignments = [],
     hideNavigation = false,
 }) => {
     const monthNames = [
@@ -177,6 +235,13 @@ const Calendar: React.FC<CalendarProps> = ({
 
     // Get employees assigned to a specific week
     const getAssignedEmployeesForWeek = (weekId: string) => {
+        if (manualAssignmentMode && manualAssignments.length > 0) {
+            // In manual assignment mode, get employees from manualAssignments
+            const assignedIds = manualAssignments
+                .filter(a => a.weekId === weekId)
+                .map(a => a.employeeId);
+            return employees.filter(emp => assignedIds.includes(emp.id));
+        }
         return employees.filter(emp => emp.assignedWeeks.includes(weekId));
     };
 
@@ -215,6 +280,44 @@ const Calendar: React.FC<CalendarProps> = ({
                         isSource={isSource}
                         eligibility={eligibility}
                     />
+                );
+            });
+        }
+
+        // Manual assignment mode - show remove buttons for non-managers
+        if (manualAssignmentMode) {
+            return assignedEmployees.map(employee => {
+                // Determine background color based on employee role
+                let backgroundColor = '#642ab5'; // Default: non-trainee personnel (purple)
+                const isManager = employee.employeeType === 'manager';
+
+                if (employee.isTrainee) {
+                    backgroundColor = '#cda8f0'; // Trainee (light purple)
+                } else if (isManager) {
+                    backgroundColor = '#CC0000'; // Manager (red)
+                }
+
+                return (
+                    <div
+                        key={employee.id}
+                        className={styles.employeeBoxWithRemove}
+                        style={{ backgroundColor }}
+                        title={`${employee.firstname} ${employee.lastname}${employee.isTrainee ? ' (Trainee)' : ''}${isManager ? ' (Manager - kann nicht entfernt werden)' : ''}`}
+                    >
+                        <span>{employee.firstname} {employee.lastname}</span>
+                        {!isManager && onRemoveAssignment && (
+                            <button
+                                className={styles.removeButton}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onRemoveAssignment(weekId, employee.id);
+                                }}
+                                title="Zuweisung entfernen"
+                            >
+                                ×
+                            </button>
+                        )}
+                    </div>
                 );
             });
         }
@@ -377,17 +480,29 @@ const Calendar: React.FC<CalendarProps> = ({
                                 </div>
 
                                 {/* Lower row: Employee boxes (view mode) or Preference toggle (preferences mode) */}
-                                <div className={styles.employeesRow}>
-                                    {planWeek && (
-                                        mode === 'preferences' ? (
-                                            renderPreferenceToggle(planWeek.id)
-                                        ) : (
-                                            <div className={styles.employeeBoxContainer}>
-                                                {renderEmployeeBoxes(planWeek.id)}
-                                            </div>
-                                        )
-                                    )}
-                                </div>
+                                {planWeek && manualAssignmentMode ? (
+                                    <DroppableWeek
+                                        weekId={planWeek.id}
+                                        isValid={validDropTargets?.get(planWeek.id)?.isValid ?? true}
+                                        isDragActive={!!draggedEmployeeId}
+                                    >
+                                        <div className={styles.employeeBoxContainer}>
+                                            {renderEmployeeBoxes(planWeek.id)}
+                                        </div>
+                                    </DroppableWeek>
+                                ) : (
+                                    <div className={styles.employeesRow}>
+                                        {planWeek && (
+                                            mode === 'preferences' ? (
+                                                renderPreferenceToggle(planWeek.id)
+                                            ) : (
+                                                <div className={styles.employeeBoxContainer}>
+                                                    {renderEmployeeBoxes(planWeek.id)}
+                                                </div>
+                                            )
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     );
