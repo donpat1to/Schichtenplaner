@@ -98,9 +98,8 @@ CREATE TABLE IF NOT EXISTS shifts (
   plan_id TEXT NOT NULL,
   time_slot_id TEXT NOT NULL,
   day_of_week INTEGER NOT NULL CHECK (day_of_week >= 1 AND day_of_week <= 7),
-  required_employees INTEGER NOT NULL CHECK (required_employees >= 1 AND required_employees <= 10) DEFAULT 2,
-  min_employees INTEGER NOT NULL CHECK (required_employees >= 1 AND required_employees <= 10) DEFAULT 1,
-  max_employees INTEGER NOT NULL CHECK (required_employees >= 1 AND required_employees <= 10) DEFAULT 2,
+  min_employees INTEGER NOT NULL CHECK (min_employees >= 1 AND min_employees <= 10) DEFAULT 1,
+  max_employees INTEGER NOT NULL CHECK (max_employees >= 1 AND max_employees <= 10) DEFAULT 2,
   color TEXT DEFAULT '#3498db',
   FOREIGN KEY (plan_id) REFERENCES shift_plans(id) ON DELETE CASCADE,
   FOREIGN KEY (time_slot_id) REFERENCES time_slots(id) ON DELETE CASCADE,
@@ -305,7 +304,6 @@ CREATE INDEX IF NOT EXISTS idx_shift_plans_template ON shift_plans(is_template, 
 CREATE INDEX IF NOT EXISTS idx_time_slots_plan ON time_slots(plan_id);
 
 CREATE INDEX IF NOT EXISTS idx_shifts_plan_day ON shifts(plan_id, day_of_week);
-CREATE INDEX IF NOT EXISTS idx_shifts_required_employees ON shifts(required_employees);
 CREATE INDEX IF NOT EXISTS idx_shifts_plan_time ON shifts(plan_id, time_slot_id, day_of_week);
 
 CREATE INDEX IF NOT EXISTS idx_shift_assignments_shift ON shift_assignments(shift_id);

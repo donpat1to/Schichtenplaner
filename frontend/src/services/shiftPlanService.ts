@@ -29,12 +29,14 @@ export interface UpdateTimeSlotRequest {
 export interface CreateShiftRequest {
   timeSlotId: string;
   dayOfWeek: number;
-  requiredEmployees: number;
+  minEmployees: number;
+  maxEmployees: number;
   color?: string;
 }
 
 export interface UpdateShiftRequest {
-  requiredEmployees?: number;
+  minEmployees?: number;
+  maxEmployees?: number;
   color?: string;
 }
 

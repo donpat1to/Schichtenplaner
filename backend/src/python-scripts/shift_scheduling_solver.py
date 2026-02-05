@@ -57,7 +57,6 @@ class Shift:
         self.plan_id = data['planId']
         self.time_slot_id = data['timeSlotId']
         self.day_of_week = data['dayOfWeek']  # 1=Monday, 7=Sunday
-        self.required_employees = data['requiredEmployees']
         self.min_employees = data.get('minEmployees', 1)
         self.max_employees = data.get('maxEmployees', 2)
         self.color = data.get('color', '#3498db')
@@ -467,7 +466,7 @@ class ShiftSchedulingSolver:
             return
         
         # Calculate total personnel needed
-        total_personnel_needed = sum(s.required_employees for s in self.shifts.values())
+        total_personnel_needed = sum(s.max_employees for s in self.shifts.values())
         
         # Count assigned managers (pre-assigned with preference 1)
         assigned_managers = 0

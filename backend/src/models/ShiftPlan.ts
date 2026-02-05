@@ -50,7 +50,6 @@ export interface Shift {
   planId: string;
   timeSlotId: string;
   dayOfWeek: number; // 1=Monday, 7=Sunday
-  requiredEmployees: number;
   minEmployees: number;
   maxEmployees: number;
   color?: string;
@@ -78,7 +77,7 @@ export interface ShiftPlanStatistics {
   };
   totals: {
     totalShifts: number;
-    totalAssignmentSlots: number; // Sum of requiredEmployees across all shifts
+    totalAssignmentSlots: number; // Sum of minEmployees across all shifts
     totalAssignedSlots: number; // Count of assigned employeeIds (not null)
     totalEmployees: number;
   };

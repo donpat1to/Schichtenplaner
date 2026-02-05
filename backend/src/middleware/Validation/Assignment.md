@@ -16,7 +16,8 @@
 * Requires valid plan ID
 * Automatically fixes data structure inconsistencies:
   - timeSlotId mapping (handles both naming conventions)
-  - requiredEmployees fallback to 2 if missing
+  - minEmployees fallback to 1 if missing
+  - maxEmployees fallback to 2 if missing
   - assignedEmployees fallback to empty array if missing
 
 ## Availability

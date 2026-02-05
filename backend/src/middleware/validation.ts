@@ -305,9 +305,13 @@ export const validateShiftPlan = [
     .isUUID()
     .withMessage('Time slot ID must be a valid UUID'),
 
-  body('shifts.*.requiredEmployees')
+  body('shifts.*.minEmployees')
     .isInt({ min: 0 })
-    .withMessage('Required employees must be a positive integer'),
+    .withMessage('Minimum employees must be a positive integer'),
+
+  body('shifts.*.maxEmployees')
+    .isInt({ min: 0 })
+    .withMessage('Maximum employees must be a positive integer'),
 
   body('shifts.*.color')
     .optional()
@@ -461,10 +465,15 @@ export const validateShiftCreate = [
     .isInt({ min: 1, max: 7 })
     .withMessage('Day of week must be between 1-7 (Monday-Sunday)'),
 
-  body('requiredEmployees')
+  body('minEmployees')
     .optional()
     .isInt({ min: 1, max: 10 })
-    .withMessage('Required employees must be between 1-10'),
+    .withMessage('Minimum employees must be between 1-10'),
+
+  body('maxEmployees')
+    .optional()
+    .isInt({ min: 1, max: 10 })
+    .withMessage('Maximum employees must be between 1-10'),
 
   body('color')
     .optional()
@@ -483,10 +492,15 @@ export const validateShiftUpdate = [
     .isInt({ min: 1, max: 7 })
     .withMessage('Day of week must be between 1-7 (Monday-Sunday)'),
 
-  body('requiredEmployees')
+  body('minEmployees')
     .optional()
     .isInt({ min: 1, max: 10 })
-    .withMessage('Required employees must be between 1-10'),
+    .withMessage('Minimum employees must be between 1-10'),
+
+  body('maxEmployees')
+    .optional()
+    .isInt({ min: 1, max: 10 })
+    .withMessage('Maximum employees must be between 1-10'),
 
   body('color')
     .optional()
@@ -510,10 +524,15 @@ export const validateScheduledShiftUpdate = [
     .isUUID()
     .withMessage('Each assigned employee must be a valid UUID'),
 
-  body('requiredEmployees')
+  body('minEmployees')
     .optional()
     .isInt({ min: 0 })
-    .withMessage('Required employees must be a positive integer')
+    .withMessage('Minimum employees must be a positive integer'),
+
+  body('maxEmployees')
+    .optional()
+    .isInt({ min: 0 })
+    .withMessage('Maximum employees must be a positive integer')
 ];
 
 // ===== SETUP VALIDATION =====

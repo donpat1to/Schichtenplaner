@@ -356,7 +356,8 @@ const PlanEdit: React.FC = () => {
     const addShift = async (
         dayOfWeek: number,
         timeSlotId: string,
-        requiredEmployees: number,
+        minEmployees: number,
+        maxEmployees: number,
         color: string
     ) => {
         if (!id) return;
@@ -365,7 +366,8 @@ const PlanEdit: React.FC = () => {
             await shiftPlanService.addShift(id, {
                 dayOfWeek,
                 timeSlotId,
-                requiredEmployees,
+                minEmployees,
+                maxEmployees,
                 color,
             });
 
@@ -381,14 +383,16 @@ const PlanEdit: React.FC = () => {
 
     const updateShift = async (
         shift: Shift,
-        requiredEmployees: number,
+        minEmployees: number,
+        maxEmployees: number,
         color: string
     ) => {
         if (!id) return;
 
         await executeWithValidation(async () => {
             await shiftPlanService.updateShift(id, shift.id, {
-                requiredEmployees,
+                minEmployees,
+                maxEmployees,
                 color,
             });
 

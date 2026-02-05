@@ -55,7 +55,7 @@ export class SchedulingService {
     console.log(`Shifts: ${shifts.length}`);
 
     // Calculate total assignment slots
-    const totalAssignmentSlots = shifts.reduce((sum, shift) => sum + shift.requiredEmployees, 0);
+    const totalAssignmentSlots = shifts.reduce((sum, shift) => sum + shift.minEmployees, 0);
     console.log(`Total assignment slots needed: ${totalAssignmentSlots}`);
 
     console.log(`Input availabilities: ${availabilities.length}`);
@@ -80,7 +80,7 @@ export class SchedulingService {
       matchingShiftIds.slice(0, 5).forEach(id => {
         const shift = shifts.find(s => s.id === id);
         const availCount = workerAvailabilities.filter(a => a.shiftId === id).length;
-        console.log(`   - ${id}: ${availCount} availabilities, Day: ${shift?.dayOfWeek}, TimeSlot: ${shift?.timeSlotId}, Required: ${shift?.requiredEmployees}`);
+        console.log(`   - ${id}: ${availCount} availabilities, Day: ${shift?.dayOfWeek}, TimeSlot: ${shift?.timeSlotId}, Minimum: ${shift?.minEmployees}`);
       });
     }
 
@@ -143,7 +143,6 @@ export class SchedulingService {
         planId: shift.planId,
         timeSlotId: shift.timeSlotId,
         dayOfWeek: shift.dayOfWeek,
-        requiredEmployees: shift.requiredEmployees,
         minEmployees: shift.minEmployees || 1,
         maxEmployees: shift.maxEmployees || 2,
         timeSlot: {

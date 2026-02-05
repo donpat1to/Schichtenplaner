@@ -47,8 +47,8 @@ export function getTimeSlotById(plan: ShiftPlan, timeSlotId: string): TimeSlot |
   return plan.timeSlots.find(slot => slot.id === timeSlotId);
 }
 
-export function calculateTotalRequiredEmployees(plan: ShiftPlan): number {
-  return plan.shifts.reduce((total, shift) => total + shift.requiredEmployees, 0);
+export function calculateTotalMinimumEmployees(plan: ShiftPlan): number {
+  return plan.shifts.reduce((total, shift) => total + shift.minEmployees, 0);
 }
 
 // NEW: Helper for shift generation

@@ -22,7 +22,6 @@ interface WorkerData {
     planId: string;
     timeSlotId: string;
     dayOfWeek: number;
-    requiredEmployees: number;
     minEmployees: number;
     maxEmployees: number;
     color?: string;
@@ -287,12 +286,10 @@ async function runShiftScheduling() {
     }
 
     // Calculate total required employees
-    const totalRequiredSlots = data.shifts.reduce((sum, shift) => sum + shift.requiredEmployees, 0);
     const totalMaxSlots = data.shifts.reduce((sum, shift) => sum + shift.maxEmployees, 0);
     const totalMinSlots = data.shifts.reduce((sum, shift) => sum + shift.minEmployees, 0);
 
     console.log(`\nShift Requirements:`);
-    console.log(`  Total required slots: ${totalRequiredSlots}`);
     console.log(`  Total min slots: ${totalMinSlots}`);
     console.log(`  Total max slots: ${totalMaxSlots}`);
 
@@ -304,11 +301,6 @@ async function runShiftScheduling() {
 
     console.log(`\nEmployee Capacity:`);
     console.log(`  Total employee capacity: ${totalEmployeeCapacity}`);
-
-    // Feasibility check
-    if (totalEmployeeCapacity > totalRequiredSlots) {
-      console.log(`⚠️ WARNING: Employee capacity (${totalEmployeeCapacity}) > Required slots (${totalRequiredSlots})`);
-    }
 
     // Get manager pre-assignments (managers with preference level 1)
     const managerAvailabilities = data.availabilities.filter(a => {

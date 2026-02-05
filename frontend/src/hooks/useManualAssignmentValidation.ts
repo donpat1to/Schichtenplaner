@@ -186,14 +186,13 @@ export function useManualAssignmentValidation({
     current: number;
     min: number;
     max: number;
-    required: number;
     isUnderStaffed: boolean;
     isOverStaffed: boolean;
     isFull: boolean;
   } => {
     const shift = shifts.find(s => s.id === shiftId);
     if (!shift) {
-      return { current: 0, min: 0, max: 0, required: 0, isUnderStaffed: false, isOverStaffed: false, isFull: true };
+      return { current: 0, min: 0, max: 0, isUnderStaffed: false, isOverStaffed: false, isFull: true };
     }
 
     const current = getShiftAssignmentCount(shiftId);
@@ -201,7 +200,6 @@ export function useManualAssignmentValidation({
       current,
       min: shift.minEmployees,
       max: shift.maxEmployees,
-      required: shift.requiredEmployees,
       isUnderStaffed: current < shift.minEmployees,
       isOverStaffed: current > shift.maxEmployees,
       isFull: current >= shift.maxEmployees,

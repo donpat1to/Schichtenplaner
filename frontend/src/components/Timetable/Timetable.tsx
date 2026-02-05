@@ -36,8 +36,8 @@ export interface TimetableProps {
     onAddTimeSlot?: (name: string, startTime: string, endTime: string, description?: string) => void;
     onUpdateTimeSlot?: (slot: TimeSlot, name: string, startTime: string, endTime: string, description?: string) => void;
     onDeleteTimeSlot?: (slotId: string) => void;
-    onAddShift?: (dayOfWeek: number, timeSlotId: string, requiredEmployees: number, color: string) => void;
-    onUpdateShift?: (shift: Shift, requiredEmployees: number, color: string) => void;
+    onAddShift?: (dayOfWeek: number, timeSlotId: string, minEmployees: number, maxEmployees: number, color: string) => void;
+    onUpdateShift?: (shift: Shift, minEmployees: number, maxEmployees: number, color: string) => void;
     onDeleteShift?: (shiftId: string) => void;
 
     // Helper functions
@@ -447,7 +447,7 @@ const Timetable: React.FC<TimetableProps> = ({
             return (
                 <div className={styles.shiftInfo}>
                     <div className={styles.requiredCount} style={{ backgroundColor: shift.color || '#27ae60' }}>
-                        {shift.requiredEmployees}
+                        {shift.minEmployees}
                     </div>
                     <div className={styles.requiredLabel}>Mitarbeiter</div>
                 </div>
@@ -681,7 +681,7 @@ const Timetable: React.FC<TimetableProps> = ({
                                                 disabled={disabled}
                                                 className={styles.addTimeSlotButton}
                                             >
-                                                {ICONS.add} Neuer Zeit-Slot hinzufügen
+                                                {ICONS.add}
                                             </button>
                                         )}
                                     </td>

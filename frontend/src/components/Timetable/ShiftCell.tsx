@@ -13,8 +13,8 @@ interface ShiftCellProps {
     shift: Shift | null;
     dayOfWeek: number;
     timeSlotId: string;
-    onAdd: (dayOfWeek: number, timeSlotId: string, requiredEmployees: number, color: string) => void;
-    onEdit: (shift: Shift, requiredEmployees: number, color: string) => void;
+    onAdd: (dayOfWeek: number, timeSlotId: string, minEmployees: number, maxEmployees: number, color: string) => void;
+    onEdit: (shift: Shift, minEmployees: number, maxEmployees: number, color: string) => void;
     onDelete: (shiftId: string) => void;
     disabled?: boolean;
 }
@@ -40,16 +40,19 @@ const ShiftCell: React.FC<ShiftCellProps> = ({
     disabled = false
 }) => {
     const [showModal, setShowModal] = useState(false);
-    const [requiredEmployees, setRequiredEmployees] = useState(shift?.requiredEmployees || 2);
+    const [minEmployees, setMinEmployees] = useState(shift?.minEmployees || 1);
+    const [maxEmployees, setMaxEmployees] = useState(shift?.maxEmployees || 2);
     const [selectedColor, setSelectedColor] = useState(shift?.color || '#3498db');
     const [isHovered, setIsHovered] = useState(false);
 
     useEffect(() => {
         if (shift) {
-            setRequiredEmployees(shift.requiredEmployees);
+            setMinEmployees(shift.minEmployees);
+            setMaxEmployees(shift.maxEmployees);
             setSelectedColor(shift.color || '#3498db');
         } else {
-            setRequiredEmployees(2);
+            setMinEmployees(1);
+            setMaxEmployees(2);
             setSelectedColor('#3498db');
         }
     }, [shift]);
@@ -61,9 +64,9 @@ const ShiftCell: React.FC<ShiftCellProps> = ({
 
     const handleSave = () => {
         if (shift) {
-            onEdit(shift, requiredEmployees, selectedColor);
+            onEdit(shift, minEmployees, maxEmployees, selectedColor);
         } else {
-            onAdd(dayOfWeek, timeSlotId, requiredEmployees, selectedColor);
+            onAdd(dayOfWeek, timeSlotId, minEmployees, maxEmployees, selectedColor);
         }
         setShowModal(false);
     };
@@ -77,10 +80,12 @@ const ShiftCell: React.FC<ShiftCellProps> = ({
 
     const handleClose = () => {
         if (shift) {
-            setRequiredEmployees(shift.requiredEmployees);
+            setMinEmployees(shift.minEmployees);
+            setMaxEmployees(shift.maxEmployees);
             setSelectedColor(shift.color || '#3498db');
         } else {
-            setRequiredEmployees(2);
+            setMinEmployees(1);
+            setMaxEmployees(2);
             setSelectedColor('#3498db');
         }
         setShowModal(false);
@@ -151,7 +156,7 @@ const ShiftCell: React.FC<ShiftCellProps> = ({
                             justifyContent: 'center',
                         }}>
                             <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold' }}>
-                                {shift.requiredEmployees}
+                                {shift.minEmployees}
                             </span>
                         </div>
                         <span style={{ fontSize: '11px', color: '#666' }}>
@@ -182,8 +187,19 @@ const ShiftCell: React.FC<ShiftCellProps> = ({
                         type="number"
                         min="1"
                         max="99"
-                        value={requiredEmployees}
-                        onChange={(e) => setRequiredEmployees(parseInt(e.target.value) || 1)}
+                        value={minEmployees}
+                        onChange={(e) => setMinEmployees(parseInt(e.target.value) || 1)}
+                        style={inputStyle}
+                    />
+                </div>
+                <div style={{ marginBottom: '16px' }}>
+                    <label style={labelStyle}>Maximum an Mitarbeiter *</label>
+                    <input
+                        type="number"
+                        min="1"
+                        max="99"
+                        value={maxEmployees}
+                        onChange={(e) => setMaxEmployees(parseInt(e.target.value) || 2)}
                         style={inputStyle}
                     />
                 </div>

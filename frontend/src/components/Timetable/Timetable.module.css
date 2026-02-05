@@ -238,7 +238,7 @@
     padding: 8px 16px;
     border: none;
     border-radius: 4px;
-    font-size: 14px;
+    font-size: 20px;
     cursor: pointer;
     transition: all 0.2s;
 }
@@ -269,14 +269,14 @@
 .addTimeSlotButton {
     background-color: transparent;
     border: 2px dashed #dee2e6;
-    color: #27ae60;
+    color: #68cb93;
     width: 100%;
     padding: 12px;
 }
 
 .addTimeSlotButton:hover:not(:disabled) {
     background-color: #f0fff4;
-    border-color: #27ae60;
+    border-color: #09b551;
 }
 
 .employeeBoxContainer {

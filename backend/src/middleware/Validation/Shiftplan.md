@@ -62,5 +62,6 @@
 
 ### \[UPDATE\] ShiftPlan shifts
 * `timeSlotId` must be selected from available time slots
-* `requiredEmployees` must be at least 1
+* `minEmployees` must be at least 1
+* `maxEmployees` must be at least 1
 * `dayOfWeek` must be between 1-7

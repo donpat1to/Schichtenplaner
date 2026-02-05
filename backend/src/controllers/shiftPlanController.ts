@@ -59,7 +59,6 @@ async function getPlanWithDetails(planId: string) {
       planId: shift.plan_id,
       timeSlotId: shift.time_slot_id,
       dayOfWeek: shift.day_of_week,
-      requiredEmployees: shift.required_employees,
       minEmployees: shift.min_employees,
       maxEmployees: shift.max_employees,
       color: shift.color,
@@ -171,7 +170,6 @@ export const getShiftPlan = async (req: Request, res: Response): Promise<void> =
         planId: shift.plan_id,
         timeSlotId: shift.time_slot_id,
         dayOfWeek: shift.day_of_week,
-        requiredEmployees: shift.required_employees,
         minEmployees: shift.min_employees,
         maxEmployees: shift.max_employees,
         color: shift.color,
@@ -224,23 +222,23 @@ export const createDefaultTemplate = async (userId: string): Promise<string> => 
       for (let day = 1; day <= 4; day++) {
         // Vormittagsschicht
         await db.run(
-          `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, required_employees, min_employees, max_employees, color) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, min_employees, max_employees, color) 
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
           [uuidv4(), planId, day, timeSlots[0].id, 2, 1, 2, '#3498db']
         );
 
         // Nachmittagsschicht
         await db.run(
-          `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, required_employees, min_employees, max_employees, color) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, min_employees, max_employees, color) 
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
           [uuidv4(), planId, day, timeSlots[1].id, 2, 1, 2, '#e74c3c']
         );
       }
 
       // Freitag nur Vormittagsschicht
       await db.run(
-        `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, required_employees, min_employees, max_employees, color) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, min_employees, max_employees, color) 
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [uuidv4(), planId, 5, timeSlots[0].id, 2, 1, 2, '#3498db']
       );
 
@@ -309,9 +307,9 @@ export const createShiftPlan = async (req: Request, res: Response): Promise<void
         }
 
         await db.run(
-          `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, required_employees, min_employees, max_employees, color) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [shiftId, planId, shift.dayOfWeek, finalTimeSlotId, shift.requiredEmployees, shift.minEmployees, shift.maxEmployees, shift.color || '#3498db']
+          `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, min_employees, max_employees, color) 
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [shiftId, planId, shift.dayOfWeek, finalTimeSlotId, shift.minEmployees, shift.maxEmployees, shift.color || '#3498db']
         );
       }
 
@@ -425,9 +423,9 @@ export const createFromPreset = async (req: Request, res: Response): Promise<voi
         }
 
         await db.run(
-          `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, required_employees, min_employees, max_employees, color) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [shiftId, planId, shift.dayOfWeek, timeSlotId, shift.requiredEmployees, shift.minEmployees, shift.maxEmployees, shift.color || '#3498db']
+          `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, min_employees, max_employees, color) 
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [shiftId, planId, shift.dayOfWeek, timeSlotId, shift.minEmployees, shift.maxEmployees, shift.color || '#3498db']
         );
 
         shiftCount++;
@@ -548,16 +546,16 @@ export const updateShiftPlan = async (req: Request, res: Response): Promise<void
           if ((shift as any).id && existingShiftIds.has((shift as any).id)) {
             // UPDATE existing shift - preserve ID
             await db.run(
-              `UPDATE shifts SET day_of_week = ?, time_slot_id = ?, required_employees = ?, min_employees = ?, max_employees = ?, color = ? WHERE id = ?`,
-              [shift.dayOfWeek, shift.timeSlotId, shift.requiredEmployees, shift.minEmployees, shift.maxEmployees, shift.color || '#3498db', (shift as any).id]
+              `UPDATE shifts SET day_of_week = ?, time_slot_id = ?, min_employees = ?, max_employees = ?, color = ? WHERE id = ?`,
+              [shift.dayOfWeek, shift.timeSlotId, shift.minEmployees, shift.maxEmployees, shift.color || '#3498db', (shift as any).id]
             );
           } else {
             // INSERT new shift
             const newId = (shift as any).id || uuidv4();
             await db.run(
-              `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, required_employees, min_employees, max_employees, color)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-              [newId, id, shift.dayOfWeek, shift.timeSlotId, shift.requiredEmployees, shift.minEmployees, shift.maxEmployees, shift.color || '#3498db']
+              `INSERT INTO shifts (id, plan_id, day_of_week, time_slot_id, min_employees, max_employees, color)
+               VALUES (?, ?, ?, ?, ?, ?, ?)`,
+              [newId, id, shift.dayOfWeek, shift.timeSlotId, shift.minEmployees, shift.maxEmployees, shift.color || '#3498db']
             );
           }
         }
@@ -725,7 +723,7 @@ export const deleteTimeSlot = async (req: Request, res: Response): Promise<void>
 export const addShift = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { timeSlotId, dayOfWeek, requiredEmployees, color } = req.body;
+    const { timeSlotId, dayOfWeek, color } = req.body;
 
     // Check if plan exists
     const existingPlan = await db.get('SELECT * FROM shift_plans WHERE id = ?', [id]);
@@ -756,9 +754,9 @@ export const addShift = async (req: Request, res: Response): Promise<void> => {
 
     const shiftId = uuidv4();
     await db.run(
-      `INSERT INTO shifts (id, plan_id, time_slot_id, day_of_week, required_employees, min_employees, max_employees, color)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [shiftId, id, timeSlotId, dayOfWeek, requiredEmployees || 2, 1, 2, color || '#3498db']
+      `INSERT INTO shifts (id, plan_id, time_slot_id, day_of_week, min_employees, max_employees, color)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [shiftId, id, timeSlotId, dayOfWeek, 1, 2, color || '#3498db']
     );
 
     res.status(201).json({
@@ -766,7 +764,6 @@ export const addShift = async (req: Request, res: Response): Promise<void> => {
       planId: id,
       timeSlotId,
       dayOfWeek,
-      requiredEmployees: requiredEmployees || 2,
       color: color || '#3498db'
     });
   } catch (error) {
@@ -778,7 +775,7 @@ export const addShift = async (req: Request, res: Response): Promise<void> => {
 export const updateShift = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id, shiftId } = req.params;
-    const { requiredEmployees, minEmployees, maxEmployees, color, timeSlotId, dayOfWeek } = req.body;
+    const { minEmployees, maxEmployees, color, timeSlotId, dayOfWeek } = req.body;
 
     // Check if shift exists and belongs to this plan
     const existingShift = await db.get<any>(
@@ -804,14 +801,13 @@ export const updateShift = async (req: Request, res: Response): Promise<void> =>
 
     await db.run(
       `UPDATE shifts
-       SET required_employees = COALESCE(?, required_employees),
-           min_employees = COALESCE(?, min_employees),
+       SET min_employees = COALESCE(?, min_employees),
            max_employees = COALESCE(?, max_employees),
            color = COALESCE(?, color),
            time_slot_id = COALESCE(?, time_slot_id),
            day_of_week = COALESCE(?, day_of_week)
        WHERE id = ?`,
-      [requiredEmployees, minEmployees, maxEmployees, color, timeSlotId, dayOfWeek, shiftId]
+      [minEmployees, maxEmployees, color, timeSlotId, dayOfWeek, shiftId]
     );
 
     const updatedShift = await db.get<any>('SELECT * FROM shifts WHERE id = ?', [shiftId]);
@@ -820,7 +816,6 @@ export const updateShift = async (req: Request, res: Response): Promise<void> =>
       planId: updatedShift.plan_id,
       timeSlotId: updatedShift.time_slot_id,
       dayOfWeek: updatedShift.day_of_week,
-      requiredEmployees: updatedShift.required_employees,
       minEmployees: updatedShift.min_employees,
       maxEmployees: updatedShift.max_employees,
       color: updatedShift.color
@@ -944,7 +939,6 @@ async function getShiftPlanById(planId: string): Promise<any> {
       planId: shift.plan_id,
       timeSlotId: shift.time_slot_id,
       dayOfWeek: shift.day_of_week,
-      requiredEmployees: shift.required_employees,
       minEmployees: shift.min_employees,
       maxEmployees: shift.max_employees,
       color: shift.color,
@@ -1036,7 +1030,6 @@ export const generateAssignments = async (req: Request, res: Response): Promise<
         planId: firstShift.planId,
         timeSlotId: firstShift.timeSlotId,
         dayOfWeek: firstShift.dayOfWeek,
-        requiredEmployees: firstShift.requiredEmployees,
         minEmployees: firstShift.minEmployees,
         maxEmployees: firstShift.maxEmployees,
         color: firstShift.color,
@@ -1085,7 +1078,6 @@ export const generateAssignments = async (req: Request, res: Response): Promise<
         planId: shift.planId,
         timeSlotId: shift.timeSlotId,
         dayOfWeek: shift.dayOfWeek,
-        requiredEmployees: shift.requiredEmployees,
         minEmployees: shift.minEmployees,
         maxEmployees: shift.maxEmployees,
         color: shift.color,
@@ -1453,7 +1445,7 @@ export const getPlanStatistics = async (req: Request, res: Response): Promise<vo
     }, {} as Record<number, number>);
 
     // Calculate total required employees across all shifts
-    const totalRequiredEmployees = shifts.reduce((sum, shift) => sum + shift.requiredEmployees, 0);
+    const totalRequiredEmployees = shifts.reduce((sum, shift) => sum + shift.minEmployees, 0);
 
     const statistics = {
       planInfo: {
@@ -1786,7 +1778,7 @@ export const exportShiftPlanToExcel = async (req: Request, res: Response): Promi
                 (s: any) => s.dayOfWeek === day.id && s.timeSlotId === timeSlot.id
               ) || [];
               const totalRequired = shiftsForSlot.reduce(
-                (sum: number, s: any) => sum + s.requiredEmployees,
+                (sum: number, s: any) => sum + s.min_employees,
                 0
               );
               rowData.push(totalRequired === 0 ? '-' : `0/${totalRequired}`);
@@ -2231,7 +2223,7 @@ export const exportShiftPlanToPDF = async (req: Request, res: Response): Promise
           s.dayOfWeek === day.id && s.timeSlotId === timeSlot.id
         ) || [];
         const totalRequired = shiftsForSlot.reduce((sum: number, s: any) =>
-          sum + s.requiredEmployees, 0
+          sum + s.min_employees, 0
         );
         const displayText = totalRequired === 0 ? '-' : `0/${totalRequired}`;
         return `<td class="required-count">${displayText}</td>`;
