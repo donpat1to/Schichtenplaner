@@ -18,6 +18,7 @@ import { useWeeklySwapValidation, WeeklySwapTarget } from '../../hooks/useWeekly
 import { useSwapValidation, SwapTarget } from '../../hooks/useSwapValidation';
 import { useManualAssignmentValidation, SchedulableEmployee } from '../../hooks/useManualAssignmentValidation';
 import { useManualWeekAssignmentValidation, SchedulableWeeklyEmployee, WeekDropTarget } from '../../hooks/useManualWeekAssignmentValidation';
+import { useShiftPlanFeasibility, useWeeklyPlanFeasibility } from '../../hooks/useFeasibilityCheck';
 import { shiftPlanService } from '../../services/shiftPlanService';
 import { weeklyPlanService } from '../../services/weeklyPlanService';
 import { employeeService } from '../../services/employeeService';
@@ -190,6 +191,16 @@ const PlanView: React.FC = () => {
     employees: weeklyPlan?.employees || [],
     assignments: weeklyManualAssignments,
   });
+
+  // Feasibility check hooks
+  const { feasibilityResult: shiftFeasibility, missingAvailability: shiftMissing } =
+    useShiftPlanFeasibility({ shiftPlan, employees, availabilities });
+
+  const { feasibilityResult: weeklyFeasibility, missingAvailability: weeklyMissing } =
+    useWeeklyPlanFeasibility({ weeklyPlan });
+
+  const feasibilityResult = planType === 'shift' ? shiftFeasibility : weeklyFeasibility;
+  const missingAvailability = planType === 'shift' ? shiftMissing : weeklyMissing;
 
   // Get eligible targets when source is selected (shift swap)
   const shiftEligibleTargets = useMemo<Map<string, SwapTarget>>(() => {
@@ -1557,6 +1568,56 @@ const PlanView: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* Missing Employees List - shown when percentage !== 100 */}
+          {availabilityStatus.percentage !== 100 && missingAvailability.employeeNames.length > 0 && (
+            <div className={styles.missingEmployees}>
+              <div className={styles.missingEmployeesHeader}>
+                Fehlende Verfügbarkeiten:
+              </div>
+              <div className={styles.missingEmployeesList}>
+                {missingAvailability.employeeNames.map((name, index) => (
+                  <span key={index} className={styles.missingEmployeeName}>
+                    {name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Feasibility Check Result - shown when percentage === 100 */}
+          {availabilityStatus.percentage === 100 && feasibilityResult && (
+            <div className={styles.feasibilityResult}>
+              <div className={`${styles.feasibilityHeader} ${feasibilityResult.isFeasible ? styles.feasibilitySuccess : styles.feasibilityWarning}`}>
+                {feasibilityResult.isFeasible ? (
+                  <>
+                    <span>✓</span>
+                    <span>Machbarkeitsprüfung: Erfolgreich</span>
+                  </>
+                ) : (
+                  <>
+                    <span>ℹ️</span>
+                    <span>Machbarkeitsprüfung: Hinweise</span>
+                  </>
+                )}
+              </div>
+              {feasibilityResult.issues.length > 0 && (
+                <div className={styles.feasibilityReport}>
+                  {feasibilityResult.issues.map((issue, index) => (
+                    <div key={index} className={styles.feasibilityIssue}>
+                      <span className={styles.infoIcon}>ℹ️</span>
+                      <div className={styles.issueContent}>
+                        <div className={styles.issueMessage}>{issue.message}</div>
+                        {issue.details && (
+                          <div className={styles.issueDetails}>{issue.details}</div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Publish buttons for both plan types when assignments exist */}
           {hasAssignments && (

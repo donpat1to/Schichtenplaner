@@ -26,11 +26,11 @@ const EmployeeManagement: React.FC = () => {
     try {
       setLoading(true);
       console.log('🔄 Loading employees...');
-      
+
       // Add cache-busting parameter to prevent browser caching
       const data = await employeeService.getEmployees(true);
       console.log('✅ Employees loaded:', data);
-      
+
       setEmployees(data);
     } catch (err: any) {
       console.error('❌ Error loading employees:', err);
@@ -93,19 +93,19 @@ const EmployeeManagement: React.FC = () => {
   const handleDeleteEmployee = async (employee: Employee) => {
     try {
       const fullName = getFullName(employee);
-      
+
       // Bestätigungs-Dialog basierend auf Rolle
       let confirmMessage = `Möchten Sie den Mitarbeiter "${fullName}" (${employee.email}) wirklich PERMANENT LÖSCHEN?\n\nDie Daten des Mitarbeiters werden unwiderruflich gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.`;
       let confirmTitle = 'Mitarbeiter löschen';
-      
+
       // Check if employee has admin role (now in roles array)
       const isAdmin = employee.roles?.includes('admin') || false;
-      
+
       if (isAdmin) {
-        const adminCount = employees.filter(emp => 
+        const adminCount = employees.filter(emp =>
           (emp.roles?.includes('admin') || false) && emp.isActive
         ).length;
-        
+
         if (adminCount <= 1) {
           showNotification({
             type: 'error',
@@ -114,7 +114,7 @@ const EmployeeManagement: React.FC = () => {
           });
           return;
         }
-        
+
         confirmTitle = 'Administrator löschen';
         confirmMessage = `Möchten Sie den Administrator "${fullName}" (${employee.email}) wirklich PERMANENT LÖSCHEN?\n\nAchtung: Diese Aktion ist permanent und kann nicht rückgängig gemacht werden.`;
       }
@@ -132,11 +132,11 @@ const EmployeeManagement: React.FC = () => {
       console.log('Starting deletion process for employee:', fullName);
       await employeeService.deleteEmployee(employee.id);
       console.log('Employee deleted, reloading list');
-      
+
       // Force a fresh reload of employees
       const updatedEmployees = await employeeService.getEmployees();
       setEmployees(updatedEmployees);
-      
+
       showNotification({
         type: 'success',
         title: 'Erfolg',
@@ -170,10 +170,10 @@ const EmployeeManagement: React.FC = () => {
 
   return (
     <div>
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
         marginBottom: '30px',
         flexWrap: 'wrap',
         gap: '15px'

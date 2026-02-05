@@ -883,13 +883,14 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
 
   return (
     <div style={{
-      maxWidth: '1900px',
+      position: 'relative',
+      maxWidth: '100 %',
       margin: '0 auto',
       backgroundColor: 'white',
-      padding: '30px',
+      padding: '20px',
       borderRadius: '8px',
       border: '1px solid #e0e0e0',
-      boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+      boxShadow: '0 8px 15px rgba(0,0,0,0.05)'
     }}>
       <h2 style={{
         margin: '0 0 25px 0',

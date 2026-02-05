@@ -365,6 +365,98 @@
   font-size: 14px;
 }
 
+/* Feasibility Check Result */
+.feasibilityResult {
+  margin-top: 20px;
+  padding: 15px;
+  background-color: #e8f4fd;
+  border: 1px solid #b8d4f0;
+  border-radius: 8px;
+}
+
+.feasibilityHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.feasibilitySuccess {
+  color: #27ae60;
+}
+
+.feasibilityWarning {
+  color: #e67e22;
+}
+
+.feasibilityReport {
+  margin-top: 10px;
+}
+
+.feasibilityIssue {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid #d4e5f7;
+}
+
+.feasibilityIssue:last-child {
+  border-bottom: none;
+}
+
+.infoIcon {
+  flex-shrink: 0;
+  font-size: 14px;
+}
+
+.issueContent {
+  flex: 1;
+}
+
+.issueMessage {
+  font-weight: 500;
+  color: #2c3e50;
+}
+
+.issueDetails {
+  font-size: 13px;
+  color: #666;
+  margin-top: 2px;
+}
+
+/* Missing Employees Box */
+.missingEmployees {
+  margin-top: 15px;
+  padding: 12px;
+  background-color: #fff8e6;
+  border: 1px solid #ffe0b2;
+  border-radius: 4px;
+}
+
+.missingEmployeesHeader {
+  font-weight: 600;
+  color: #e67e22;
+  margin-bottom: 8px;
+}
+
+.missingEmployeesList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.missingEmployeeName {
+  background-color: #fff3cd;
+  border: 1px solid #ffc107;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #856404;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .header {
