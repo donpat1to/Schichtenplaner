@@ -413,7 +413,7 @@ const Timetable: React.FC<TimetableProps> = ({
                     maxCount={shift.maxEmployees}
                 >
                     {assignedEmployees.length > 0 ? (
-                        <div className={styles.employeeBoxContainer}>
+                        <div className={styles.employeeContainer}>
                             {renderEmployeeBoxes(assignedEmployees, shift.id)}
                         </div>
                     ) : (
@@ -435,7 +435,7 @@ const Timetable: React.FC<TimetableProps> = ({
 
             if (assignedEmployees.length > 0) {
                 return (
-                    <div className={styles.employeeBoxContainer}>
+                    <div className={styles.employeeContainer}>
                         {renderEmployeeBoxes(assignedEmployees, shift?.id || '')}
                     </div>
                 );

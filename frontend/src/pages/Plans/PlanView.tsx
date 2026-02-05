@@ -1592,12 +1592,12 @@ const PlanView: React.FC = () => {
                 {feasibilityResult.isFeasible ? (
                   <>
                     <span>✓</span>
-                    <span>Machbarkeitsprüfung: Erfolgreich</span>
+                    <span>Realisierbarkeits-Check: Erfolgreich</span>
                   </>
                 ) : (
                   <>
                     <span>ℹ️</span>
-                    <span>Machbarkeitsprüfung: Hinweise</span>
+                    <span> Realisierbarkeits-Check: Hinweise</span>
                   </>
                 )}
               </div>
