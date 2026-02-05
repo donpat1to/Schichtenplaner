@@ -14,7 +14,7 @@ export const BUTTON_COLORS = {
 
 // Icon constants for uniform usage
 export const ICONS = {
-  delete: '-',
+  delete: '×',
   add: '+',
   edit: '✎',
   close: '✕',
@@ -192,7 +192,7 @@ Implementation Example:
           }}>
             {/* Export Dropdown Container *//*}
 <div
-  ref={ dropdownRef }
+ref={ dropdownRef }
 style = {{
 transform: exportType ? `translateX(-${dropdownWidth}px)` : 'translateX(0)',
 transition: 'transform 0.05s ease-in-out',
@@ -200,7 +200,7 @@ position: 'relative'
 }}
 >
 <select
-    value={ exportType || '' }
+value={ exportType || '' }
 onChange = {(e) => setExportType(e.target.value as 'pdf' | 'excel' | null)}
 style = {{
 padding: '10px 10px',
@@ -210,7 +210,7 @@ borderRadius: '4px',
 cursor: 'pointer',
 minWidth: '100px'
 }}
-  >
+>
 <option value="" > Export </option>
 < option value = "pdf" > PDF </option>
 < option value = "excel" > Excel </option>

@@ -4,6 +4,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { EmployeeWithPreferences, PlanWeek } from '../../models/WeeklyPlan';
 import { WeekDropTarget } from '../../hooks/useManualWeekAssignmentValidation';
 import DraggableEmployeeBox from '../SwapMode/DraggableEmployeeBox';
+import { ICONS } from '../../utils/buttonStyles';
 import styles from './Calendar.module.css';
 
 export interface CalendarProps {
@@ -106,7 +107,7 @@ const Calendar: React.FC<CalendarProps> = ({
     validDropTargets,
     onRemoveAssignment,
     manualAssignments = [],
-    hideNavigation = false,
+    hideNavigation = mode === 'view',
 }) => {
     const monthNames = [
         'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
@@ -307,14 +308,14 @@ const Calendar: React.FC<CalendarProps> = ({
                         <span>{employee.firstname} {employee.lastname}</span>
                         {!isManager && onRemoveAssignment && (
                             <button
-                                className={styles.removeButton}
+                                className={styles.removeAssignmentButton}
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onRemoveAssignment(weekId, employee.id);
                                 }}
                                 title="Zuweisung entfernen"
                             >
-                                ×
+                                {ICONS.delete}
                             </button>
                         )}
                     </div>

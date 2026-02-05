@@ -10,7 +10,7 @@ import ShiftCell from './ShiftCell';
 import AddDayButton from './AddDayButton';
 import DraggableEmployeeBox from '../SwapMode/DraggableEmployeeBox';
 import { formatTime } from '../../utils/formatters';
-import { ICONS, BUTTON_COLORS, smallDeleteButton } from '../../utils/buttonStyles';
+import { ICONS, BUTTON_COLORS } from '../../utils/buttonStyles';
 import styles from './Timetable.module.css';
 
 export interface DayInfo {
@@ -47,7 +47,6 @@ export interface TimetableProps {
     // UI customization
     headerTitle?: string;
     showLegend?: boolean;
-    compactMode?: boolean;
 
     // Swap mode props (drag-and-drop based)
     swapModeActive?: boolean;
@@ -92,7 +91,6 @@ const Timetable: React.FC<TimetableProps> = ({
     disabled = false,
     headerTitle = 'Schichtplan',
     showLegend = true,
-    compactMode = false,
     swapModeActive = false,
     sourceSelection = null,
     eligibleTargets = new Map(),
@@ -415,7 +413,7 @@ const Timetable: React.FC<TimetableProps> = ({
                     maxCount={shift.maxEmployees}
                 >
                     {assignedEmployees.length > 0 ? (
-                        <div className={styles.employeeContainer}>
+                        <div className={styles.employeeBoxContainer}>
                             {renderEmployeeBoxes(assignedEmployees, shift.id)}
                         </div>
                     ) : (
@@ -437,7 +435,7 @@ const Timetable: React.FC<TimetableProps> = ({
 
             if (assignedEmployees.length > 0) {
                 return (
-                    <div className={styles.employeeContainer}>
+                    <div className={styles.employeeBoxContainer}>
                         {renderEmployeeBoxes(assignedEmployees, shift?.id || '')}
                     </div>
                 );

@@ -279,23 +279,11 @@
     border-color: #27ae60;
 }
 
-.employeeContainer {
+.employeeBoxContainer {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
-    width: 100%;
-}
-
-.employeeBox {
-    color: white;
-    padding: 4px 8px;
-    border-radius: 4px;
-    margin-bottom: 2px;
-    font-size: 12px;
-    text-align: center;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
 }
 
 .shiftInfo {
@@ -483,33 +471,14 @@
     justify-content: center;
 }
 
-/* Improve employee container for dynamic content */
-.employeeContainer {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    /* Increased gap for better spacing */
-    width: 100%;
-    min-height: 40px;
-}
-
 .employeeBox {
-    color: white;
-    padding: 6px 8px;
-    /* Slightly increased padding */
+    padding: 4px 10px;
     border-radius: 4px;
-    margin-bottom: 2px;
+    color: white;
     font-size: 12px;
-    text-align: center;
+    font-weight: 500;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    line-height: 1.2;
-    min-height: 24px;
-    /* Ensure minimum height */
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
 }
 
 /* Ensure shift info adapts */
@@ -546,7 +515,7 @@
 
     .employeeBox {
         font-size: 10px;
-        padding: 4px 6px;
+        padding: 3px 6px;
     }
 
     .timeSlotCell {
@@ -649,36 +618,36 @@
 .employeeBoxWithRemove {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding-right: 4px;
-}
-
-.employeeBoxWithRemove .employeeName {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    gap: 4px;
+    padding: 4px 6px 4px 10px;
+    border-radius: 4px;
+    color: white;
+    font-size: 12px;
+    font-weight: 500;
     white-space: nowrap;
-    margin-right: 4px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
 }
 
 .removeAssignmentButton {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: rgba(255, 255, 255, 0.8);
-    font-size: 12px;
-    padding: 2px 4px;
-    border-radius: 3px;
-    transition: background-color 0.2s, color 0.2s;
-    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background-color: rgba(255, 255, 255, 0.3);
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    line-height: 1;
 }
 
 .removeAssignmentButton:hover {
-    background-color: rgba(255, 255, 255, 0.2);
-    color: white;
+    background-color: rgba(255, 255, 255, 0.5);
 }
 
 /* Responsive adjustments for manual assignment mode */
