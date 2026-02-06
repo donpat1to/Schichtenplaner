@@ -4,7 +4,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { Shift, TimeSlot, ShiftAssignment } from '../../models/ShiftPlan';
 import { Employee } from '../../models/Employee';
 import { AssignmentResult } from '../../models/scheduling';
-import { DropTarget } from '../../hooks/useManualAssignmentValidation';
+import { DropTarget, ShiftPriority } from '../../hooks/useManualAssignmentValidation';
 import TimeSlotEditor from './TimeSlotEditor';
 import ShiftCell from './ShiftCell';
 import AddDayButton from './AddDayButton';
@@ -58,6 +58,7 @@ export interface TimetableProps {
     draggedEmployeeId?: string | null;
     validDropTargets?: Map<string, DropTarget>;
     onRemoveAssignment?: (shiftId: string, employeeId: string) => void;
+    shiftPriorities?: Map<string, ShiftPriority>;
 }
 
 const DEFAULT_DAYS: DayInfo[] = [
@@ -98,6 +99,7 @@ const Timetable: React.FC<TimetableProps> = ({
     draggedEmployeeId = null,
     validDropTargets,
     onRemoveAssignment,
+    shiftPriorities,
 }) => {
     const [showAddTimeSlot, setShowAddTimeSlot] = useState(false);
     const [newTimeSlot, setNewTimeSlot] = useState({
@@ -351,7 +353,9 @@ const Timetable: React.FC<TimetableProps> = ({
         invalidReason?: string;
         currentCount: number;
         maxCount: number;
-    }> = ({ shiftId, children, isValidTarget, invalidReason, currentCount, maxCount }) => {
+        priorityIndex?: number;
+        availableEmployeeNames?: string[];
+    }> = ({ shiftId, children, isValidTarget, invalidReason, currentCount, maxCount, priorityIndex, availableEmployeeNames }) => {
         const { setNodeRef, isOver } = useDroppable({
             id: `shift-drop::${shiftId}`,
         });
@@ -372,13 +376,31 @@ const Timetable: React.FC<TimetableProps> = ({
             }
         }
 
+        // Build tooltip text
+        const buildTooltip = () => {
+            if (!isValidTarget && invalidReason) return invalidReason;
+
+            let tooltip = `${currentCount}/${maxCount} zugewiesen`;
+            if (availableEmployeeNames && availableEmployeeNames.length > 0) {
+                tooltip += `\n\nVerfügbare Mitarbeiter (${availableEmployeeNames.length}):\n• ${availableEmployeeNames.join('\n• ')}`;
+            } else if (availableEmployeeNames) {
+                tooltip += '\n\nKeine verfügbaren Mitarbeiter';
+            }
+            return tooltip;
+        };
+
         return (
             <div
                 ref={setNodeRef}
                 className={styles.droppableZone}
                 style={{ border: borderStyle, backgroundColor }}
-                title={!isValidTarget && invalidReason ? invalidReason : `${currentCount}/${maxCount} zugewiesen`}
+                title={buildTooltip()}
             >
+                {priorityIndex !== undefined && (
+                    <div className={styles.priorityBadge}>
+                        {priorityIndex}
+                    </div>
+                )}
                 {children}
                 {showDropFeedback && (
                     <div className={styles.dropIndicator}>
@@ -403,6 +425,7 @@ const Timetable: React.FC<TimetableProps> = ({
             const dropTarget = validDropTargets?.get(shift.id);
             const isValidTarget = dropTarget?.isValid ?? false;
             const invalidReason = dropTarget?.reason;
+            const priority = shiftPriorities?.get(shift.id);
 
             return (
                 <DroppableShiftZone
@@ -411,6 +434,8 @@ const Timetable: React.FC<TimetableProps> = ({
                     invalidReason={invalidReason}
                     currentCount={assignedEmployees.length}
                     maxCount={shift.maxEmployees}
+                    priorityIndex={priority?.priorityIndex}
+                    availableEmployeeNames={priority?.availableEmployeeNames}
                 >
                     {assignedEmployees.length > 0 ? (
                         <div className={styles.employeeContainer}>

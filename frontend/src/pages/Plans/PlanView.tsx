@@ -171,6 +171,7 @@ const PlanView: React.FC = () => {
     canDropOnShift,
     getShiftStatus,
     validateSchedule,
+    shiftPriorities,
   } = useManualAssignmentValidation({
     shifts: shiftPlan?.shifts || [],
     employees,
@@ -1769,6 +1770,7 @@ const PlanView: React.FC = () => {
                   draggedEmployeeId={draggedEmployeeId}
                   validDropTargets={draggedEmployeeId ? getValidDropTargets(draggedEmployeeId) : undefined}
                   onRemoveAssignment={handleRemoveManualAssignment}
+                  shiftPriorities={shiftPriorities}
                 />
                 <DragOverlay>
                   {draggedEmployeeId ? (() => {

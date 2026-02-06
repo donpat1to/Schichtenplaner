@@ -18,6 +18,13 @@ export interface DropTarget {
   reason?: string;
 }
 
+export interface ShiftPriority {
+  shiftId: string;
+  availableCount: number;
+  priorityIndex: number;  // 1 = highest priority (fewest available)
+  availableEmployeeNames: string[];  // Names of employees available for this shift
+}
+
 interface UseManualAssignmentValidationProps {
   shifts: Shift[];
   employees: Employee[];
@@ -59,6 +66,42 @@ export function useManualAssignmentValidation({
   const managers = useMemo(() => {
     return employees.filter(emp => emp.employeeType === 'manager' && emp.isActive);
   }, [employees]);
+
+  // Calculate shift priorities based on available personnel count
+  const shiftPriorities = useMemo<Map<string, ShiftPriority>>(() => {
+    const personnelEmployees = employees.filter(
+      emp => emp.employeeType === 'personell' && emp.isActive
+    );
+
+    const shiftsWithCounts = shifts.map(shift => {
+      const availableEmps = personnelEmployees.filter(emp => {
+        const availability = availabilities.find(
+          a => a.employeeId === emp.id && a.shiftId === shift.id
+        );
+        return availability && availability.preferenceLevel <= 2;
+      });
+
+      const availableEmployeeNames = availableEmps.map(emp =>
+        `${emp.firstname || ''} ${emp.lastname || ''}`.trim() || emp.username
+      );
+
+      return {
+        shiftId: shift.id,
+        availableCount: availableEmps.length,
+        priorityIndex: 0,
+        availableEmployeeNames
+      };
+    });
+
+    // Sort by available count (ascending) - fewer available = higher priority
+    const sorted = [...shiftsWithCounts].sort((a, b) => a.availableCount - b.availableCount);
+    sorted.forEach((item, idx) => { item.priorityIndex = idx + 1; });
+
+    const priorityMap = new Map<string, ShiftPriority>();
+    shiftsWithCounts.forEach(item => priorityMap.set(item.shiftId, item));
+
+    return priorityMap;
+  }, [shifts, employees, availabilities]);
 
   // Check if employee is available for a shift (preference 1 or 2)
   const isEmployeeAvailable = useCallback((employeeId: string, shiftId: string): boolean => {
@@ -239,5 +282,6 @@ export function useManualAssignmentValidation({
     getShiftStatus,
     validateSchedule,
     isEmployeeAvailable,
+    shiftPriorities,
   };
 }
