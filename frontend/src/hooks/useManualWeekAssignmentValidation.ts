@@ -157,7 +157,7 @@ export function useManualWeekAssignmentValidation({
 
     // Check availability
     if (!isEmployeeAvailable(employeeId, weekId)) {
-      return { valid: false, reason: 'Mitarbeiter ist für diese Woche nicht verfügbar (Präferenz 3 oder keine Angabe)' };
+      return { valid: false, reason: 'Mitarbeiter ist für diese Woche nicht verfügbar (Präferenz 3)' };
     }
 
     // Check week capacity

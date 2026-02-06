@@ -348,22 +348,48 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
     setRequiredWeeksChanged(true);
   };
 
+  // Unified preference cycling: undefined/3 -> 1 -> 2 -> 3 -> 1
+  const getNextPreferenceLevel = (current: AvailabilityLevel | undefined): AvailabilityLevel => {
+    if (current === undefined || current === 3) return 1;
+    return (current + 1) as AvailabilityLevel;
+  };
+
   const toggleWeeklyPreference = (weekId: string) => {
     if (!canEdit) return;
 
     setWeeklyPreferencesMap(prev => {
       const current = prev[weekId];
-      // Cycle: undefined -> 1 (preferred) -> 2 (available) -> 3 (unavailable) -> remove
-      if (current === undefined) {
-        return { ...prev, [weekId]: 1 };
-      } else if (current === 1) {
-        return { ...prev, [weekId]: 2 };
-      } else if (current === 2) {
-        return { ...prev, [weekId]: 3 };
+      const nextLevel = getNextPreferenceLevel(current);
+      return { ...prev, [weekId]: nextLevel };
+    });
+  };
+
+  const toggleShiftPreference = (shiftId: string) => {
+    if (!canEdit) return;
+
+    setAvailabilities(prev => {
+      const existingIndex = prev.findIndex(avail => avail.shiftId === shiftId);
+
+      if (existingIndex >= 0) {
+        const nextLevel = getNextPreferenceLevel(prev[existingIndex].preferenceLevel);
+        const updated = [...prev];
+        updated[existingIndex] = {
+          ...updated[existingIndex],
+          preferenceLevel: nextLevel,
+          isAvailable: nextLevel !== 3
+        };
+        return updated;
       } else {
-        // current === 3, remove it
-        const { [weekId]: _, ...rest } = prev;
-        return rest;
+        // No existing preference, start with level 1 (Bevorzugt)
+        return [...prev, {
+          id: `temp-${shiftId}-${Date.now()}`,
+          employeeId: employee.id,
+          planId: selectedPlanId,
+          shiftId: shiftId,
+          contractType: employee.contractType,
+          preferenceLevel: 1 as AvailabilityLevel,
+          isAvailable: true
+        }];
       }
     });
   };
@@ -384,16 +410,6 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
   const getAvailabilityForShift = (shiftId: string): AvailabilityLevel => {
     const availability = availabilities.find(avail => avail.shiftId === shiftId);
     return availability?.preferenceLevel || 3;
-  };
-
-  const getPreferenceDisplay = (level: 1 | 2 | 3 | undefined) => {
-    if (!level) return { text: '-', color: '#e0e0e0', bg: '#f8f8f8' };
-    const displays = {
-      1: { text: 'Bevorzugt', color: '#22c55e', bg: '#dcfce7' },
-      2: { text: 'Verfügbar', color: '#eab308', bg: '#fef9c3' },
-      3: { text: 'Nicht verf.', color: '#ef4444', bg: '#fee2e2' },
-    };
-    return displays[level];
   };
 
   // Render shift plan timetable
@@ -545,13 +561,8 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                         textAlign: 'center',
                         backgroundColor: levelConfig?.bgColor || 'white'
                       }}>
-                        <select
-                          value={currentLevel}
-                          onChange={(e) => {
-                            const newLevel = parseInt(e.target.value) as AvailabilityLevel;
-                            handleAvailabilityLevelChange(shift.id, newLevel);
-                          }}
-                          disabled={!canEdit}
+                        <div
+                          onClick={() => toggleShiftPreference(shift.id)}
                           style={{
                             padding: '8px 12px',
                             border: `2px solid ${levelConfig?.color || '#ddd'}`,
@@ -562,23 +573,19 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                             minWidth: '140px',
                             cursor: canEdit ? 'pointer' : 'not-allowed',
                             textAlign: 'center',
-                            opacity: canEdit ? 1 : 0.7
+                            opacity: canEdit ? 1 : 0.7,
+                            userSelect: 'none',
+                            transition: 'all 0.2s ease'
                           }}
+                          title={canEdit ? 'Klicken zum Ändern' : 'Bearbeitung nicht erlaubt'}
                         >
-                          {availabilityLevels.map(level => (
-                            <option
-                              key={level.level}
-                              value={level.level}
-                              style={{
-                                backgroundColor: level.bgColor,
-                                color: level.color,
-                                fontWeight: 'bold'
-                              }}
-                            >
-                              {level.level}: {level.label}
-                            </option>
-                          ))}
-                        </select>
+                          <div>{levelConfig?.level}: {levelConfig?.label}</div>
+                          {canEdit && (
+                            <div style={{ fontSize: '10px', opacity: 0.7, marginTop: '2px' }}>
+                              Klicken zum Ändern
+                            </div>
+                          )}
+                        </div>
                       </td>
                     );
                   })}
@@ -820,13 +827,11 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
     }
 
     // Für alle Wochen im Plan sicherstellen, dass wir einen Wert haben
-    // Wenn undefined, dann 3 (Nicht möglich) setzen
     const preferences = selectedWeeklyPlan.weeks.map(week => {
       const level = weeklyPreferencesMap[week.id];
       return {
         weekId: week.id,
-        // Wenn undefined, dann 3, ansonsten den gesetzten Wert
-        preferenceLevel: level !== undefined ? level : 3,
+        preferenceLevel: level,
       };
     });
 

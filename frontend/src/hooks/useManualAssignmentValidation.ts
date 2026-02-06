@@ -208,7 +208,7 @@ export function useManualAssignmentValidation({
 
     // Check availability
     if (!isEmployeeAvailable(employeeId, shiftId)) {
-      return { valid: false, reason: 'Mitarbeiter ist für diese Schicht nicht verfügbar (Präferenz 3 oder keine Angabe)' };
+      return { valid: false, reason: 'Mitarbeiter ist für diese Schicht nicht verfügbar (Präferenz 3)' };
     }
 
     // Check same-day constraint

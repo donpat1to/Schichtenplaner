@@ -247,8 +247,7 @@ const Calendar: React.FC<CalendarProps> = ({
     };
 
     // Get preference display info
-    const getPreferenceDisplay = (level: 1 | 2 | 3 | undefined) => {
-        if (!level) return { text: 'Keine Angabe', color: '#999', bg: '#f8f8f8', borderColor: '#e0e0e0' };
+    const getPreferenceDisplay = (level: 1 | 2 | 3) => {
         const displays = {
             1: { text: '1: Bevorzugt', color: '#22c55e', bg: '#dcfce7', borderColor: '#22c55e' },
             2: { text: '2: Verfügbar', color: '#eab308', bg: '#fef9c3', borderColor: '#eab308' },
@@ -455,7 +454,7 @@ const Calendar: React.FC<CalendarProps> = ({
                                                         ? `Präferenz: ${day.dayInfo.preferenceLevel === 1 ? 'Bevorzugt' :
                                                             day.dayInfo.preferenceLevel === 2 ? 'Verfügbar' : 'Nicht verfügbar'
                                                         }`
-                                                        : undefined
+                                                        : ''
                                                 }
                                             >
                                                 <div className={styles.dayNumber}>{day.date.getDate()}</div>
@@ -554,7 +553,7 @@ const Calendar: React.FC<CalendarProps> = ({
                     <span>Außerhalb des Monats</span>
                 </div>
             </div>
-        </div>
+        </div >
     );
 };
 
