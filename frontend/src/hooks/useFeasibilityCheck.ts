@@ -85,9 +85,13 @@ export function useShiftPlanFeasibility({
 
     const issues: FeasibilityIssue[] = [];
 
-    // Filter relevant employees (personell and manager, not trainee)
+    // Filter relevant employees (personell)
     const schedulableEmployees = employees.filter(
-      emp => (emp.employeeType === 'personell' || emp.employeeType === 'manager') && !emp.isTrainee
+      emp => emp.employeeType === 'personell'
+    );
+    // Filter relevant employees (personell, not trainee)
+    const schedulableEmployeesTraineeSupervisionSensible = employees.filter(
+      emp => emp.employeeType === 'personell' && !emp.isTrainee
     );
 
     // Calculate total required slots (based on contractType: small=1, large=2)
@@ -126,7 +130,32 @@ export function useShiftPlanFeasibility({
       });
     }
 
-    // Check 2: Per-Shift availability
+    // Check 2: Per-Shift availability trainee supervision sensible
+    shiftPlan.shifts.forEach(shift => {
+      // Count available employees for this shift (pref 1 or 2, not trainee)
+      const availableForShift = availabilities.filter(
+        a =>
+          a.shiftId === shift.id &&
+          (a.preferenceLevel === 1 || a.preferenceLevel === 2) &&
+          schedulableEmployeesTraineeSupervisionSensible.some(emp => emp.id === a.employeeId)
+      );
+
+      const availableCount = availableForShift.length;
+
+      if (availableCount < shift.minEmployees) {
+        const dayName = WEEKDAY_NAMES[shift.dayOfWeek] || `Tag ${shift.dayOfWeek}`;
+        const timeSlotLabel = getTimeSlotLabel(shift.timeSlotId, shiftPlan.timeSlots);
+
+        issues.push({
+          type: 'per_slot',
+          severity: 'info',
+          message: `${dayName} ${timeSlotLabel}: Zu wenig verfügbare Mitarbeiter - Neuling allein`,
+          details: `Verfügbar: ${availableCount}, Minimum: ${shift.minEmployees}`
+        });
+      }
+    });
+
+    // Check 3: Per-Shift availability
     shiftPlan.shifts.forEach(shift => {
       // Count available employees for this shift (pref 1 or 2, not trainee)
       const availableForShift = availabilities.filter(
@@ -200,11 +229,18 @@ export function useWeeklyPlanFeasibility({
     }
 
     const issues: FeasibilityIssue[] = [];
-    const employees = weeklyPlan.employees;
+    // Filter relevant employees (personell)
+    const schedulableEmployees = weeklyPlan.employees.filter(
+      emp => emp.employeeType === 'personell'
+    );
+    // Filter relevant employees (personell, not trainee)
+    const schedulableEmployeesTraineeSupervisionSensible = weeklyPlan.employees.filter(
+      emp => emp.employeeType === 'personell' && !emp.isTrainee
+    );
     const weeks = weeklyPlan.weeks;
 
     // Calculate total required weeks (sum of requiredWeeks across all employees)
-    const totalRequired = employees.reduce((sum, emp) => sum + emp.requiredWeeks, 0);
+    const totalRequired = schedulableEmployees.reduce((sum, emp) => sum + emp.requiredWeeks, 0);
 
     // Calculate total min/max slots from weeks
     const totalMinSlots = weeks.reduce((sum, week) => sum + week.minEmployees, 0);
@@ -228,7 +264,7 @@ export function useWeeklyPlanFeasibility({
     }
 
     // Check 2: Individual Employee - each employee's requiredWeeks ≤ availableWeeks
-    employees.forEach(emp => {
+    schedulableEmployees.forEach(emp => {
       // Count weeks where employee has pref 1 or 2
       const availableWeeks = emp.preferences.filter(
         p => p.preferenceLevel === 1 || p.preferenceLevel === 2
@@ -248,7 +284,7 @@ export function useWeeklyPlanFeasibility({
     // Check 3: Per-Week availability
     weeks.forEach(week => {
       // Count employees available for this week (pref 1 or 2)
-      const availableCount = employees.filter(emp =>
+      const availableCount = schedulableEmployees.filter(emp =>
         emp.preferences.some(
           p => p.weekId === week.id && (p.preferenceLevel === 1 || p.preferenceLevel === 2)
         )
@@ -259,6 +295,25 @@ export function useWeeklyPlanFeasibility({
           type: 'per_slot',
           severity: 'info',
           message: `KW ${week.weekNumber}: Zu wenig verfügbare Mitarbeiter`,
+          details: `Verfügbar: ${availableCount}, Minimum: ${week.minEmployees}`
+        });
+      }
+    });
+
+    // Check 4: Per-Week availability trainee supervision sensible
+    weeks.forEach(week => {
+      // Count employees available for this week (pref 1 or 2)
+      const availableCount = schedulableEmployeesTraineeSupervisionSensible.filter(emp =>
+        emp.preferences.some(
+          p => p.weekId === week.id && (p.preferenceLevel === 1 || p.preferenceLevel === 2)
+        )
+      ).length;
+
+      if (availableCount < week.minEmployees) {
+        issues.push({
+          type: 'per_slot',
+          severity: 'info',
+          message: `KW ${week.weekNumber}: Zu wenig verfügbare Mitarbeiter - Neuling alleine`,
           details: `Verfügbar: ${availableCount}, Minimum: ${week.minEmployees}`
         });
       }
