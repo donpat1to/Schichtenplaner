@@ -9,7 +9,8 @@ import {
   getAvailabilities,
   updateAvailabilities,
   changePassword,
-  updateLastLogin
+  updateLastLogin,
+  checkConflicts
 } from '../controllers/employeeController.js';
 import {
   handleValidationErrors,

@@ -376,3 +376,60 @@ export function getShiftEmployees(shiftId: string, ctx: SwapConstraintContext): 
 
   return ctx.employees.filter(e => assignedIds.includes(e.id));
 }
+
+/**
+ * Find replacement candidates for an employee being removed from a shift
+ * Returns employees sorted by preference (level 1 first, then level 2)
+ */
+export function findReplacementCandidates(
+  shiftId: string,
+  excludeEmployeeId: string,
+  ctx: SwapConstraintContext
+): { employee: Employee; preferenceLevel: number }[] {
+  const shift = ctx.shifts.find(s => s.id === shiftId);
+  if (!shift) return [];
+
+  const candidates: { employee: Employee; preferenceLevel: number }[] = [];
+
+  for (const emp of ctx.employees) {
+    // Skip the employee being replaced
+    if (emp.id === excludeEmployeeId) continue;
+
+    // Skip non-personnel and managers
+    if (!isEligibleForScheduling(emp) || isManager(emp)) continue;
+
+    // Check if available for this shift
+    if (!isEmployeeAvailable(emp.id, shiftId, ctx)) continue;
+
+    // Check if already assigned to this shift
+    const alreadyAssigned = ctx.assignments.some(
+      a => a.shiftId === shiftId && a.employeeId === emp.id
+    );
+    if (alreadyAssigned) continue;
+
+    // Check if has another shift on the same day
+    if (!hasNoOtherShiftOnDay(emp.id, shiftId, null, ctx)) continue;
+
+    // Check contract limits
+    if (!wouldNotExceedContractShifts(emp.id, shiftId, null, ctx)) continue;
+
+    // Check trainee supervision would be maintained
+    if (!wouldHaveTraineeSupervision(shiftId, emp.id, excludeEmployeeId, ctx)) continue;
+
+    // Check if can work alone or with coworkers
+    if (!canEmployeeWorkAlone(emp.id, shiftId, emp.id, excludeEmployeeId, ctx)) continue;
+
+    // Get preference level
+    const availability = ctx.availabilities.find(
+      a => a.employeeId === emp.id && a.shiftId === shiftId
+    );
+    const preferenceLevel = availability?.preferenceLevel || 2;
+
+    candidates.push({ employee: emp, preferenceLevel });
+  }
+
+  // Sort by preference level (1 first, then 2)
+  candidates.sort((a, b) => a.preferenceLevel - b.preferenceLevel);
+
+  return candidates;
+}

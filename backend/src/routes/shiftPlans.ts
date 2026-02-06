@@ -19,7 +19,8 @@ import {
   generateAssignments,
   publishPlan,
   getPlanStatistics,
-  createAssignments
+  createAssignments,
+  resolveConflict
 } from '../controllers/shiftPlanController.js';
 import {
   validateShiftPlan,
@@ -70,5 +71,6 @@ router.get('/:id/statistics', validateId, handleValidationErrors, getPlanStatist
 // Export routes
 router.get('/:id/export/excel', validateId, handleValidationErrors, requireRole(['admin', 'maintenance']), exportShiftPlanToExcel);
 router.get('/:id/export/pdf', validateId, handleValidationErrors, requireRole(['admin', 'maintenance']), exportShiftPlanToPDF);
+
 
 export default router;

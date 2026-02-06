@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { EmployeeService, employeeService } from '../../../services/employeeService';
+import { employeeService, AvailabilityConflict, ConflictContextData } from '../../../services/employeeService';
 import { shiftPlanService } from '../../../services/shiftPlanService';
 import { weeklyPlanService } from '../../../services/weeklyPlanService';
 import { Employee, EmployeeAvailability } from '../../../models/Employee';
-import { ShiftPlan, TimeSlot, Shift } from '../../../models/ShiftPlan';
-import { WeeklyPlanWithDetails, PlanWeek, formatWeekRange, getCalendarWeekNumber } from '../../../models/WeeklyPlan';
+import { ShiftPlan, Shift, ShiftWithData, ShiftAssignment } from '../../../models/ShiftPlan';
+import { WeeklyPlanWithDetails } from '../../../models/WeeklyPlan';
 import { useNotification } from '../../../contexts/NotificationContext';
 import { useBackendValidation } from '../../../hooks/useBackendValidation';
 import { useAuth } from '../../../contexts/AuthContext';
 import Calendar from '../../../components/Calendar/Calendar';
+import ConflictResolutionModal from '../../../components/ConflictResolution/ConflictResolutionModal';
+import { findReplacementCandidates, SwapConstraintContext } from '../../../utils/swapConstraints';
 
 interface AvailabilityManagerProps {
   employee: Employee;
@@ -73,6 +75,11 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
   // Calendar month state for weekly plan view
   const [currentMonth, setCurrentMonth] = useState<Date>(() => new Date());
 
+  // Conflict detection state
+  const [conflicts, setConflicts] = useState<AvailabilityConflict[]>([]);
+  const [showConflictModal, setShowConflictModal] = useState(false);
+  const [pendingSaveData, setPendingSaveData] = useState<any>(null);
+
   const daysOfWeek = [
     { id: 1, name: 'Montag' },
     { id: 2, name: 'Dienstag' },
@@ -89,8 +96,15 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
     { level: 3 as AvailabilityLevel, label: 'Nicht möglich', color: '#e74c3c', bgColor: '#fadbd8', description: 'Nicht verfügbar' }
   ];
 
-  // Check permission - can edit if admin or own profile
-  const canEdit = isAdmin || isOwnProfile;
+  // Check if the selected plan is published
+  const isPlanPublished = planType === 'shift'
+    ? selectedPlan?.status === 'published'
+    : selectedWeeklyPlan?.status === 'published';
+
+  // Check permission - for published plans only admin can edit, for drafts admin or own profile
+  const canEdit = isPlanPublished
+    ? isAdmin
+    : (isAdmin || isOwnProfile);
 
   // Load initial data based on plan type
   useEffect(() => {
@@ -113,14 +127,15 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
             setLoading(false);
           }
         } else {
-          // Load weekly plans
+          // Load weekly plans - include draft and published for editing with conflict detection
           const plans = await weeklyPlanService.getWeeklyPlans();
-          // Filter only draft plans for preference editing
-          const draftPlans = plans.filter(p => p.status === 'draft');
-          setWeeklyPlans(draftPlans as any);
+          const editablePlans = plans.filter(p => p.status === 'draft' || p.status === 'published');
+          setWeeklyPlans(editablePlans as any);
 
-          if (draftPlans.length > 0) {
-            setSelectedWeeklyPlanId(draftPlans[0].id);
+          if (editablePlans.length > 0) {
+            // Prefer draft plans, but allow published
+            const draftPlan = editablePlans.find(p => p.status === 'draft');
+            setSelectedWeeklyPlanId(draftPlan?.id || editablePlans[0].id);
           } else {
             setLoading(false);
           }
@@ -300,47 +315,6 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       });
 
     return { days, shiftsByDay };
-  };
-
-  const handleAvailabilityLevelChange = (shiftId: string, level: AvailabilityLevel) => {
-    if (!shiftId || !canEdit) return;
-
-    setAvailabilities(prev => {
-      const existingIndex = prev.findIndex(avail => avail.shiftId === shiftId);
-
-      if (existingIndex >= 0) {
-        const updated = [...prev];
-        updated[existingIndex] = {
-          ...updated[existingIndex],
-          preferenceLevel: level,
-          isAvailable: level !== 3
-        };
-        return updated;
-      } else {
-        const newAvailability: Availability = {
-          id: `temp-${shiftId}-${Date.now()}`,
-          employeeId: employee.id,
-          planId: selectedPlanId,
-          shiftId: shiftId,
-          contractType: employee.contractType,
-          preferenceLevel: level,
-          isAvailable: level !== 3
-        };
-        return [...prev, newAvailability];
-      }
-    });
-  };
-
-  const handleWeeklyPreferenceChange = (weekId: string, level: AvailabilityLevel | 0) => {
-    if (!canEdit) return;
-
-    setWeeklyPreferencesMap(prev => {
-      if (level === 0) {
-        const { [weekId]: _, ...rest } = prev;
-        return rest;
-      }
-      return { ...prev, [weekId]: level as 1 | 2 | 3 };
-    });
   };
 
   const handleRequiredWeeksChange = (value: number) => {
@@ -790,18 +764,158 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
 
 
 
+    const requestData = {
+      planId: selectedPlanId,
+      availabilities: validAvailabilities.map(avail => ({
+        planId: selectedPlanId,
+        shiftId: avail.shiftId,
+        preferenceLevel: avail.preferenceLevel,
+        notes: avail.notes
+      }))
+    };
+
+    // Check for conflicts if plan is published
+    console.log('🔍 Checking if conflict detection needed:', {
+      planStatus: selectedPlan?.status,
+      isPublished: selectedPlan?.status === 'published',
+      employeeId: employee.id,
+      planId: selectedPlanId
+    });
+
+    if (selectedPlan?.status === 'published') {
+      try {
+        setSaving(true);
+        const unavailableShifts = validAvailabilities.filter(avail => avail.preferenceLevel === 3);
+        console.log('🔍 Shifts marked as unavailable:', unavailableShifts.map(a => a.shiftId));
+
+        const conflictCheckData = {
+          planId: selectedPlanId,
+          planType: 'shift' as const,
+          availabilities: validAvailabilities.map(avail => ({
+            shiftId: avail.shiftId,
+            preferenceLevel: avail.preferenceLevel
+          }))
+        };
+        console.log('🔍 Sending conflict check request:', conflictCheckData);
+
+        const conflictResult = await employeeService.checkAvailabilityConflicts(employee.id, conflictCheckData);
+        console.log('🔍 Conflict check result:', conflictResult);
+
+        if (conflictResult.conflicts && conflictResult.conflicts.length > 0) {
+          // Use frontend constraint checking for replacement candidates
+          let conflictsWithCandidates = conflictResult.conflicts;
+
+          if (conflictResult.contextData) {
+            const defaultCreatedAt = '1970-01-01T00:00:00.000Z';
+            const defaultAssignedAt = '1970-01-01T00:00:00.000Z';
+            const normalizeEmployeeType = (value: string): Employee['employeeType'] => {
+              const allowed = ['manager', 'personell', 'apprentice', 'guest'] as const;
+              return allowed.includes(value as (typeof allowed)[number]) ? (value as Employee['employeeType']) : 'personell';
+            };
+            const normalizeContractType = (value: string | null): Employee['contractType'] | undefined => {
+              if (value === 'small' || value === 'large' || value === 'flexible') return value;
+              return undefined;
+            };
+            const toEmployee = (e: ConflictContextData['employees'][number]): Employee => ({
+              id: e.id,
+              username: '',
+              email: '',
+              firstname: e.firstname,
+              lastname: e.lastname,
+              employeeType: normalizeEmployeeType(e.employeeType),
+              contractType: normalizeContractType(e.contractType),
+              canWorkAlone: e.canWorkAlone,
+              isTrainee: e.isTrainee,
+              isActive: e.isActive,
+              createdAt: defaultCreatedAt,
+              roles: [],
+            });
+            const toAssignment = (
+              a: ConflictContextData['assignments'][number],
+              planId: string
+            ): ShiftAssignment => ({
+              id: `${planId}-${a.shiftId}-${a.employeeId}`,
+              planId,
+              shiftId: a.shiftId,
+              employeeId: a.employeeId,
+              assignedAt: defaultAssignedAt,
+              assignedBy: 'system',
+            });
+
+            const assignments = conflictResult.contextData.assignments.map(a => toAssignment(a, selectedPlanId));
+
+            // Build SwapConstraintContext from backend data
+            const ctx: SwapConstraintContext = {
+              employees: conflictResult.contextData.employees.map(toEmployee),
+              shifts: conflictResult.contextData.shifts.map(s => ({
+                id: s.id,
+                planId: s.planId,
+                dayOfWeek: s.dayOfWeek,
+                timeSlotId: s.timeSlotId,
+                minEmployees: s.minEmployees,
+                maxEmployees: s.maxEmployees,
+                timeSlot: { id: s.timeSlotId, name: '', startTime: '', endTime: '' },
+                assignments: assignments.filter(a => a.shiftId === s.id)
+              })),
+              availabilities: conflictResult.contextData.availabilities.map(a => ({
+                id: `${selectedPlanId}-${a.shiftId}-${a.employeeId}`,
+                employeeId: a.employeeId,
+                planId: selectedPlanId,
+                shiftId: a.shiftId,
+                preferenceLevel: a.preferenceLevel as 1 | 2 | 3
+              })),
+              assignments
+            };
+
+            // Compute replacement candidates for each conflict using frontend logic
+            conflictsWithCandidates = conflictResult.conflicts.map(conflict => {
+              if (conflict.shiftId) {
+                const candidates = findReplacementCandidates(conflict.shiftId, conflict.employeeId, ctx);
+                return {
+                  ...conflict,
+                  replacementCandidates: candidates.map(c => ({
+                    employeeId: c.employee.id,
+                    employeeName: `${c.employee.firstname} ${c.employee.lastname}`,
+                    preferenceLevel: c.preferenceLevel,
+                    isTrainee: c.employee.isTrainee,
+                    canWorkAlone: c.employee.canWorkAlone,
+                    currentShiftCount: ctx.assignments.filter(a => a.employeeId === c.employee.id).length
+                  }))
+                };
+              }
+              return conflict;
+            });
+
+            console.log('🔍 Computed replacement candidates using frontend logic');
+          }
+
+          // Show conflict modal
+          console.log('⚠️ Conflicts found:', conflictsWithCandidates);
+          setConflicts(conflictsWithCandidates);
+          setPendingSaveData({ type: 'shift', data: requestData });
+          setShowConflictModal(true);
+          setSaving(false);
+          return;
+        } else {
+          console.log('✅ No conflicts found');
+        }
+      } catch (err) {
+        console.error('❌ Error checking conflicts:', err);
+        // Continue with save if conflict check fails
+      } finally {
+        setSaving(false);
+      }
+    } else {
+      console.log('ℹ️ Skipping conflict check - plan is not published');
+    }
+
+    // No conflicts, proceed with save
+    await performShiftSave(requestData);
+  };
+
+  const performShiftSave = async (requestData: any) => {
     await executeWithValidation(async () => {
       setSaving(true);
-
-      const requestData = {
-        planId: selectedPlanId,
-        availabilities: validAvailabilities.map(avail => ({
-          planId: selectedPlanId,
-          shiftId: avail.shiftId,
-          preferenceLevel: avail.preferenceLevel,
-          notes: avail.notes
-        }))
-      };
 
       await employeeService.updateAvailabilities(employee.id, requestData);
 
@@ -835,21 +949,49 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       };
     });
 
+    // Check for conflicts if plan is published
+    if (selectedWeeklyPlan.status === 'published') {
+      try {
+        setSaving(true);
+        const conflictResult = await employeeService.checkAvailabilityConflicts(employee.id, {
+          planId: selectedWeeklyPlanId,
+          planType: 'weekly',
+          availabilities: preferences.map(pref => ({
+            weekId: pref.weekId,
+            preferenceLevel: pref.preferenceLevel || 3
+          }))
+        });
+
+        if (conflictResult.conflicts && conflictResult.conflicts.length > 0) {
+          // Show conflict modal
+          setConflicts(conflictResult.conflicts);
+          setPendingSaveData({ type: 'weekly', data: { preferences, requiredWeeks } });
+          setShowConflictModal(true);
+          setSaving(false);
+          return;
+        }
+      } catch (err) {
+        console.error('Error checking conflicts:', err);
+        // Continue with save if conflict check fails
+      } finally {
+        setSaving(false);
+      }
+    }
+
+    // No conflicts, proceed with save
+    await performWeeklySave({ preferences, requiredWeeks });
+  };
+
+  const performWeeklySave = async (data: { preferences: any[]; requiredWeeks: number }) => {
     await executeWithValidation(async () => {
       setSaving(true);
 
       if (isOwnProfile) {
         // Save own preferences
-        await weeklyPlanService.saveMyPreferences(selectedWeeklyPlanId, {
-          preferences,
-          requiredWeeks,
-        });
+        await weeklyPlanService.saveMyPreferences(selectedWeeklyPlanId, data);
       } else if (isAdmin) {
         // Admin saving for another employee
-        await weeklyPlanService.saveEmployeePreferences(selectedWeeklyPlanId, employee.id, {
-          preferences,
-          requiredWeeks,
-        });
+        await weeklyPlanService.saveEmployeePreferences(selectedWeeklyPlanId, employee.id, data);
       }
 
       showNotification({
@@ -860,6 +1002,34 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
 
       window.dispatchEvent(new CustomEvent('weeklyPreferencesChanged'));
       onSave();
+    });
+  };
+
+  const handleConflictResolved = async () => {
+    setShowConflictModal(false);
+
+    // After resolving conflicts, proceed with the save
+    if (pendingSaveData) {
+      if (pendingSaveData.type === 'shift') {
+        await performShiftSave(pendingSaveData.data);
+      } else {
+        await performWeeklySave(pendingSaveData.data);
+      }
+    }
+
+    setConflicts([]);
+    setPendingSaveData(null);
+  };
+
+  const handleConflictCancel = () => {
+    setShowConflictModal(false);
+    setConflicts([]);
+    setPendingSaveData(null);
+
+    showNotification({
+      type: 'info',
+      title: 'Abgebrochen',
+      message: 'Verfügbarkeitsänderung wurde abgebrochen'
     });
   };
 
@@ -916,7 +1086,9 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
           borderRadius: '6px',
           color: '#856404'
         }}>
-          <strong>Hinweis:</strong> Sie können die Verfügbarkeiten dieses Mitarbeiters nur anzeigen, aber nicht bearbeiten.
+          <strong>Hinweis:</strong> {isPlanPublished && isOwnProfile
+            ? 'Der ausgewählte Plan ist bereits veröffentlicht. Nur Administratoren können Verfügbarkeiten für veröffentlichte Pläne ändern.'
+            : 'Sie können die Verfügbarkeiten dieses Mitarbeiters nur anzeigen, aber nicht bearbeiten.'}
         </div>
       )}
 
@@ -1019,6 +1191,19 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                 </div>
               )}
             </div>
+            {selectedPlan?.status === 'published' && (
+              <div style={{
+                marginTop: '10px',
+                padding: '10px',
+                backgroundColor: '#fff3cd',
+                border: '1px solid #ffeaa7',
+                borderRadius: '4px',
+                fontSize: '12px',
+                color: '#856404'
+              }}>
+                ⚠️ Dieser Plan ist veröffentlicht. Änderungen an Verfügbarkeiten erfordern möglicherweise eine Konfliktauflösung.
+              </div>
+            )}
           </div>
         ) : (
           <div>
@@ -1061,7 +1246,20 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                 borderRadius: '4px',
                 fontSize: '12px'
               }}>
-                ℹ️ Nur Wochenpläne im Entwurfsstatus können bearbeitet werden.
+                ℹ️ Keine Wochenpläne zur Bearbeitung verfügbar.
+              </div>
+            )}
+            {selectedWeeklyPlan?.status === 'published' && (
+              <div style={{
+                marginTop: '10px',
+                padding: '10px',
+                backgroundColor: '#fff3cd',
+                border: '1px solid #ffeaa7',
+                borderRadius: '4px',
+                fontSize: '12px',
+                color: '#856404'
+              }}>
+                ⚠️ Dieser Plan ist veröffentlicht. Änderungen an Verfügbarkeiten erfordern möglicherweise eine Konfliktauflösung.
               </div>
             )}
           </div>
@@ -1171,6 +1369,15 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
           </button>
         )}
       </div>
+
+      {/* Conflict Resolution Modal */}
+      <ConflictResolutionModal
+        isOpen={showConflictModal}
+        onClose={handleConflictCancel}
+        conflicts={conflicts}
+        onResolved={handleConflictResolved}
+        onCancel={handleConflictCancel}
+      />
     </div>
   );
 };

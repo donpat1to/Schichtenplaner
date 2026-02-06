@@ -10,6 +10,7 @@ import {
 } from '../models/ShiftPlan';
 import { TEMPLATE_PRESETS } from '../models/defaults/shiftPlanDefaults';
 import { apiClient } from './apiClient';
+import { ConflictResolution } from './employeeService';
 
 // Request types for time slot and shift operations
 export interface CreateTimeSlotRequest {
@@ -362,6 +363,23 @@ export const shiftPlanService = {
         throw new Error('Nicht authorisiert - bitte erneut anmelden');
       }
       throw new Error('Fehler beim Löschen der Schicht');
+    }
+  },
+
+  async resolveConflict(planId: string, resolution: ConflictResolution): Promise<{ success: boolean; message: string }> {
+    try {
+      console.log('🔄 Resolving shift plan conflict:', planId, resolution);
+      return await apiClient.post<{ success: boolean; message: string }>(
+        `/shift-plans/${planId}/resolve-conflict`,
+        resolution
+      );
+    } catch (error: any) {
+      if (error.statusCode === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('employee');
+        throw new Error('Nicht authorisiert - bitte erneut anmelden');
+      }
+      throw new Error('Fehler beim Auflösen des Konflikts');
     }
   },
 };
