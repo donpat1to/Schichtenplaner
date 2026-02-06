@@ -51,16 +51,17 @@
     margin-bottom: 4px;
 }
 
-.tableWrapper {
+/*.tableWrapper {
     overflow-x: auto;
-}
+    overflow-y: none;
+}*/
 
-.timetable {
+/*.timetable {
     width: 100%;
     border-collapse: collapse;
     background-color: white;
     overflow: none;
-}
+}*/
 
 .timeSlotHeader,
 .dayHeader,
@@ -420,11 +421,10 @@
 }
 
 .tableWrapper {
-    overflow-x: auto;
+    /*overflow-x: auto;*/
     max-height: 80vh;
     /* Limit maximum height for scroll */
-    overflow-y: auto;
-    /* Add vertical scroll for many rows */
+    overflow: hidden;
 }
 
 .timetable {
@@ -432,6 +432,7 @@
     border-collapse: collapse;
     background-color: white;
     table-layout: fixed;
+    overflow: hidden;
     /* Changed from auto to fixed for better control */
 }
 

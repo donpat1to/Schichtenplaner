@@ -100,6 +100,7 @@ const PlanView: React.FC = () => {
     targetShiftId: string;
   } | null>(null);
   const [isSavingShiftSwap, setIsSavingShiftSwap] = useState(false);
+  const bodyOverflowRef = useRef<string | null>(null);
 
   // Manual assignment mode state (shift plans)
   const [manualAssignmentModeActive, setManualAssignmentModeActive] = useState(false);
@@ -652,6 +653,29 @@ const PlanView: React.FC = () => {
     setShiftActiveDrag(null);
     setShiftTwoStepModal(null);
   }, []);
+
+  useEffect(() => {
+    if (shiftActiveDrag) {
+      if (bodyOverflowRef.current === null) {
+        bodyOverflowRef.current = document.body.style.overflow;
+      }
+      document.body.style.overflow = 'hidden';
+      document.body.style.overscrollBehavior = 'none';
+      return () => {
+        if (bodyOverflowRef.current !== null) {
+          document.body.style.overflow = bodyOverflowRef.current;
+          document.body.style.overscrollBehavior = '';
+          bodyOverflowRef.current = null;
+        }
+      };
+    }
+
+    if (bodyOverflowRef.current !== null) {
+      document.body.style.overflow = bodyOverflowRef.current;
+      document.body.style.overscrollBehavior = '';
+      bodyOverflowRef.current = null;
+    }
+  }, [shiftActiveDrag]);
 
   // Execute a single shift swap - updates localShiftAssignments
   const executeShiftSwap = useCallback((
