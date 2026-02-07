@@ -1511,7 +1511,7 @@ export const exportWeeklyPlanToPDF = async (req: Request, res: Response): Promis
 
     const pdfBuffer = await page.pdf({
       format: 'A4',
-      landscape: plan.weeks.length > 4,
+      landscape: true,
       printBackground: true,
       margin: { top: '15mm', right: '10mm', bottom: '15mm', left: '10mm' },
     });

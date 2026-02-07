@@ -1630,15 +1630,78 @@ export const exportShiftPlanToExcel = async (req: Request, res: Response): Promi
     const { id } = req.params;
     console.log('📊 Starting Excel export for plan:', id);
 
-    const plan = await getShiftPlanById(id);
-    if (!plan) {
+    // Get plan data using the helper function
+    const planData = await getShiftPlanById(id);
+
+    if (!planData) {
       res.status(404).json({ error: 'Shift plan not found' });
       return;
     }
-    if (plan.status !== 'published') {
+
+    if (planData.status !== 'published') {
       res.status(400).json({ error: 'Can only export published shift plans' });
       return;
     }
+
+    // Get all assignments with employee details
+    const allAssignments = await db.all<any>(`
+      SELECT 
+        sa.employee_id,
+        sa.shift_id,
+        e.firstname,
+        e.lastname,
+        e.email,
+        e.employee_type,
+        e.contract_type,
+        e.can_work_alone,
+        e.is_trainee,
+        er.role as employee_role
+      FROM shift_assignments sa
+      LEFT JOIN employees e ON sa.employee_id = e.id
+      LEFT JOIN employee_roles er ON e.id = er.employee_id
+      WHERE sa.plan_id = ?
+      ORDER BY e.firstname, e.lastname, sa.shift_id
+    `, [id]);
+
+    // Get all employees (including those without assignments)
+    const allEmployees = await db.all<any>(`
+      SELECT DISTINCT
+        e.id,
+        e.firstname,
+        e.lastname,
+        e.email,
+        e.employee_type,
+        e.contract_type,
+        e.can_work_alone,
+        e.is_trainee
+      FROM employees e
+      WHERE e.is_active = 1
+      ORDER BY e.firstname, e.lastname
+    `, []);
+
+    // Get roles for each employee
+    const employeeRoles = await db.all<any>(`
+      SELECT 
+        employee_id,
+        GROUP_CONCAT(role) as roles
+      FROM employee_roles
+      GROUP BY employee_id
+    `, []);
+
+    // Create roles map for quick lookup
+    const rolesMap = new Map<string, string>();
+    employeeRoles.forEach(role => {
+      rolesMap.set(role.employee_id, role.roles);
+    });
+
+    // Group assignments by shift
+    const assignmentsByShift: Record<string, any[]> = {};
+    allAssignments.forEach(assignment => {
+      if (!assignmentsByShift[assignment.shift_id]) {
+        assignmentsByShift[assignment.shift_id] = [];
+      }
+      assignmentsByShift[assignment.shift_id].push(assignment);
+    });
 
     // Create workbook
     const workbook = new ExcelJS.Workbook();
@@ -1655,14 +1718,15 @@ export const exportShiftPlanToExcel = async (req: Request, res: Response): Promi
     ];
 
     summarySheet.addRows([
-      { property: 'Plan Name', value: plan.name },
-      { property: 'Beschreibung', value: plan.description || 'Keine' },
-      { property: 'Zeitraum', value: `${plan.startDate} bis ${plan.endDate}` },
-      { property: 'Status', value: plan.status },
-      { property: 'Erstellt von', value: plan.created_by_name || 'Unbekannt' },
-      { property: 'Erstellt am', value: new Date(plan.createdAt).toLocaleString('de-DE') },
-      { property: 'Anzahl Schichten', value: plan.scheduledShifts?.length || 0 },
-      { property: 'Anzahl Mitarbeiter', value: plan.employees?.length || 0 }
+      { property: 'Plan Name', value: planData.name },
+      { property: 'Beschreibung', value: planData.description || 'Keine' },
+      { property: 'Zeitraum', value: `${planData.startDate} bis ${planData.endDate}` },
+      { property: 'Status', value: planData.status },
+      { property: 'Erstellt von', value: planData.created_by_name || 'Unbekannt' },
+      { property: 'Erstellt am', value: new Date(planData.createdAt).toLocaleString('de-DE') },
+      { property: 'Anzahl Schichten', value: planData.shifts?.length || 0 },
+      { property: 'Anzahl Mitarbeiter', value: allEmployees.length },
+      { property: 'Zuweisungen gesamt', value: allAssignments.length }
     ]);
 
     // Style header
@@ -1672,32 +1736,26 @@ export const exportShiftPlanToExcel = async (req: Request, res: Response): Promi
     summarySheet.columns.forEach(col => (col.alignment = { vertical: 'middle', wrapText: true }));
 
     /* -------------------------------------------------------------------------- */
-    /*                        📅 2. Timetable / Schichtplan Sheet                 */
+    /*                        📅 2. Detailed Timetable Sheet                      */
     /* -------------------------------------------------------------------------- */
-    const timetableSheet = workbook.addWorksheet('Schichtplan');
-    const timetableData = getTimetableDataForExport(plan);
+    const timetableSheet = workbook.addWorksheet('Schichtplan Details');
+
+    // Get timetable data
+    const timetableData = getTimetableDataForExport(planData);
     const { days, allTimeSlots } = timetableData;
 
-    // Calculate max employees per shift to determine row structure
-    let maxEmployeesPerShift = 1;
-    for (const timeSlot of allTimeSlots) {
-      for (const day of days) {
-        const scheduledShift = plan.scheduledShifts?.find(
-          (s: any) => getDayOfWeek(s.date) === day.id && s.timeSlotId === timeSlot.id
-        );
-        if (scheduledShift && scheduledShift.assignedEmployees?.length > maxEmployeesPerShift) {
-          maxEmployeesPerShift = scheduledShift.assignedEmployees.length;
-        }
-      }
-    }
+    // Create header row - more detailed
+    const headerRow = [
+      'Schicht',
+      'Zeit',
+      ...days.map(day => day.name)
+    ];
 
-    // Header
-    const headerRow = ['Schicht (Zeit)', ...days.map(d => d.name)];
     const header = timetableSheet.addRow(headerRow);
     header.eachCell(cell => {
       cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2C3E50' } };
-      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
       cell.border = {
         top: { style: 'thin' },
         left: { style: 'thin' },
@@ -1706,188 +1764,283 @@ export const exportShiftPlanToExcel = async (req: Request, res: Response): Promi
       };
     });
 
-    // Content rows - each time slot can have multiple employee rows
+    // Process each time slot
     for (const timeSlot of allTimeSlots) {
-      // Find max employees for this time slot across all days
-      let maxEmployeesInTimeSlot = 0;
-      for (const day of days) {
-        const scheduledShift = plan.scheduledShifts?.find(
-          (s: any) => getDayOfWeek(s.date) === day.id && s.timeSlotId === timeSlot.id
-        );
-        if (scheduledShift && scheduledShift.assignedEmployees?.length > maxEmployeesInTimeSlot) {
-          maxEmployeesInTimeSlot = scheduledShift.assignedEmployees.length;
-        }
-      }
+      // Add time slot header row
+      const timeSlotRow = timetableSheet.addRow([
+        timeSlot.name,
+        `${timeSlot.startTime} - ${timeSlot.endTime}`,
+        ...days.map(() => '') // Empty cells for days
+      ]);
 
-      // If no employees assigned, show at least one row with requirement count
-      const rowsToCreate = Math.max(maxEmployeesInTimeSlot, 1);
+      timeSlotRow.eachCell(cell => {
+        cell.font = { bold: true };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0F0F0' } };
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+        cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+      });
 
-      for (let empIndex = 0; empIndex < rowsToCreate; empIndex++) {
-        const rowData: any[] = [];
+      // For each day, list all assigned employees
+      days.forEach((day, dayIndex) => {
+        const shift = timeSlot.shiftsByDay[day.id];
+        const dayColumn = dayIndex + 3; // +3 because we have 2 columns before days
 
-        // First cell: time slot name (only in first row, merged for others)
-        if (empIndex === 0) {
-          rowData.push(`${timeSlot.name}\n${timeSlot.startTime} - ${timeSlot.endTime}`);
-        } else {
-          rowData.push(''); // Empty for merged cells
-        }
-
-        // Day cells
-        for (const day of days) {
-          const shift = timeSlot.shiftsByDay[day.id];
-
-          if (!shift) {
-            rowData.push(empIndex === 0 ? 'Keine Schicht' : '');
-            continue;
-          }
-
-          const scheduledShift = plan.scheduledShifts?.find(
-            (s: any) => getDayOfWeek(s.date) === day.id && s.timeSlotId === timeSlot.id
-          );
-
-          if (scheduledShift && scheduledShift.assignedEmployees?.length > 0) {
-            if (empIndex < scheduledShift.assignedEmployees.length) {
-              const empId = scheduledShift.assignedEmployees[empIndex];
-              const emp = plan.employees?.find((e: any) => e.id === empId);
-
-              if (!emp) {
-                rowData.push({ text: 'Unbekannt', color: 'FF888888' });
-              } else if (emp.isTrainee) {
-                rowData.push({
-                  text: `${emp.firstname} ${emp.lastname} (T)`,
-                  color: 'FFCDA8F0'
-                });
-              } else if (emp.employeeType === 'manager') {
-                rowData.push({
-                  text: `${emp.firstname} ${emp.lastname} (M)`,
-                  color: 'FFCC0000'
-                });
-              } else {
-                rowData.push({
-                  text: `${emp.firstname} ${emp.lastname}`,
-                  color: 'FF642AB5'
-                });
-              }
-            } else {
-              rowData.push(''); // Empty cell if no more employees
-            }
-          } else {
-            // No employees assigned, show requirement count only in first row
-            if (empIndex === 0) {
-              const shiftsForSlot = plan.shifts?.filter(
-                (s: any) => s.dayOfWeek === day.id && s.timeSlotId === timeSlot.id
-              ) || [];
-              const totalRequired = shiftsForSlot.reduce(
-                (sum: number, s: any) => sum + s.min_employees,
-                0
-              );
-              rowData.push(totalRequired === 0 ? '-' : `0/${totalRequired}`);
-            } else {
-              rowData.push('');
-            }
-          }
-        }
-
-        const row = timetableSheet.addRow(rowData);
-
-        row.eachCell((cell, colNumber) => {
-          cell.border = {
-            top: { style: 'thin' },
-            left: { style: 'thin' },
-            bottom: { style: 'thin' },
-            right: { style: 'thin' }
+        if (!shift) {
+          // No shift for this day
+          timeSlotRow.getCell(dayColumn).value = 'Keine Schicht';
+          timeSlotRow.getCell(dayColumn).font = { italic: true, color: { argb: 'FF888888' } };
+          timeSlotRow.getCell(dayColumn).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDEDED' } };
+          timeSlotRow.getCell(dayColumn).alignment = {
+            horizontal: 'center',
+            vertical: 'middle',
+            wrapText: true
           };
-          cell.alignment = { vertical: 'middle', wrapText: true, horizontal: 'center' };
+          return;
+        }
 
-          // Handle colored employee names
-          if (typeof cell.value === 'object' && cell.value !== null && 'text' in cell.value) {
-            const employeeData = cell.value as unknown as { text: string; color: string };
-            cell.value = employeeData.text;
-            cell.font = { color: { argb: employeeData.color } };
-            cell.alignment = { vertical: 'middle', horizontal: 'left' };
+        const assignments = assignmentsByShift[shift.id] || [];
+
+        if (assignments.length === 0) {
+          // No assignments, show requirement
+          const requirement = shift.minEmployees || 0;
+          timeSlotRow.getCell(dayColumn).value = `Erforderlich: ${requirement}`;
+          timeSlotRow.getCell(dayColumn).font = { italic: true, color: { argb: 'FF888888' } };
+          timeSlotRow.getCell(dayColumn).alignment = {
+            horizontal: 'center',
+            vertical: 'middle',
+            wrapText: true
+          };
+        } else {
+          // Create a string with all assigned employees (each on new line)
+          const employeesList = assignments.map(assignment => {
+            const employee = allEmployees.find(e => e.id === assignment.employee_id);
+            const roles = rolesMap.get(assignment.employee_id) || '';
+
+            let suffix = '';
+            if (assignment.is_trainee) {
+              suffix = ' (T)';
+            } else if (assignment.employee_type === 'manager') {
+              suffix = ' (M)';
+            }
+
+            const name = employee ?
+              `${employee.firstname} ${employee.lastname}${suffix}` :
+              `Unbekannt (${assignment.employee_id.substring(0, 8)})`;
+
+            return name;
+          }).join('\n');
+
+          timeSlotRow.getCell(dayColumn).value = employeesList;
+          timeSlotRow.getCell(dayColumn).alignment = {
+            horizontal: 'center',
+            vertical: 'middle',
+            wrapText: true
+          };
+
+          // Color code based on assignment count vs requirement
+          const requirement = shift.minEmployees || 0;
+          if (assignments.length >= requirement) {
+            timeSlotRow.getCell(dayColumn).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F5E8' } }; // Light green
+          } else {
+            timeSlotRow.getCell(dayColumn).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5E8E8' } }; // Light red
           }
+        }
+      });
 
-          if (cell.value === 'Keine Schicht') {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDEDED' } };
-            cell.font = { color: { argb: 'FF888888' }, italic: true };
-          }
+      // Set row height based on max assignments
+      const maxAssignments = Math.max(...days.map(day => {
+        const shift = timeSlot.shiftsByDay[day.id];
+        return shift ? (assignmentsByShift[shift.id]?.length || 0) : 0;
+      }));
 
-          if (colNumber === 1) {
-            cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
-          }
-        });
-
-        row.height = 25;
-      }
-
-      // Merge time slot cells vertically if multiple rows were created
-      if (rowsToCreate > 1) {
-        const currentRow = timetableSheet.lastRow!.number;
-        const startRow = currentRow - rowsToCreate + 1;
-        timetableSheet.mergeCells(startRow, 1, currentRow, 1);
-      }
+      timeSlotRow.height = Math.max(25, 20 + (maxAssignments * 15));
     }
 
     // Adjust column widths
-    timetableSheet.getColumn(1).width = 25; // Time slot column
-    for (let i = 2; i <= days.length + 1; i++) {
-      timetableSheet.getColumn(i).width = 30;
+    timetableSheet.getColumn(1).width = 20; // Schicht name
+    timetableSheet.getColumn(2).width = 15; // Zeit
+    for (let i = 3; i <= days.length + 2; i++) {
+      timetableSheet.getColumn(i).width = 25; // Day columns
     }
 
-    // Add legend row at bottom
-    const legendRow = timetableSheet.addRow([
-      'Legende:',
-      '■ Manager',
-      '■ Trainee',
-      '■ Mitarbeiter',
-      '■ Keine Schicht'
-    ]);
+    /* -------------------------------------------------------------------------- */
+    /*                        👥 3. Employee Assignments Grid                     */
+    /* -------------------------------------------------------------------------- */
+    const assignmentsGridSheet = workbook.addWorksheet('Mitarbeiter Zuweisungen');
 
-    // Style each square with its respective color
-    legendRow.getCell(1).font = { bold: true };
-    legendRow.getCell(2).font = { color: { argb: 'FFCC0000' } };   // Red = Manager
-    legendRow.getCell(3).font = { color: { argb: 'FFCDA8F0' } };   // Purple = Trainee
-    legendRow.getCell(4).font = { color: { argb: 'FF642AB5' } };   // Blue = Mitarbeiter
-    legendRow.getCell(5).font = { color: { argb: 'FF888888' } };   // Gray = Keine Schicht
+    // Create matrix header: Employees as rows, Shifts as columns
+    const shifts = planData.shifts || [];
 
-    legendRow.eachCell(cell => {
-      cell.alignment = { vertical: 'middle', horizontal: 'left' };
-      cell.font = { ...cell.font, italic: true };
+    // Group shifts by day for better organization
+    const shiftsByDay: Record<number, any[]> = {};
+    shifts.forEach((shift: Shift) => {
+      if (!shiftsByDay[shift.dayOfWeek]) {
+        shiftsByDay[shift.dayOfWeek] = [];
+      }
+      shiftsByDay[shift.dayOfWeek].push(shift);
     });
 
+    // Sort days
+    const sortedDays = Object.keys(shiftsByDay)
+      .map(Number)
+      .sort((a, b) => a - b);
+
+    // Create header row
+    const gridHeaderRow = ['Mitarbeiter', 'Typ', 'Vertrag', 'Trainee', 'Rollen'];
+
+    // Add shift headers by day
+    sortedDays.forEach(dayNum => {
+      const dayShifts = shiftsByDay[dayNum];
+      const dayName = days.find(d => d.id === dayNum)?.name || `Tag ${dayNum}`;
+
+      // Sort shifts by time
+      dayShifts.sort((a, b) => {
+        const timeSlotA = planData.timeSlots.find((ts: any) => ts.id === a.timeSlotId);
+        const timeSlotB = planData.timeSlots.find((ts: any) => ts.id === b.timeSlotId);
+        return (timeSlotA?.startTime || '').localeCompare(timeSlotB?.startTime || '');
+      });
+
+      dayShifts.forEach(shift => {
+        const timeSlot = planData.timeSlots.find((ts: any) => ts.id === shift.timeSlotId);
+        const timeStr = timeSlot ? `${timeSlot.startTime}-${timeSlot.endTime}` : '';
+        gridHeaderRow.push(`${dayName}\n${timeStr}`);
+      });
+    });
+
+    const gridHeader = assignmentsGridSheet.addRow(gridHeaderRow);
+    gridHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    gridHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF34495E' } };
+    gridHeader.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+
+    // Create a map for quick assignment lookup
+    const assignmentMap = new Map<string, Set<string>>();
+    allAssignments.forEach(assignment => {
+      const key = `${assignment.employee_id}_${assignment.shift_id}`;
+      if (!assignmentMap.has(assignment.employee_id)) {
+        assignmentMap.set(assignment.employee_id, new Set());
+      }
+      assignmentMap.get(assignment.employee_id)!.add(assignment.shift_id);
+    });
+
+    // Add employee rows
+    allEmployees.forEach(employee => {
+      const employeeAssignments = assignmentMap.get(employee.id) || new Set();
+      const roles = rolesMap.get(employee.id) || '';
+
+      const rowData: any[] = [
+        `${employee.firstname} ${employee.lastname}`,
+        employee.employee_type,
+        employee.contract_type || '-',
+        employee.is_trainee ? 'Ja' : 'Nein',
+        roles.split(',').join(', ')
+      ];
+
+      // Add assignment indicators for each shift
+      sortedDays.forEach(dayNum => {
+        const dayShifts = shiftsByDay[dayNum];
+        dayShifts.forEach(shift => {
+          const isAssigned = employeeAssignments.has(shift.id);
+          rowData.push(isAssigned ? '✓' : '');
+        });
+      });
+
+      const row = assignmentsGridSheet.addRow(rowData);
+
+      // Style assignment cells
+      let shiftColumnIndex = 6; // Start after the first 5 columns
+      sortedDays.forEach(dayNum => {
+        const dayShifts = shiftsByDay[dayNum];
+        dayShifts.forEach(() => {
+          const cell = row.getCell(shiftColumnIndex);
+          const isAssigned = employeeAssignments.has(shifts[shiftColumnIndex - 6]?.id);
+
+          if (isAssigned) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF90EE90' } }; // Light green
+            cell.font = { bold: true };
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          } else {
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          }
+
+          shiftColumnIndex++;
+        });
+      });
+
+      // Highlight trainee employees
+      if (employee.is_trainee) {
+        row.getCell(1).font = { color: { argb: 'FFCDA8F0' } }; // Purple
+        row.getCell(4).font = { bold: true, color: { argb: 'FFCDA8F0' } };
+      }
+    });
+
+    // Adjust column widths
+    assignmentsGridSheet.getColumn(1).width = 25; // Name
+    assignmentsGridSheet.getColumn(2).width = 12; // Type
+    assignmentsGridSheet.getColumn(3).width = 12; // Contract
+    assignmentsGridSheet.getColumn(4).width = 10; // Trainee
+    assignmentsGridSheet.getColumn(5).width = 20; // Roles
+
+    // Set width for shift columns
+    const shiftColumnsCount = gridHeaderRow.length - 5; // Total columns minus first 5
+    for (let i = 6; i <= shiftColumnsCount + 5; i++) {
+      assignmentsGridSheet.getColumn(i).width = 15;
+    }
+
     /* -------------------------------------------------------------------------- */
-    /*                        👥 3. Employee Overview Sheet                       */
+    /*                        📋 4. Employee Details Sheet                        */
     /* -------------------------------------------------------------------------- */
-    const employeeSheet = workbook.addWorksheet('Mitarbeiterübersicht');
-    employeeSheet.columns = [
+    const employeesSheet = workbook.addWorksheet('Mitarbeiter Details');
+    employeesSheet.columns = [
       { header: 'Name', key: 'name', width: 25 },
       { header: 'E-Mail', key: 'email', width: 25 },
-      { header: 'Rolle', key: 'role', width: 18 },
-      { header: 'Mitarbeiter Typ', key: 'type', width: 15 },
-      { header: 'Vertragstyp', key: 'contract', width: 18 },
-      { header: 'Trainee', key: 'trainee', width: 10 }
+      { header: 'Typ', key: 'type', width: 15 },
+      { header: 'Vertrag', key: 'contract', width: 12 },
+      { header: 'Trainee', key: 'trainee', width: 10 },
+      { header: 'Rollen', key: 'roles', width: 20 },
+      { header: 'Zugewiesene Schichten', key: 'assignedShifts', width: 30 }
     ];
 
-    plan.employees?.forEach((e: any) =>
-      employeeSheet.addRow({
-        name: `${e.firstname} ${e.lastname}`,
-        email: e.email,
-        role: e.roles?.join(', ') || 'Benutzer',
-        type: e.employeeType || 'Unbekannt',
-        contract: e.contractType || 'Nicht angegeben',
-        trainee: e.isTrainee ? 'Ja' : 'Nein'
-      })
-    );
+    allEmployees.forEach(employee => {
+      const employeeAssignments = allAssignments.filter(a => a.employee_id === employee.id);
+      const roles = rolesMap.get(employee.id) || '';
 
-    const empHeader = employeeSheet.getRow(1);
+      // Format assigned shifts
+      const assignedShiftsText = employeeAssignments.map(assignment => {
+        const shift = planData.shifts.find((s: any) => s.id === assignment.shift_id);
+        if (!shift) return `Schicht ${assignment.shift_id.substring(0, 8)}`;
+
+        const dayName = days.find(d => d.id === shift.dayOfWeek)?.name || `Tag ${shift.dayOfWeek}`;
+        const timeSlot = planData.timeSlots.find((ts: any) => ts.id === shift.timeSlotId);
+        const timeStr = timeSlot ? `${timeSlot.startTime}-${timeSlot.endTime}` : '';
+
+        return `${dayName} ${timeStr}`;
+      }).join(', ');
+
+      employeesSheet.addRow({
+        name: `${employee.firstname} ${employee.lastname}`,
+        email: employee.email,
+        type: employee.employee_type,
+        contract: employee.contract_type || '-',
+        trainee: employee.is_trainee ? 'Ja' : 'Nein',
+        roles: roles.split(',').join(', '),
+        assignedShifts: assignedShiftsText || 'Keine'
+      });
+    });
+
+    const empHeader = employeesSheet.getRow(1);
     empHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    empHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF34495E' } };
+    empHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2C3E50' } };
     empHeader.alignment = { horizontal: 'center', vertical: 'middle' };
 
     /* -------------------------------------------------------------------------- */
-    /*                            📤 4. Send Response                             */
+    /*                            📤 5. Send Response                             */
     /* -------------------------------------------------------------------------- */
-    const fileName = `Schichtplan_${plan.name}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    const fileName = `Schichtplan_${planData.name.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     await workbook.xlsx.write(res);
@@ -1905,19 +2058,70 @@ export const exportShiftPlanToPDF = async (req: Request, res: Response): Promise
     const { id } = req.params;
     console.log('📄 Starting PDF export for plan:', id);
 
-    const plan = await getShiftPlanById(id);
-    if (!plan) {
+    // Get plan data using the helper function
+    const planData = await getShiftPlanById(id);
+
+    if (!planData) {
       res.status(404).json({ error: 'Shift plan not found' });
       return;
     }
 
-    if (plan.status !== 'published') {
+    if (planData.status !== 'published') {
       res.status(400).json({ error: 'Can only export published shift plans' });
       return;
     }
 
-    // Get timetable data (same as Excel)
-    const timetableData = getTimetableDataForExport(plan);
+    // Get assignments from database (grouped by employee)
+    const allAssignments = await db.all<any>(`
+      SELECT 
+        sa.employee_id,
+        sa.shift_id,
+        e.firstname,
+        e.lastname,
+        e.email,
+        e.employee_type,
+        e.contract_type,
+        e.can_work_alone,
+        e.is_trainee,
+        GROUP_CONCAT(er.role) as roles
+      FROM shift_assignments sa
+      LEFT JOIN employees e ON sa.employee_id = e.id
+      LEFT JOIN employee_roles er ON e.id = er.employee_id
+      WHERE sa.plan_id = ?
+      GROUP BY sa.employee_id, sa.shift_id
+      ORDER BY e.firstname, e.lastname, sa.shift_id
+    `, [id]);
+
+    // Group assignments by employee
+    const assignmentsByEmployee: Record<string, any[]> = {};
+    allAssignments.forEach(assignment => {
+      if (!assignmentsByEmployee[assignment.employee_id]) {
+        assignmentsByEmployee[assignment.employee_id] = [];
+      }
+      assignmentsByEmployee[assignment.employee_id].push(assignment);
+    });
+
+    // Get all employees in the plan
+    const allEmployees = await db.all<any>(`
+      SELECT 
+        e.id,
+        e.firstname,
+        e.lastname,
+        e.email,
+        e.employee_type,
+        e.contract_type,
+        e.can_work_alone,
+        e.is_trainee,
+        GROUP_CONCAT(er.role) as roles
+      FROM employees e
+      LEFT JOIN employee_roles er ON e.id = er.employee_id
+      WHERE e.is_active = 1
+      GROUP BY e.id
+      ORDER BY e.firstname, e.lastname
+    `, []);
+
+    // Get timetable data
+    const timetableData = getTimetableDataForExport(planData);
     const { days, allTimeSlots } = timetableData;
 
     // Generate HTML content
@@ -1927,7 +2131,7 @@ export const exportShiftPlanToPDF = async (req: Request, res: Response): Promise
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Schichtplan - ${plan.name}</title>
+  <title>Schichtplan - ${planData.name}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { 
@@ -2060,6 +2264,44 @@ export const exportShiftPlanToPDF = async (req: Request, res: Response): Promise
       text-align: center;
     }
     
+    /* Employee Assignments Section */
+    .employee-assignments-section {
+      margin-top: 30px;
+      page-break-before: always;
+    }
+    .employee-assignments-section h2 {
+      font-size: 16pt;
+      margin-bottom: 15px;
+      color: #2c3e50;
+    }
+    .employee-assignments-table {
+      width: 100%;
+      font-size: 9pt;
+    }
+    .employee-assignments-table thead {
+      background: #34495e;
+    }
+    .employee-assignments-table td {
+      padding: 8px 6px;
+      text-align: center;
+    }
+    .assigned-cell {
+      background-color: #90EE90;
+      font-weight: bold;
+      color: #2c3e50;
+    }
+    .trainee-row {
+      background-color: #F8F0FF;
+    }
+    .trainee-text {
+      color: #CDA8F0;
+      font-style: italic;
+    }
+    .shift-header {
+      font-size: 8pt;
+      line-height: 1.2;
+    }
+    
     /* Legend */
     .legend {
       margin-top: 15px;
@@ -2081,26 +2323,6 @@ export const exportShiftPlanToPDF = async (req: Request, res: Response): Promise
       width: 12px;
       height: 12px;
       border-radius: 2px;
-    }
-    
-    /* Employee section */
-    .employee-section {
-      margin-top: 30px;
-      page-break-before: always;
-    }
-    .employee-section h2 {
-      font-size: 16pt;
-      margin-bottom: 15px;
-      color: #2c3e50;
-    }
-    .employee-table {
-      width: 100%;
-    }
-    .employee-table thead {
-      background: #34495e;
-    }
-    .employee-table td {
-      font-size: 9pt;
     }
     
     /* Footer */
@@ -2125,7 +2347,7 @@ export const exportShiftPlanToPDF = async (req: Request, res: Response): Promise
 </head>
 <body>
   <div class="header">
-    <h1>Schichtplan: ${plan.name}</h1>
+    <h1>Schichtplan: ${planData.name}</h1>
     <div class="subtitle">Erstellt am: ${new Date().toLocaleDateString('de-DE', {
       year: 'numeric',
       month: 'long',
@@ -2138,35 +2360,39 @@ export const exportShiftPlanToPDF = async (req: Request, res: Response): Promise
     <div class="info-grid">
       <div class="info-item">
         <span class="info-label">Plan Name:</span>
-        <span class="info-value">${plan.name}</span>
+        <span class="info-value">${planData.name}</span>
       </div>
       <div class="info-item">
         <span class="info-label">Status:</span>
-        <span class="info-value">${plan.status}</span>
+        <span class="info-value">${planData.status}</span>
       </div>
       <div class="info-item">
         <span class="info-label">Beschreibung:</span>
-        <span class="info-value">${plan.description || 'Keine'}</span>
+        <span class="info-value">${planData.description || 'Keine'}</span>
       </div>
       <div class="info-item">
         <span class="info-label">Erstellt von:</span>
-        <span class="info-value">${plan.created_by_name || 'Unbekannt'}</span>
+        <span class="info-value">${planData.created_by_name || 'Unbekannt'}</span>
       </div>
       <div class="info-item">
         <span class="info-label">Zeitraum:</span>
-        <span class="info-value">${plan.startDate} bis ${plan.endDate}</span>
+        <span class="info-value">${planData.startDate} bis ${planData.endDate}</span>
       </div>
       <div class="info-item">
         <span class="info-label">Erstellt am:</span>
-        <span class="info-value">${new Date(plan.createdAt).toLocaleString('de-DE')}</span>
+        <span class="info-value">${new Date(planData.createdAt).toLocaleString('de-DE')}</span>
       </div>
       <div class="info-item">
         <span class="info-label">Anzahl Schichten:</span>
-        <span class="info-value">${plan.scheduledShifts?.length || 0}</span>
+        <span class="info-value">${planData.shifts?.length || 0}</span>
       </div>
       <div class="info-item">
         <span class="info-label">Anzahl Mitarbeiter:</span>
-        <span class="info-value">${plan.employees?.length || 0}</span>
+        <span class="info-value">${allEmployees.length}</span>
+      </div>
+      <div class="info-item">
+        <span class="info-label">Zuweisungen gesamt:</span>
+        <span class="info-value">${allAssignments.length}</span>
       </div>
     </div>
   </div>
@@ -2189,42 +2415,33 @@ export const exportShiftPlanToPDF = async (req: Request, res: Response): Promise
             </td>
             ${days.map(day => {
       const shift = timeSlot.shiftsByDay[day.id];
-
       if (!shift) {
         return '<td class="no-shift">Keine Schicht</td>';
       }
 
-      const scheduledShift = plan.scheduledShifts?.find((s: any) =>
-        getDayOfWeek(s.date) === day.id && s.timeSlotId === timeSlot.id
-      );
+      // Get assignments for this shift
+      const shiftAssignments = allAssignments.filter(a => a.shift_id === shift.id);
 
-      if (scheduledShift && scheduledShift.assignedEmployees?.length > 0) {
-        const employeeItems = scheduledShift.assignedEmployees.map((empId: string) => {
-          const emp = plan.employees?.find((e: any) => e.id === empId);
-          if (!emp) return '<li>Unbekannt</li>';
-
+      if (shiftAssignments.length > 0) {
+        const employeeItems = shiftAssignments.map(assignment => {
           let cssClass = 'employee-regular';
           let suffix = '';
 
-          if (emp.isTrainee) {
+          if (assignment.is_trainee) {
             cssClass = 'employee-trainee';
             suffix = ' (T)';
-          } else if (emp.employeeType === 'manager') {
+          } else if (assignment.employee_type === 'manager') {
             cssClass = 'employee-manager';
             suffix = ' (M)';
           }
 
-          return `<li class="${cssClass}">${emp.firstname} ${emp.lastname}${suffix}</li>`;
+          return `<li class="${cssClass}">${assignment.firstname} ${assignment.lastname}${suffix}</li>`;
         }).join('');
 
         return `<td><ul class="employee-list">${employeeItems}</ul></td>`;
       } else {
-        const shiftsForSlot = plan.shifts?.filter((s: any) =>
-          s.dayOfWeek === day.id && s.timeSlotId === timeSlot.id
-        ) || [];
-        const totalRequired = shiftsForSlot.reduce((sum: number, s: any) =>
-          sum + s.min_employees, 0
-        );
+        // No employees assigned, show requirement count
+        const totalRequired = shift.minEmployees || 1;
         const displayText = totalRequired === 0 ? '-' : `0/${totalRequired}`;
         return `<td class="required-count">${displayText}</td>`;
       }
@@ -2254,32 +2471,70 @@ export const exportShiftPlanToPDF = async (req: Request, res: Response): Promise
     </div>
   </div>
 
-  <div class="employee-section">
-    <h2>Mitarbeiterübersicht</h2>
-    <table class="employee-table">
+  <div class="employee-assignments-section">
+    <h2>Mitarbeiter-Zuweisungen</h2>
+    <table class="employee-assignments-table">
       <thead>
         <tr>
-          <th>Name</th>
+          <th>Mitarbeiter</th>
           <th>E-Mail</th>
-          <th>Rolle</th>
-          <th>Mitarbeiter Typ</th>
-          <th>Vertragstyp</th>
+          <th>Typ</th>
+          <th>Vertrag</th>
           <th>Trainee</th>
+          <th>Rollen</th>
+          ${allAssignments
+        .filter((value, index, self) =>
+          index === self.findIndex((a) => a.shift_id === value.shift_id)
+        )
+        .map(assignment => {
+          const shift = planData.shifts.find((s: any) => s.id === assignment.shift_id);
+          if (!shift) return `<th>${assignment.shift_id.substring(0, 8)}...</th>`;
+
+          const dayName = days.find(d => d.id === shift.dayOfWeek)?.name || `Tag ${shift.dayOfWeek}`;
+          const timeSlot = planData.timeSlots.find((ts: any) => ts.id === shift.timeSlotId);
+          const timeRange = timeSlot ? `${timeSlot.startTime}-${timeSlot.endTime}` : '';
+
+          return `<th class="shift-header">${dayName}<br/>${timeRange}</th>`;
+        }).join('')}
         </tr>
       </thead>
       <tbody>
-        ${plan.employees?.map((emp: any) => `
-          <tr>
-            <td>${emp.firstname} ${emp.lastname}</td>
-            <td>${emp.email}</td>
-            <td>${emp.roles?.join(', ') || 'Benutzer'}</td>
-            <td>${emp.employeeType || 'Unbekannt'}</td>
-            <td>${emp.contractType || 'Nicht angegeben'}</td>
-            <td>${emp.isTrainee ? 'Ja' : 'Nein'}</td>
-          </tr>
-        `).join('') || '<tr><td colspan="6" style="text-align: center; color: #999;">Keine Mitarbeiter</td></tr>'}
+        ${allEmployees.map(employee => {
+          const employeeAssignments = allAssignments.filter(a => a.employee_id === employee.id);
+          const assignedShiftIds = employeeAssignments.map(a => a.shift_id);
+          const uniqueShifts = Array.from(new Set(allAssignments.map(a => a.shift_id)));
+
+          return `
+            <tr ${employee.is_trainee ? 'class="trainee-row"' : ''}>
+              <td style="text-align: left;">
+                ${employee.firstname} ${employee.lastname}
+                ${employee.is_trainee ? '<span class="trainee-text"> (T)</span>' : ''}
+              </td>
+              <td style="text-align: left;">${employee.email}</td>
+              <td>${employee.employee_type}</td>
+              <td>${employee.contract_type || '-'}</td>
+              <td>${employee.is_trainee ? 'Ja' : 'Nein'}</td>
+              <td style="text-align: left;">${employee.roles ? employee.roles.split(',').join(', ') : 'Benutzer'}</td>
+              ${uniqueShifts.map(shiftId => {
+            const isAssigned = assignedShiftIds.includes(shiftId);
+            return `<td class="${isAssigned ? 'assigned-cell' : ''}">${isAssigned ? '✓' : ''}</td>`;
+          }).join('')}
+            </tr>
+          `;
+        }).join('')}
       </tbody>
     </table>
+    
+    <div class="legend">
+      <div class="legend-item">
+        <div class="legend-square" style="background: #90EE90;"></div>
+        <span>Zugewiesene Schicht</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-square" style="background: #F8F0FF;"></div>
+        <span>Trainee Mitarbeiter</span>
+      </div>
+    </div>
   </div>
 
   <div class="footer">
@@ -2299,6 +2554,7 @@ export const exportShiftPlanToPDF = async (req: Request, res: Response): Promise
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
+      landscape: true,
       margin: {
         top: '20mm',
         right: '15mm',
@@ -2317,7 +2573,7 @@ export const exportShiftPlanToPDF = async (req: Request, res: Response): Promise
     await browser.close();
 
     // Set response headers and send PDF
-    const fileName = `Schichtplan_${plan.name}_${new Date().toISOString().split('T')[0]}.pdf`;
+    const fileName = `Schichtplan_${planData.name.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.send(pdfBuffer);

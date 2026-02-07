@@ -1146,6 +1146,19 @@ const PlanView: React.FC = () => {
     }
   }, [weeklyPlan?.employees]);
 
+  // Published plan swap mode handlers with warning
+  const handleOpenShiftSwapModePublished = useCallback(() => {
+    if (window.confirm('Achtung: Dieser Plan ist bereits veröffentlicht. Änderungen werden sofort für alle Mitarbeiter sichtbar sein. Fortfahren?')) {
+      handleOpenShiftSwapMode();
+    }
+  }, [handleOpenShiftSwapMode]);
+
+  const handleOpenWeeklySwapModePublished = useCallback(() => {
+    if (window.confirm('Achtung: Dieser Plan ist bereits veröffentlicht. Änderungen werden sofort für alle Mitarbeiter sichtbar sein. Fortfahren?')) {
+      handleOpenWeeklySwapMode();
+    }
+  }, [handleOpenWeeklySwapMode]);
+
   const handleCancelWeeklySwapMode = useCallback(() => {
     setWeeklySwapModeActive(false);
     setLocalWeeklyEmployees([]);
@@ -1721,9 +1734,72 @@ const PlanView: React.FC = () => {
 
       {/* Main Content */}
       <div className={styles.mainContent}>
+        {/* Warning banner when editing published plan */}
+        {planStatus === 'published' && (shiftSwapModeActive || weeklySwapModeActive) && (
+          <div className={styles.publishedWarning}>
+            ⚠️ Sie bearbeiten einen veröffentlichten Plan. Änderungen werden sofort wirksam.
+          </div>
+        )}
+
         {/* Admin Action Buttons - only for published plans */}
         {isAdmin && planStatus === 'published' && (
           <div className={styles.actionBar}>
+            {/* Swap mode buttons for shift plans */}
+            {planType === 'shift' && !shiftSwapModeActive && (
+              <button
+                onClick={handleOpenShiftSwapModePublished}
+                className={styles.secondaryButton}
+              >
+                Manuelle Änderungen
+              </button>
+            )}
+            {planType === 'shift' && shiftSwapModeActive && (
+              <>
+                <button
+                  onClick={handleSaveShiftSwap}
+                  disabled={isSavingShiftSwap}
+                  className={styles.successButton}
+                >
+                  {isSavingShiftSwap ? 'Speichert...' : 'Änderungen speichern'}
+                </button>
+                <button
+                  onClick={handleCancelShiftSwapMode}
+                  disabled={isSavingShiftSwap}
+                  className={styles.secondaryButton}
+                >
+                  Abbrechen
+                </button>
+              </>
+            )}
+
+            {/* Swap mode buttons for weekly plans */}
+            {planType === 'weekly' && !weeklySwapModeActive && (
+              <button
+                onClick={handleOpenWeeklySwapModePublished}
+                className={styles.secondaryButton}
+              >
+                Manuelle Änderungen
+              </button>
+            )}
+            {planType === 'weekly' && weeklySwapModeActive && (
+              <>
+                <button
+                  onClick={handleSaveWeeklySwap}
+                  disabled={isSavingSwap}
+                  className={styles.successButton}
+                >
+                  {isSavingSwap ? 'Speichert...' : 'Änderungen speichern'}
+                </button>
+                <button
+                  onClick={handleCancelWeeklySwapMode}
+                  disabled={isSavingSwap}
+                  className={styles.secondaryButton}
+                >
+                  Abbrechen
+                </button>
+              </>
+            )}
+
             <button
               onClick={planType === 'shift' ? handleClearShiftAssignments : handleClearWeeklyAssignments}
               disabled={isClearing || (planType === 'weekly' && isSubmitting)}

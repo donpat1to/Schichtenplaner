@@ -632,7 +632,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
           gap: '15px'
         }}>
           <label style={{ fontWeight: 'bold', color: '#2c3e50' }}>
-            Gewünschte Anzahl Wochen:
+            Gewünschte Wochen:
           </label>
           <input
             type="number"
@@ -971,7 +971,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
 
     // Für alle Wochen im Plan sicherstellen, dass wir einen Wert haben
     const preferences = selectedWeeklyPlan.weeks.map(week => {
-      const level = weeklyPreferencesMap[week.id];
+      const level = weeklyPreferencesMap[week.id] ?? 3;
       return {
         weekId: week.id,
         preferenceLevel: level,
@@ -1513,37 +1513,10 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         borderRadius: '8px',
         border: '1px solid #e9ecef'
       }}>
-        <h4 style={{ margin: '0 0 15px 0', color: '#495057' }}>
-          Verfügbarkeits-Level
-        </h4>
-
-        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-          {availabilityLevels.map(level => (
-            <div key={level.level} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div
-                style={{
-                  width: '20px',
-                  height: '20px',
-                  backgroundColor: level.bgColor,
-                  border: `2px solid ${level.color}`,
-                  borderRadius: '4px'
-                }}
-              />
-              <div>
-                <div style={{ fontWeight: 'bold', color: level.color }}>
-                  {level.level}: {level.label}
-                </div>
-                <div style={{ fontSize: '12px', color: '#666' }}>
-                  {level.description}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
         {planType === 'weekly' && (
           <>
             <div style={{ marginTop: '10px' }}>
-              Basierend auf aktueller Mitarbeiterverteilung werden für den Solver des Plans empfohlen:
+              Empfohlen für die Anzahl '<strong>gewünschter Wochen</strong>' basierend auf aktueller Mitarbeiterverteilung:
             </div>
             <div style={{ marginTop: '5px' }}>
               • <strong>Große Verträge:</strong> Mindestens {largeContractMinimumWeeks} Wochen, Maxmial {largeContractMaximumWeeks}

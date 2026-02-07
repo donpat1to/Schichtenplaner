@@ -11,7 +11,7 @@ const Features: React.FC = () => {
     {
       icon: "⚡",
       title: "Schnelle Berechnung",
-      description: "Google OR-Tools CP-SAT Solver findet Lösungen in maximal 105 Sekunden"
+      description: "Google OR-Tools CP-SAT Solver findet Lösungen in maximal 120 Sekunden"
     },
     {
       icon: "👥",

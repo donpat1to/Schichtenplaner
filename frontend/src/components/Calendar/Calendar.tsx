@@ -248,11 +248,12 @@ const Calendar: React.FC<CalendarProps> = ({
 
     // Get preference display info
     const getPreferenceDisplay = (level: 1 | 2 | 3) => {
-        const displays = {
+        const displays: Record<1 | 2 | 3, { text: string; color: string; bg: string; borderColor: string }> = {
             1: { text: '1: Bevorzugt', color: '#22c55e', bg: '#dcfce7', borderColor: '#22c55e' },
             2: { text: '2: Verfügbar', color: '#eab308', bg: '#fef9c3', borderColor: '#eab308' },
             3: { text: '3: Nicht verfügbar', color: '#ef4444', bg: '#fee2e2', borderColor: '#ef4444' },
         };
+
         return displays[level];
     };
 
@@ -348,7 +349,7 @@ const Calendar: React.FC<CalendarProps> = ({
 
     // Render preference toggle for a week (preferences mode)
     const renderPreferenceToggle = (weekId: string) => {
-        const pref = weekPreferences[weekId];
+        const pref = weekPreferences[weekId] ?? 3;
         const prefDisplay = getPreferenceDisplay(pref);
 
         return (

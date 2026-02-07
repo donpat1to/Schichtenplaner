@@ -178,8 +178,7 @@ const PlanList: React.FC = () => {
 
   const canEditPlan = (plan: PlanItem) => {
     if (!hasRole(['admin', 'maintenance'])) return false;
-    // Shift plans can only be edited when in draft status
-    if (plan.type === 'shift' && plan.status !== 'draft') return false;
+    if (plan.status !== 'draft') return false;
     return true;
   };
 
@@ -202,7 +201,7 @@ const PlanList: React.FC = () => {
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: '30px'
+        marginBottom: '20px'
       }}>
         <h1>Alle Pläne</h1>
         <div style={{ display: 'flex', gap: '10px' }}>

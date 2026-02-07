@@ -22,7 +22,7 @@ const Help: React.FC = () => {
       description: "Das System erstellt ein mathematisches Modell mit allen Variablen und Constraints."
     },
     {
-      title: "3. CP-SAT Optimierung", 
+      title: "3. CP-SAT Optimierung",
       description: "Google's Constraint Programming Solver findet die beste Zuordnung unter allen Regeln."
     },
     {
@@ -44,12 +44,12 @@ const Help: React.FC = () => {
   return (
     <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
       <h1>❓ Hilfe & Support - Scheduling Algorithmus</h1>
-      
+
       {/* Business Rules */}
-      <div style={{ 
-        backgroundColor: 'white', 
-        borderRadius: '12px', 
-        padding: '30px', 
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '12px',
+        padding: '30px',
         marginTop: '20px',
         boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
         border: '1px solid #e0e0e0'
@@ -68,7 +68,7 @@ const Help: React.FC = () => {
                 alignItems: 'center'
               }}
             >
-              <span style={{ 
+              <span style={{
                 marginRight: '12px',
                 color: rule.critical ? '#e74c3c' : '#f39c12',
                 fontWeight: 'bold',
@@ -79,7 +79,7 @@ const Help: React.FC = () => {
               <span style={{ color: rule.critical ? '#721c24' : '#856404' }}>
                 {rule.rule}
               </span>
-              <span style={{ 
+              <span style={{
                 marginLeft: 'auto',
                 fontSize: '12px',
                 color: rule.critical ? '#e74c3c' : '#f39c12',
@@ -93,16 +93,16 @@ const Help: React.FC = () => {
       </div>
 
       {/* Scheduling Process */}
-      <div style={{ 
-        backgroundColor: 'white', 
-        borderRadius: '12px', 
-        padding: '30px', 
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '12px',
+        padding: '30px',
         marginTop: '20px',
         boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
         border: '1px solid #e0e0e0'
       }}>
         <h2 style={{ color: '#2c3e50', marginBottom: '20px' }}>⚙️ Scheduling-Prozess</h2>
-        
+
         <div style={{ display: 'grid', gap: '15px' }}>
           {schedulingStages.map((stage, index) => (
             <div key={index} style={{
@@ -138,16 +138,16 @@ const Help: React.FC = () => {
       </div>
 
       {/* Preference Levels */}
-      <div style={{ 
-        backgroundColor: 'white', 
-        borderRadius: '12px', 
-        padding: '30px', 
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '12px',
+        padding: '30px',
         marginTop: '20px',
         boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
         border: '1px solid #e0e0e0'
       }}>
         <h2 style={{ color: '#2c3e50', marginBottom: '20px' }}>🎯 Verfügbarkeits-Level</h2>
-        
+
         <div style={{ display: 'grid', gap: '12px' }}>
           {preferenceLevels.map((pref) => (
             <div key={pref.level} style={{
@@ -177,7 +177,7 @@ const Help: React.FC = () => {
       </div>
 
       {/* Tips */}
-      <div style={{ 
+      <div style={{
         marginTop: '25px',
         padding: '25px',
         backgroundColor: '#e8f4fd',
@@ -206,7 +206,7 @@ const Help: React.FC = () => {
       </div>
 
       {/* Technical Info */}
-      <div style={{ 
+      <div style={{
         marginTop: '25px',
         padding: '20px',
         backgroundColor: '#fff3cd',
@@ -215,9 +215,8 @@ const Help: React.FC = () => {
       }}>
         <h4 style={{ color: '#856404', marginTop: 0 }}>🔧 Technische Informationen</h4>
         <p style={{ color: '#856404', margin: 0 }}>
-          <strong>Lösungsalgorithmus:</strong> Google OR-Tools CP-SAT Solver • 
-          <strong> Fallback:</strong> TypeScript-basierter Solver • 
-          <strong> Maximale Laufzeit:</strong> 105 Sekunden
+          <strong>Lösungsalgorithmus:</strong> Google OR-Tools CP-SAT Solver •
+          <strong> Maximale Laufzeit:</strong> 120 Sekunden
         </p>
       </div>
     </div>

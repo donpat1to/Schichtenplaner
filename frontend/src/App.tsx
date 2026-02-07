@@ -45,9 +45,9 @@ if (ENABLE_PRO) {
     if (premiumModule.Imprint) PremiumImprint = premiumModule.Imprint;
     if (premiumModule.Terms) PremiumTerms = premiumModule.Terms;
 
-    console.log('✅ Premium components loaded successfully');
+    console.log('Premium components loaded successfully');
   } catch (error) {
-    console.warn('⚠️ Premium components not available, using community fallbacks:', error);
+    console.warn('Premium components not available, using community fallbacks:', error);
   }
 }
 
@@ -103,8 +103,8 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 const AppContent: React.FC = () => {
   const { loading, needsSetup, user } = useAuth();
 
-  console.log('🏠 AppContent rendering - loading:', loading, 'needsSetup:', needsSetup, 'user:', user);
-  console.log('🎯 Premium features enabled:', ENABLE_PRO);
+  console.log('AppContent rendering - loading:', loading, 'needsSetup:', needsSetup, 'user:', user);
+  console.log('Premium features enabled:', ENABLE_PRO);
 
   // Während des Ladens
   if (loading) {
@@ -123,12 +123,12 @@ const AppContent: React.FC = () => {
 
   // Kein User eingeloggt
   if (!user) {
-    console.log('🔐 Showing login page');
+    console.log('Showing login page');
     return <Login />;
   }
 
   // User eingeloggt - Geschützte Routen
-  console.log('✅ Showing protected routes for user:', user.email);
+  console.log('Showing protected routes for user:', user.email);
   return (
     <Routes>
       {/* Protected Routes (require login) */}

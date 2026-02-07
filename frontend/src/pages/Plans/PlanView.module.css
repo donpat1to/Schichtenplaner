@@ -457,6 +457,17 @@
   color: #856404;
 }
 
+/* Published Plan Warning Banner */
+.publishedWarning {
+  background-color: #fff3cd;
+  border: 1px solid #ffc107;
+  color: #856404;
+  padding: 10px 15px;
+  border-radius: 6px;
+  margin-bottom: 15px;
+  font-weight: 500;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .header {
