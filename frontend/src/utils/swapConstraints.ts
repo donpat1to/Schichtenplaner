@@ -377,7 +377,97 @@ export function getShiftEmployees(shiftId: string, ctx: SwapConstraintContext): 
   return ctx.employees.filter(e => assignedIds.includes(e.id));
 }
 
+export interface SwapCandidate {
+  employee: Employee;
+  /** The shift the candidate is currently assigned to (which source employee would take) */
+  theirShiftId: string;
+  /** Candidate's preference for taking the source shift */
+  theirPreferenceForSourceShift: number;
+  /** Source employee's preference for taking the candidate's shift */
+  sourcePreferenceForTheirShift: number;
+}
+
 /**
+ * Find swap candidates for an employee who wants to give up a shift.
+ * Returns employees who can swap their shift with the source employee.
+ *
+ * A valid swap means:
+ * - Candidate is assigned to some other shift
+ * - Source employee is available and can work the candidate's shift
+ * - Candidate is available and can work the source shift
+ * - All constraints (trainee supervision, contract limits, etc.) are satisfied
+ */
+export function findSwapCandidates(
+  sourceShiftId: string,
+  sourceEmployeeId: string,
+  ctx: SwapConstraintContext
+): SwapCandidate[] {
+  const sourceShift = ctx.shifts.find(s => s.id === sourceShiftId);
+  if (!sourceShift) return [];
+
+  const sourceEmployee = ctx.employees.find(e => e.id === sourceEmployeeId);
+  if (!sourceEmployee) return [];
+
+  const candidates: SwapCandidate[] = [];
+
+  // Find all employees assigned to other shifts
+  for (const emp of ctx.employees) {
+    // Skip the source employee
+    if (emp.id === sourceEmployeeId) continue;
+
+    // Skip non-personnel and managers
+    if (!isEligibleForScheduling(emp) || isManager(emp)) continue;
+
+    // Get shifts this employee is assigned to
+    const empAssignments = ctx.assignments.filter(a => a.employeeId === emp.id);
+
+    for (const assignment of empAssignments) {
+      // Skip if it's the same shift
+      if (assignment.shiftId === sourceShiftId) continue;
+
+      const theirShiftId = assignment.shiftId;
+
+      // Validate the swap using existing validation
+      const swapResult = validateDirectSwap(
+        sourceEmployeeId,
+        sourceShiftId,
+        emp.id,
+        theirShiftId,
+        ctx
+      );
+
+      if (swapResult.valid) {
+        // Get preference levels
+        const theirPrefForSource = ctx.availabilities.find(
+          a => a.employeeId === emp.id && a.shiftId === sourceShiftId
+        )?.preferenceLevel || 2;
+
+        const sourcePrefForTheirs = ctx.availabilities.find(
+          a => a.employeeId === sourceEmployeeId && a.shiftId === theirShiftId
+        )?.preferenceLevel || 2;
+
+        candidates.push({
+          employee: emp,
+          theirShiftId,
+          theirPreferenceForSourceShift: theirPrefForSource,
+          sourcePreferenceForTheirShift: sourcePrefForTheirs
+        });
+      }
+    }
+  }
+
+  // Sort by combined preference (lower is better - both parties prefer the swap)
+  candidates.sort((a, b) => {
+    const scoreA = a.theirPreferenceForSourceShift + a.sourcePreferenceForTheirShift;
+    const scoreB = b.theirPreferenceForSourceShift + b.sourcePreferenceForTheirShift;
+    return scoreA - scoreB;
+  });
+
+  return candidates;
+}
+
+/**
+ * @deprecated Use findSwapCandidates instead
  * Find replacement candidates for an employee being removed from a shift
  * Returns employees sorted by preference (level 1 first, then level 2)
  */
@@ -432,4 +522,96 @@ export function findReplacementCandidates(
   candidates.sort((a, b) => a.preferenceLevel - b.preferenceLevel);
 
   return candidates;
+}
+
+/**
+ * Conflict information for an availability change
+ */
+export interface ShiftAvailabilityConflict {
+  shiftId: string;
+  employeeId: string;
+  swapCandidates: SwapCandidate[];
+  canUnassign: boolean;
+  unassignBlockedReason?: string;
+}
+
+/**
+ * Check if unassigning an employee from a shift is allowed
+ * (must maintain trainee supervision and minimum staffing)
+ */
+function canUnassignFromShift(
+  shiftId: string,
+  employeeId: string,
+  ctx: SwapConstraintContext
+): { allowed: boolean; reason?: string } {
+  const shift = ctx.shifts.find(s => s.id === shiftId);
+  if (!shift) return { allowed: false, reason: 'Schicht nicht gefunden' };
+
+  // Count current assignments
+  const currentAssignments = ctx.assignments.filter(a => a.shiftId === shiftId);
+  const countAfterRemoval = currentAssignments.length - 1;
+
+  // Check minimum staffing
+  if (countAfterRemoval < shift.minEmployees) {
+    return { allowed: false, reason: `Mindestbesetzung (${shift.minEmployees}) würde unterschritten` };
+  }
+
+  // Check trainee supervision after removal
+  if (!wouldHaveTraineeSupervision(shiftId, null, employeeId, ctx)) {
+    return { allowed: false, reason: 'Neuling-Betreuung wäre nicht mehr gewährleistet' };
+  }
+
+  // Check if remaining employees can work (canWorkAlone constraint)
+  const remainingEmpIds = currentAssignments
+    .filter(a => a.employeeId !== employeeId)
+    .map(a => a.employeeId);
+
+  for (const empId of remainingEmpIds) {
+    const emp = ctx.employees.find(e => e.id === empId);
+    if (emp && !emp.canWorkAlone && remainingEmpIds.length === 1) {
+      return { allowed: false, reason: `${emp.firstname} kann nicht alleine arbeiten` };
+    }
+  }
+
+  return { allowed: true };
+}
+
+/**
+ * Detect conflicts when an employee marks shifts as unavailable.
+ * Returns conflicts for shifts where the employee is currently assigned
+ * but wants to mark as unavailable (preferenceLevel === 3).
+ */
+export function detectShiftAvailabilityConflicts(
+  employeeId: string,
+  newAvailabilities: { shiftId: string; preferenceLevel: number }[],
+  ctx: SwapConstraintContext
+): ShiftAvailabilityConflict[] {
+  const conflicts: ShiftAvailabilityConflict[] = [];
+
+  // Find shifts marked as unavailable (preferenceLevel === 3)
+  const unavailableShifts = newAvailabilities.filter(a => a.preferenceLevel === 3);
+
+  for (const avail of unavailableShifts) {
+    // Check if employee is currently assigned to this shift
+    const isAssigned = ctx.assignments.some(
+      a => a.shiftId === avail.shiftId && a.employeeId === employeeId
+    );
+
+    if (isAssigned) {
+      // Employee is assigned but wants to be unavailable - this is a conflict
+      // Find swap candidates (employees who can exchange shifts)
+      const swapCandidates = findSwapCandidates(avail.shiftId, employeeId, ctx);
+      const unassignCheck = canUnassignFromShift(avail.shiftId, employeeId, ctx);
+
+      conflicts.push({
+        shiftId: avail.shiftId,
+        employeeId,
+        swapCandidates,
+        canUnassign: unassignCheck.allowed,
+        unassignBlockedReason: unassignCheck.reason
+      });
+    }
+  }
+
+  return conflicts;
 }

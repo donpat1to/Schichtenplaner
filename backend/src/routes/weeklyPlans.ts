@@ -18,7 +18,6 @@ import {
   exportWeeklyPlanToExcel,
   exportWeeklyPlanToPDF,
   createAssignments,
-  resolveConflict
 } from '../controllers/weeklyPlanController.js';
 import { handleValidationErrors, validateId } from '../middleware/validation.js';
 import { body, param } from 'express-validator';

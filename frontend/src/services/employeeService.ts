@@ -23,12 +23,55 @@ export interface AvailabilityConflict {
     startDate: string;
     endDate: string;
   };
-  replacementCandidates: ReplacementCandidate[];
+  swapCandidates: SwapCandidateInfo[];
   // Whether unassign is allowed
   canUnassign: boolean;
   unassignBlockedReason?: string;
 }
 
+export interface SwapCandidateInfo {
+  employeeId: string;
+  employeeName: string;
+  isTrainee: boolean;
+  canWorkAlone: boolean;
+  // The shift/week that would be swapped (candidate gives this, source takes this)
+  swapShift?: {
+    shiftId: string;
+    dayOfWeek: number;
+    dayName: string;
+    timeSlotName: string;
+    startTime: string;
+    endTime: string;
+  };
+  swapWeek?: {
+    weekId: string;
+    weekNumber: number;
+    startDate: string;
+    endDate: string;
+  };
+  // Preference levels for the swap
+  theirPreferenceForSourceShift: number;  // How much candidate wants the source's shift
+  sourcePreferenceForTheirShift: number;  // How much source wants candidate's shift
+  // All current assignments for display
+  currentShiftCount?: number;
+  currentWeekCount?: number;
+  currentShifts?: {
+    shiftId: string;
+    dayOfWeek: number;
+    dayName: string;
+    timeSlotName: string;
+    startTime: string;
+    endTime: string;
+  }[];
+  currentWeeks?: {
+    weekId: string;
+    weekNumber: number;
+    startDate: string;
+    endDate: string;
+  }[];
+}
+
+/** @deprecated Use SwapCandidateInfo instead */
 export interface ReplacementCandidate {
   employeeId: string;
   employeeName: string;
@@ -37,6 +80,20 @@ export interface ReplacementCandidate {
   canWorkAlone: boolean;
   currentShiftCount?: number;
   currentWeekCount?: number;
+  currentShifts?: {
+    shiftId: string;
+    dayOfWeek: number;
+    dayName: string;
+    timeSlotName: string;
+    startTime: string;
+    endTime: string;
+  }[];
+  currentWeeks?: {
+    weekId: string;
+    weekNumber: number;
+    startDate: string;
+    endDate: string;
+  }[];
 }
 
 export interface ConflictCheckRequest {
@@ -52,9 +109,12 @@ export interface ConflictCheckRequest {
 export interface ConflictResolution {
   action: 'swap' | 'unassign' | 'force_keep' | 'cancel';
   employeeId: string;
-  shiftId?: string;
-  weekId?: string;
-  replacementEmployeeId?: string;
+  shiftId?: string;  // The shift the source employee is giving up
+  weekId?: string;   // The week the source employee is giving up
+  // For swaps:
+  swapEmployeeId?: string;      // The employee to swap with
+  swapShiftId?: string;         // The shift source employee will take (from swap partner)
+  swapWeekId?: string;          // The week source employee will take (from swap partner)
 }
 
 // Context data for frontend constraint checking
@@ -128,7 +188,7 @@ export class EmployeeService {
   }
 
   async updateAvailabilities(
-    employeeId: string, 
+    employeeId: string,
     data: { planId: string, availabilities: Omit<EmployeeAvailability, 'id' | 'employeeId'>[] }
   ): Promise<EmployeeAvailability[]> {
     console.log('🔄 Updating availabilities for employee:', employeeId);
@@ -136,7 +196,7 @@ export class EmployeeService {
   }
 
   async changePassword(
-    id: string, 
+    id: string,
     data: { currentPassword: string, newPassword: string, confirmPassword: string }
   ): Promise<void> {
     return apiClient.put<void>(`/employees/${id}/password`, data);
@@ -149,17 +209,6 @@ export class EmployeeService {
       console.error('Error updating last login:', error);
       throw error;
     }
-  }
-
-  async checkAvailabilityConflicts(
-    employeeId: string,
-    data: ConflictCheckRequest
-  ): Promise<ConflictCheckResponse> {
-    console.log('🔍 Checking availability conflicts for employee:', employeeId);
-    return apiClient.post<ConflictCheckResponse>(
-      `/employees/${employeeId}/check-availability-conflicts`,
-      data
-    );
   }
 }
 

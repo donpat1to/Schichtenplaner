@@ -1,14 +1,12 @@
 import React, { useState } from 'react';
 import Modal from '../Modal/Modal';
-import { AvailabilityConflict, ReplacementCandidate, ConflictResolution } from '../../services/employeeService';
-import { shiftPlanService } from '../../services/shiftPlanService';
-import { weeklyPlanService } from '../../services/weeklyPlanService';
+import { AvailabilityConflict, SwapCandidateInfo, ConflictResolution } from '../../services/employeeService';
 
 interface ConflictResolutionModalProps {
   isOpen: boolean;
   onClose: () => void;
   conflicts: AvailabilityConflict[];
-  onResolved: () => void;
+  onResolved: (resolutions: ConflictResolution[]) => void;
   onCancel: () => void;
 }
 
@@ -16,7 +14,9 @@ type ResolutionAction = 'swap' | 'unassign' | 'force_keep' | 'cancel';
 
 interface ResolutionChoice {
   action: ResolutionAction;
-  replacementEmployeeId?: string;
+  swapEmployeeId?: string;
+  swapShiftId?: string;  // The shift/week the source employee will take
+  swapWeekId?: string;
 }
 
 const ConflictResolutionModal: React.FC<ConflictResolutionModalProps> = ({
@@ -29,26 +29,26 @@ const ConflictResolutionModal: React.FC<ConflictResolutionModalProps> = ({
   const [currentConflictIndex, setCurrentConflictIndex] = useState(0);
   const [resolutions, setResolutions] = useState<Record<number, ResolutionChoice>>({});
   const [selectedAction, setSelectedAction] = useState<ResolutionAction | null>(null);
-  const [selectedReplacement, setSelectedReplacement] = useState<string | null>(null);
+  const [selectedSwapCandidate, setSelectedSwapCandidate] = useState<SwapCandidateInfo | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const currentConflict = conflicts[currentConflictIndex];
-  const hasReplacements = currentConflict?.replacementCandidates?.length > 0;
+  const hasSwapCandidates = currentConflict?.swapCandidates?.length > 0;
 
   const handleActionSelect = (action: ResolutionAction) => {
     setSelectedAction(action);
-    setSelectedReplacement(null);
+    setSelectedSwapCandidate(null);
     setError(null);
 
-    if (action === 'swap' && hasReplacements) {
+    if (action === 'swap' && hasSwapCandidates) {
       // Auto-select best candidate (first in list, already sorted by preference)
-      setSelectedReplacement(currentConflict.replacementCandidates[0].employeeId);
+      setSelectedSwapCandidate(currentConflict.swapCandidates[0]);
     }
   };
 
-  const handleReplacementSelect = (employeeId: string) => {
-    setSelectedReplacement(employeeId);
+  const handleSwapCandidateSelect = (candidate: SwapCandidateInfo) => {
+    setSelectedSwapCandidate(candidate);
   };
 
   const handleConfirmResolution = () => {
@@ -57,81 +57,79 @@ const ConflictResolutionModal: React.FC<ConflictResolutionModalProps> = ({
       return;
     }
 
-    if (selectedAction === 'swap' && !selectedReplacement) {
-      setError('Bitte wählen Sie einen Ersatzmitarbeiter aus');
+    if (selectedAction === 'swap' && !selectedSwapCandidate) {
+      setError('Bitte wählen Sie einen Tauschpartner aus');
       return;
     }
 
     // Store the resolution
+    const resolutionChoice: ResolutionChoice = {
+      action: selectedAction
+    };
+
+    if (selectedAction === 'swap' && selectedSwapCandidate) {
+      resolutionChoice.swapEmployeeId = selectedSwapCandidate.employeeId;
+      resolutionChoice.swapShiftId = selectedSwapCandidate.swapShift?.shiftId;
+      resolutionChoice.swapWeekId = selectedSwapCandidate.swapWeek?.weekId;
+    }
+
     setResolutions(prev => ({
       ...prev,
-      [currentConflictIndex]: {
-        action: selectedAction,
-        replacementEmployeeId: selectedAction === 'swap' ? selectedReplacement || undefined : undefined
-      }
+      [currentConflictIndex]: resolutionChoice
     }));
 
     // Move to next conflict or process all resolutions
     if (currentConflictIndex < conflicts.length - 1) {
       setCurrentConflictIndex(prev => prev + 1);
       setSelectedAction(null);
-      setSelectedReplacement(null);
+      setSelectedSwapCandidate(null);
       setError(null);
     } else {
       // All conflicts have resolutions, process them
       processAllResolutions({
         ...resolutions,
-        [currentConflictIndex]: {
-          action: selectedAction,
-          replacementEmployeeId: selectedAction === 'swap' ? selectedReplacement || undefined : undefined
-        }
+        [currentConflictIndex]: resolutionChoice
       });
     }
   };
 
-  const processAllResolutions = async (allResolutions: Record<number, ResolutionChoice>) => {
+  const processAllResolutions = (allResolutions: Record<number, ResolutionChoice>) => {
     setIsProcessing(true);
     setError(null);
 
-    try {
-      // Check if any resolution is 'cancel'
-      const hasCancellation = Object.values(allResolutions).some(r => r.action === 'cancel');
-      if (hasCancellation) {
-        onCancel();
-        return;
-      }
-
-      // Process each resolution
-      for (let i = 0; i < conflicts.length; i++) {
-        const conflict = conflicts[i];
-        const resolution = allResolutions[i];
-
-        if (!resolution || resolution.action === 'cancel') {
-          continue;
-        }
-
-        const resolutionData: ConflictResolution = {
-          action: resolution.action,
-          employeeId: conflict.employeeId,
-          shiftId: conflict.shiftId,
-          weekId: conflict.weekId,
-          replacementEmployeeId: resolution.replacementEmployeeId
-        };
-
-        if (conflict.type === 'shift') {
-          await shiftPlanService.resolveConflict(conflict.planId, resolutionData);
-        } else {
-          await weeklyPlanService.resolveConflict(conflict.planId, resolutionData);
-        }
-      }
-
-      onResolved();
-    } catch (err: any) {
-      console.error('Error processing resolutions:', err);
-      setError(err.message || 'Fehler beim Verarbeiten der Auflösungen');
-    } finally {
+    // Check if any resolution is 'cancel'
+    const hasCancellation = Object.values(allResolutions).some(r => r.action === 'cancel');
+    if (hasCancellation) {
       setIsProcessing(false);
+      onCancel();
+      return;
     }
+
+    // Build resolution data for each conflict and pass back to parent
+    const resolutionData: ConflictResolution[] = [];
+
+    for (let i = 0; i < conflicts.length; i++) {
+      const conflict = conflicts[i];
+      const resolution = allResolutions[i];
+
+      if (!resolution || resolution.action === 'cancel') {
+        continue;
+      }
+
+      resolutionData.push({
+        action: resolution.action,
+        employeeId: conflict.employeeId,
+        shiftId: conflict.shiftId,
+        weekId: conflict.weekId,
+        swapEmployeeId: resolution.swapEmployeeId,
+        swapShiftId: resolution.swapShiftId,
+        swapWeekId: resolution.swapWeekId
+      });
+    }
+
+    setIsProcessing(false);
+    // Pass resolutions back to parent for handling
+    onResolved(resolutionData);
   };
 
   const handleCancelAll = () => {
@@ -236,87 +234,157 @@ const ConflictResolutionModal: React.FC<ConflictResolutionModalProps> = ({
 
           {/* Swap option */}
           <div
-            onClick={() => hasReplacements && handleActionSelect('swap')}
+            onClick={() => hasSwapCandidates && handleActionSelect('swap')}
             style={{
               padding: '15px',
               marginBottom: '10px',
               border: selectedAction === 'swap' ? '2px solid #27ae60' : '2px solid #ddd',
               borderRadius: '8px',
-              cursor: hasReplacements ? 'pointer' : 'not-allowed',
-              backgroundColor: selectedAction === 'swap' ? '#d5f4e6' : (hasReplacements ? 'white' : '#f5f5f5'),
-              opacity: hasReplacements ? 1 : 0.6
+              cursor: hasSwapCandidates ? 'pointer' : 'not-allowed',
+              backgroundColor: selectedAction === 'swap' ? '#d5f4e6' : (hasSwapCandidates ? 'white' : '#f5f5f5'),
+              opacity: hasSwapCandidates ? 1 : 0.6
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <input
                 type="radio"
                 checked={selectedAction === 'swap'}
-                onChange={() => hasReplacements && handleActionSelect('swap')}
-                disabled={!hasReplacements}
+                onChange={() => hasSwapCandidates && handleActionSelect('swap')}
+                disabled={!hasSwapCandidates}
               />
               <div>
-                <strong style={{ color: hasReplacements ? '#27ae60' : '#999' }}>
-                  Ersatzmitarbeiter zuweisen
+                <strong style={{ color: hasSwapCandidates ? '#27ae60' : '#999' }}>
+                  Schicht tauschen
                 </strong>
                 <p style={{ margin: '5px 0 0 0', fontSize: '14px', color: '#666' }}>
-                  {hasReplacements
-                    ? `${currentConflict.replacementCandidates.length} verfügbare Ersatzmitarbeiter gefunden`
-                    : 'Keine verfügbaren Ersatzmitarbeiter gefunden'
+                  {hasSwapCandidates
+                    ? `${currentConflict.swapCandidates.length} Tauschpartner gefunden`
+                    : 'Keine Tauschpartner gefunden'
                   }
                 </p>
               </div>
             </div>
 
-            {/* Replacement candidates */}
-            {selectedAction === 'swap' && hasReplacements && (
+            {/* Swap candidates */}
+            {selectedAction === 'swap' && hasSwapCandidates && (
               <div style={{ marginTop: '15px', paddingLeft: '30px' }}>
                 <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block' }}>
-                  Ersatzmitarbeiter auswählen:
+                  Tauschpartner auswählen:
                 </label>
-                <div style={{ maxHeight: '150px', overflowY: 'auto' }}>
-                  {currentConflict.replacementCandidates.map((candidate: ReplacementCandidate) => (
+                <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                  {currentConflict.swapCandidates.map((candidate: SwapCandidateInfo) => (
                     <div
-                      key={candidate.employeeId}
-                      onClick={() => handleReplacementSelect(candidate.employeeId)}
+                      key={`${candidate.employeeId}-${candidate.swapShift?.shiftId || candidate.swapWeek?.weekId}`}
+                      onClick={() => handleSwapCandidateSelect(candidate)}
                       style={{
                         padding: '10px',
                         marginBottom: '5px',
-                        border: selectedReplacement === candidate.employeeId ? '2px solid #27ae60' : '1px solid #ddd',
+                        border: selectedSwapCandidate?.employeeId === candidate.employeeId &&
+                               (selectedSwapCandidate?.swapShift?.shiftId === candidate.swapShift?.shiftId ||
+                                selectedSwapCandidate?.swapWeek?.weekId === candidate.swapWeek?.weekId)
+                          ? '2px solid #27ae60' : '1px solid #ddd',
                         borderRadius: '4px',
                         cursor: 'pointer',
-                        backgroundColor: selectedReplacement === candidate.employeeId ? '#e8f8e8' : 'white'
+                        backgroundColor: selectedSwapCandidate?.employeeId === candidate.employeeId &&
+                                        (selectedSwapCandidate?.swapShift?.shiftId === candidate.swapShift?.shiftId ||
+                                         selectedSwapCandidate?.swapWeek?.weekId === candidate.swapWeek?.weekId)
+                          ? '#e8f8e8' : 'white'
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
                         <input
                           type="radio"
-                          checked={selectedReplacement === candidate.employeeId}
-                          onChange={() => handleReplacementSelect(candidate.employeeId)}
+                          checked={selectedSwapCandidate?.employeeId === candidate.employeeId &&
+                                   (selectedSwapCandidate?.swapShift?.shiftId === candidate.swapShift?.shiftId ||
+                                    selectedSwapCandidate?.swapWeek?.weekId === candidate.swapWeek?.weekId)}
+                          onChange={() => handleSwapCandidateSelect(candidate)}
+                          style={{ marginTop: '4px' }}
                         />
-                        <div>
-                          <strong>{candidate.employeeName}</strong>
-                          <span style={{
-                            marginLeft: '10px',
-                            padding: '2px 6px',
-                            borderRadius: '4px',
-                            fontSize: '12px',
-                            backgroundColor: candidate.preferenceLevel === 1 ? '#27ae60' : '#f39c12',
-                            color: 'white'
-                          }}>
-                            {candidate.preferenceLevel === 1 ? 'Bevorzugt' : 'Möglich'}
-                          </span>
-                          {candidate.isTrainee && (
-                            <span style={{
-                              marginLeft: '5px',
-                              padding: '2px 6px',
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '5px' }}>
+                            <strong>{candidate.employeeName}</strong>
+                            {candidate.isTrainee && (
+                              <span style={{
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontSize: '12px',
+                                backgroundColor: '#CDA8F0',
+                                color: 'white'
+                              }}>
+                                Trainee
+                              </span>
+                            )}
+                          </div>
+                          {/* Show the shift/week to swap */}
+                          {candidate.swapShift && (
+                            <div style={{
+                              marginTop: '8px',
+                              padding: '8px',
+                              backgroundColor: '#f0f7ff',
                               borderRadius: '4px',
-                              fontSize: '12px',
-                              backgroundColor: '#CDA8F0',
-                              color: 'white'
+                              border: '1px solid #b8d4f0'
                             }}>
-                              Trainee
-                            </span>
+                              <div style={{ fontSize: '12px', fontWeight: '500', color: '#2c5282' }}>
+                                Tausch-Schicht:
+                              </div>
+                              <div style={{ fontSize: '13px', color: '#2c5282', marginTop: '2px' }}>
+                                {candidate.swapShift.dayName} {formatTime(candidate.swapShift.startTime)}-{formatTime(candidate.swapShift.endTime)}
+                                <span style={{ marginLeft: '5px', color: '#666' }}>({candidate.swapShift.timeSlotName})</span>
+                              </div>
+                              <div style={{ fontSize: '11px', color: '#666', marginTop: '4px' }}>
+                                {candidate.employeeName} übernimmt Ihre Schicht, Sie übernehmen diese Schicht
+                              </div>
+                            </div>
                           )}
+                          {candidate.swapWeek && (
+                            <div style={{
+                              marginTop: '8px',
+                              padding: '8px',
+                              backgroundColor: '#f0f7ff',
+                              borderRadius: '4px',
+                              border: '1px solid #b8d4f0'
+                            }}>
+                              <div style={{ fontSize: '12px', fontWeight: '500', color: '#2c5282' }}>
+                                Tausch-Woche:
+                              </div>
+                              <div style={{ fontSize: '13px', color: '#2c5282', marginTop: '2px' }}>
+                                KW {candidate.swapWeek.weekNumber}
+                                <span style={{ marginLeft: '5px', color: '#666' }}>
+                                  ({formatDate(candidate.swapWeek.startDate)} - {formatDate(candidate.swapWeek.endDate)})
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '11px', color: '#666', marginTop: '4px' }}>
+                                {candidate.employeeName} übernimmt Ihre Woche, Sie übernehmen diese Woche
+                              </div>
+                            </div>
+                          )}
+                          {/* Preference indicators */}
+                          <div style={{ marginTop: '5px', fontSize: '11px', color: '#666', display: 'flex', gap: '10px' }}>
+                            <span>
+                              Partner-Präferenz:
+                              <span style={{
+                                marginLeft: '3px',
+                                padding: '1px 4px',
+                                borderRadius: '3px',
+                                backgroundColor: candidate.theirPreferenceForSourceShift === 1 ? '#d5f4e6' : '#fef5e7',
+                                color: candidate.theirPreferenceForSourceShift === 1 ? '#27ae60' : '#f39c12'
+                              }}>
+                                {candidate.theirPreferenceForSourceShift === 1 ? 'Bevorzugt' : 'Möglich'}
+                              </span>
+                            </span>
+                            <span>
+                              Ihre Präferenz:
+                              <span style={{
+                                marginLeft: '3px',
+                                padding: '1px 4px',
+                                borderRadius: '3px',
+                                backgroundColor: candidate.sourcePreferenceForTheirShift === 1 ? '#d5f4e6' : '#fef5e7',
+                                color: candidate.sourcePreferenceForTheirShift === 1 ? '#27ae60' : '#f39c12'
+                              }}>
+                                {candidate.sourcePreferenceForTheirShift === 1 ? 'Bevorzugt' : 'Möglich'}
+                              </span>
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>

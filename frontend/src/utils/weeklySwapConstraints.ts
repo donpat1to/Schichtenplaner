@@ -281,3 +281,211 @@ export function findWeeklyTwoStepSwapPath(
 export function getWeekEmployees(weekId: string, ctx: WeeklySwapConstraintContext): EmployeeWithPreferences[] {
   return ctx.employees.filter(e => e.assignedWeeks.includes(weekId));
 }
+
+/**
+ * Check if unassigning an employee from a week is allowed
+ * (must maintain trainee supervision and minimum staffing)
+ */
+function canUnassignFromWeek(
+  weekId: string,
+  employeeId: string,
+  ctx: WeeklySwapConstraintContext
+): { allowed: boolean; reason?: string } {
+  const week = ctx.weeks.find(w => w.id === weekId);
+  if (!week) return { allowed: false, reason: 'Woche nicht gefunden' };
+
+  // Count current assignments
+  const currentCount = ctx.employees.filter(e => e.assignedWeeks.includes(weekId)).length;
+  const countAfterRemoval = currentCount - 1;
+
+  // Check minimum staffing
+  if (countAfterRemoval < week.minEmployees) {
+    return { allowed: false, reason: `Mindestbesetzung (${week.minEmployees}) würde unterschritten` };
+  }
+
+  // Check trainee supervision after removal
+  if (!weekWouldHaveTraineeSupervision(weekId, null, employeeId, ctx)) {
+    return { allowed: false, reason: 'Neuling-Betreuung wäre nicht mehr gewährleistet' };
+  }
+
+  return { allowed: true };
+}
+
+export interface WeeklySwapCandidate {
+  employee: EmployeeWithPreferences;
+  /** The week the candidate is currently assigned to (which source employee would take) */
+  theirWeekId: string;
+  /** Candidate's preference for taking the source week */
+  theirPreferenceForSourceWeek: number;
+  /** Source employee's preference for taking the candidate's week */
+  sourcePreferenceForTheirWeek: number;
+}
+
+/**
+ * Find swap candidates for an employee who wants to give up a week.
+ * Returns employees who can swap their week with the source employee.
+ */
+export function findWeeklySwapCandidates(
+  sourceWeekId: string,
+  sourceEmployeeId: string,
+  ctx: WeeklySwapConstraintContext
+): WeeklySwapCandidate[] {
+  const sourceWeek = ctx.weeks.find(w => w.id === sourceWeekId);
+  if (!sourceWeek) return [];
+
+  const sourceEmployee = ctx.employees.find(e => e.id === sourceEmployeeId);
+  if (!sourceEmployee) return [];
+
+  const candidates: WeeklySwapCandidate[] = [];
+
+  // Find all employees assigned to other weeks
+  for (const emp of ctx.employees) {
+    // Skip the source employee
+    if (emp.id === sourceEmployeeId) continue;
+
+    // Skip non-personnel and managers
+    if (!isEligibleForScheduling(emp) || isManager(emp)) continue;
+
+    // Check each week this employee is assigned to
+    for (const theirWeekId of emp.assignedWeeks) {
+      // Skip if it's the same week
+      if (theirWeekId === sourceWeekId) continue;
+
+      // Validate the swap using existing validation
+      const swapResult = validateWeeklyDirectSwap(
+        sourceEmployeeId,
+        sourceWeekId,
+        emp.id,
+        theirWeekId,
+        ctx
+      );
+
+      if (swapResult.valid) {
+        // Get preference levels
+        const theirPrefForSource = emp.preferences.find(
+          p => p.weekId === sourceWeekId
+        )?.preferenceLevel || 2;
+
+        const sourcePrefForTheirs = sourceEmployee.preferences.find(
+          p => p.weekId === theirWeekId
+        )?.preferenceLevel || 2;
+
+        candidates.push({
+          employee: emp,
+          theirWeekId,
+          theirPreferenceForSourceWeek: theirPrefForSource,
+          sourcePreferenceForTheirWeek: sourcePrefForTheirs
+        });
+      }
+    }
+  }
+
+  // Sort by combined preference (lower is better)
+  candidates.sort((a, b) => {
+    const scoreA = a.theirPreferenceForSourceWeek + a.sourcePreferenceForTheirWeek;
+    const scoreB = b.theirPreferenceForSourceWeek + b.sourcePreferenceForTheirWeek;
+    return scoreA - scoreB;
+  });
+
+  return candidates;
+}
+
+/**
+ * @deprecated Use findWeeklySwapCandidates instead
+ * Find replacement candidates for an employee being removed from a week
+ * Returns employees sorted by preference (level 1 first, then level 2)
+ */
+export function findWeeklyReplacementCandidates(
+  weekId: string,
+  excludeEmployeeId: string,
+  ctx: WeeklySwapConstraintContext
+): { employee: EmployeeWithPreferences; preferenceLevel: number }[] {
+  const week = ctx.weeks.find(w => w.id === weekId);
+  if (!week) return [];
+
+  const candidates: { employee: EmployeeWithPreferences; preferenceLevel: number }[] = [];
+
+  for (const emp of ctx.employees) {
+    // Skip the employee being replaced
+    if (emp.id === excludeEmployeeId) continue;
+
+    // Skip non-personnel and managers
+    if (!isEligibleForScheduling(emp) || isManager(emp)) continue;
+
+    // Check if available for this week
+    if (!isEmployeeAvailableForWeek(emp.id, weekId, ctx)) continue;
+
+    // Check if already assigned to this week
+    if (emp.assignedWeeks.includes(weekId)) continue;
+
+    // Check if week would respect employee limits after adding
+    if (!weekRespectsEmployeeLimits(weekId, emp.id, excludeEmployeeId, ctx)) continue;
+
+    // Check trainee supervision would be maintained
+    if (!weekWouldHaveTraineeSupervision(weekId, emp.id, excludeEmployeeId, ctx)) continue;
+
+    // Get preference level
+    const preference = emp.preferences.find(p => p.weekId === weekId);
+    const preferenceLevel = preference?.preferenceLevel || 2;
+
+    candidates.push({ employee: emp, preferenceLevel });
+  }
+
+  // Sort by preference level (1 first, then 2)
+  candidates.sort((a, b) => a.preferenceLevel - b.preferenceLevel);
+
+  return candidates;
+}
+
+/**
+ * Conflict information for an availability change
+ */
+export interface WeeklyAvailabilityConflict {
+  weekId: string;
+  employeeId: string;
+  swapCandidates: WeeklySwapCandidate[];
+  canUnassign: boolean;
+  unassignBlockedReason?: string;
+}
+
+/**
+ * Detect conflicts when an employee marks weeks as unavailable.
+ * Returns conflicts for weeks where the employee is currently assigned
+ * but wants to mark as unavailable (preferenceLevel === 3).
+ */
+export function detectWeeklyAvailabilityConflicts(
+  employeeId: string,
+  newPreferences: { weekId: string; preferenceLevel: number }[],
+  ctx: WeeklySwapConstraintContext
+): WeeklyAvailabilityConflict[] {
+  const conflicts: WeeklyAvailabilityConflict[] = [];
+
+  // Find the employee
+  const employee = ctx.employees.find(e => e.id === employeeId);
+  if (!employee) return conflicts;
+
+  // Find weeks marked as unavailable (preferenceLevel === 3)
+  const unavailableWeeks = newPreferences.filter(p => p.preferenceLevel === 3);
+
+  for (const pref of unavailableWeeks) {
+    // Check if employee is currently assigned to this week
+    const isAssigned = employee.assignedWeeks.includes(pref.weekId);
+
+    if (isAssigned) {
+      // Employee is assigned but wants to be unavailable - this is a conflict
+      // Find swap candidates (employees who can exchange weeks)
+      const swapCandidates = findWeeklySwapCandidates(pref.weekId, employeeId, ctx);
+      const unassignCheck = canUnassignFromWeek(pref.weekId, employeeId, ctx);
+
+      conflicts.push({
+        weekId: pref.weekId,
+        employeeId,
+        swapCandidates,
+        canUnassign: unassignCheck.allowed,
+        unassignBlockedReason: unassignCheck.reason
+      });
+    }
+  }
+
+  return conflicts;
+}

@@ -5,10 +5,6 @@ import bcrypt from 'bcryptjs';
 import { db } from '../services/databaseService.js';
 import { AuthRequest } from '../middleware/auth.js';
 import { CreateEmployeeRequest } from '../models/Employee.js';
-import {
-  checkAvailabilityConflicts,
-  ConflictCheckRequest
-} from '../services/ConflictDetectionService.js';
 
 function generateEmail(firstname: string, lastname: string): string {
   const convertUmlauts = (str: string): string => {
@@ -882,43 +878,5 @@ const checkAdminCount = async (employeeId: string, newRoles: string[]): Promise<
 
   } catch (error) {
     throw error;
-  }
-};
-
-/**
- * Check for availability conflicts before saving
- */
-export const checkConflicts = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const { employeeId } = req.params;
-    const { planId, planType, availabilities } = req.body as ConflictCheckRequest;
-
-    console.log('🔍 [checkConflicts] Request received:', {
-      employeeId,
-      planId,
-      planType,
-      availabilitiesCount: availabilities?.length
-    });
-
-    // Validate employee exists
-    const employee = await db.get('SELECT id FROM employees WHERE id = ?', [employeeId]);
-    if (!employee) {
-      console.log('❌ [checkConflicts] Employee not found:', employeeId);
-      res.status(404).json({ error: 'Employee not found' });
-      return;
-    }
-
-    const result = await checkAvailabilityConflicts({
-      employeeId,
-      planId,
-      planType,
-      availabilities
-    });
-
-    console.log('✅ [checkConflicts] Returning conflicts:', result.conflicts.length);
-    res.json({ conflicts: result.conflicts, contextData: result.contextData });
-  } catch (error) {
-    console.error('❌ Error checking availability conflicts:', error);
-    res.status(500).json({ error: 'Internal server error' });
   }
 };

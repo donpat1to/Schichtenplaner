@@ -12,7 +12,6 @@ import {
   CreateAssignmentsRequest
 } from '../models/WeeklyPlan';
 import { apiClient } from './apiClient';
-import { ConflictResolution } from './employeeService';
 
 export interface WeeklyPlanListItem extends WeeklyPlan {
   weekCount: number;
@@ -381,20 +380,4 @@ export const weeklyPlanService = {
     }
   },
 
-  async resolveConflict(planId: string, resolution: ConflictResolution): Promise<{ success: boolean; message: string }> {
-    try {
-      console.log('🔄 Resolving weekly plan conflict:', planId, resolution);
-      return await apiClient.post<{ success: boolean; message: string }>(
-        `/weekly-plans/${planId}/resolve-conflict`,
-        resolution
-      );
-    } catch (error: any) {
-      if (error.statusCode === 401) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('employee');
-        throw new Error('Nicht autorisiert - bitte erneut anmelden');
-      }
-      throw new Error('Fehler beim Auflösen des Konflikts');
-    }
-  },
 };

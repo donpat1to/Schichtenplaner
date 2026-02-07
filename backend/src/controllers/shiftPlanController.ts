@@ -15,10 +15,6 @@ import { AuthRequest } from '../middleware/auth.js';
 import { TEMPLATE_PRESETS } from '../models/defaults/shiftPlanDefaults.js';
 import ExcelJS from 'exceljs';
 import { chromium } from 'playwright-chromium';
-import {
-  resolveShiftConflict,
-  ConflictResolution
-} from '../services/ConflictDetectionService.js';
 
 async function getPlanWithDetails(planId: string) {
   const plan = await db.get<any>(`
@@ -2342,35 +2338,3 @@ function getDayOfWeek(dateString: string): number {
   const date = new Date(dateString);
   return date.getDay() === 0 ? 7 : date.getDay();
 }
-
-/**
- * Resolve a shift plan conflict
- */
-export const resolveConflict = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const { id: planId } = req.params;
-    const resolution: ConflictResolution = {
-      ...req.body,
-      planId,
-      conflictType: 'shift'
-    };
-
-    // Validate plan exists
-    const plan = await db.get('SELECT id, status FROM shift_plans WHERE id = ?', [planId]);
-    if (!plan) {
-      res.status(404).json({ error: 'Shift plan not found' });
-      return;
-    }
-
-    const result = await resolveShiftConflict(resolution);
-
-    if (result.success) {
-      res.json(result);
-    } else {
-      res.status(400).json(result);
-    }
-  } catch (error) {
-    console.error('Error resolving shift conflict:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-};

@@ -18,10 +18,6 @@ import {
 import { AuthRequest } from '../middleware/auth.js';
 import ExcelJS from 'exceljs';
 import { chromium } from 'playwright-chromium';
-import {
-  resolveWeeklyConflict,
-  ConflictResolution
-} from '../services/ConflictDetectionService.js';
 
 // Helper function to get ISO week number (Kalenderwoche)
 function getWeekNumber(date: Date): number {
@@ -1530,37 +1526,5 @@ export const exportWeeklyPlanToPDF = async (req: Request, res: Response): Promis
     console.error('Error exporting to PDF:', error);
     if (browser) await browser.close();
     res.status(500).json({ error: 'Internal server error during PDF export' });
-  }
-};
-
-/**
- * Resolve a weekly plan conflict
- */
-export const resolveConflict = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const { id: planId } = req.params;
-    const resolution: ConflictResolution = {
-      ...req.body,
-      planId,
-      conflictType: 'weekly'
-    };
-
-    // Validate plan exists
-    const plan = await db.get('SELECT id, status FROM weekly_plans WHERE id = ?', [planId]);
-    if (!plan) {
-      res.status(404).json({ error: 'Weekly plan not found' });
-      return;
-    }
-
-    const result = await resolveWeeklyConflict(resolution);
-
-    if (result.success) {
-      res.json(result);
-    } else {
-      res.status(400).json(result);
-    }
-  } catch (error) {
-    console.error('Error resolving weekly conflict:', error);
-    res.status(500).json({ error: 'Internal server error' });
   }
 };

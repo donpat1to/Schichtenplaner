@@ -20,7 +20,6 @@ import {
   publishPlan,
   getPlanStatistics,
   createAssignments,
-  resolveConflict
 } from '../controllers/shiftPlanController.js';
 import {
   validateShiftPlan,

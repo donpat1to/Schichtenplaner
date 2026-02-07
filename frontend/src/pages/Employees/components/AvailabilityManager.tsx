@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { employeeService, AvailabilityConflict, ConflictContextData } from '../../../services/employeeService';
+import { employeeService, AvailabilityConflict, ConflictResolution } from '../../../services/employeeService';
 import { shiftPlanService } from '../../../services/shiftPlanService';
 import { weeklyPlanService } from '../../../services/weeklyPlanService';
 import { Employee, EmployeeAvailability } from '../../../models/Employee';
@@ -10,7 +10,8 @@ import { useBackendValidation } from '../../../hooks/useBackendValidation';
 import { useAuth } from '../../../contexts/AuthContext';
 import Calendar from '../../../components/Calendar/Calendar';
 import ConflictResolutionModal from '../../../components/ConflictResolution/ConflictResolutionModal';
-import { findReplacementCandidates, SwapConstraintContext } from '../../../utils/swapConstraints';
+import { SwapConstraintContext, detectShiftAvailabilityConflicts } from '../../../utils/swapConstraints';
+import { WeeklySwapConstraintContext, detectWeeklyAvailabilityConflicts } from '../../../utils/weeklySwapConstraints';
 
 interface AvailabilityManagerProps {
   employee: Employee;
@@ -60,6 +61,9 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
   const [selectedWeeklyPlan, setSelectedWeeklyPlan] = useState<WeeklyPlanWithDetails | null>(null);
   const [weeklyPreferencesMap, setWeeklyPreferencesMap] = useState<Record<string, 1 | 2 | 3>>({});
 
+  // All employees for constraint checking
+  const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const { showNotification } = useNotification();
@@ -79,6 +83,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
   const [conflicts, setConflicts] = useState<AvailabilityConflict[]>([]);
   const [showConflictModal, setShowConflictModal] = useState(false);
   const [pendingSaveData, setPendingSaveData] = useState<any>(null);
+  const [pendingContext, setPendingContext] = useState<{ type: 'shift' | 'weekly'; ctx: SwapConstraintContext | WeeklySwapConstraintContext } | null>(null);
 
   const daysOfWeek = [
     { id: 1, name: 'Montag' },
@@ -169,6 +174,12 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         const plan = await shiftPlanService.getShiftPlan(selectedPlanId);
         setSelectedPlan(plan);
 
+        // Fetch all employees for conflict detection if plan is published
+        if (plan.status === 'published') {
+          const employees = await employeeService.getEmployees(false);
+          setAllEmployees(employees);
+        }
+
         try {
           const allAvailabilities = await employeeService.getAvailabilities(employee.id);
           const planAvailabilities = allAvailabilities.filter(
@@ -242,6 +253,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
         const weeksMax = assignmentsPerWeekMax * weeksCount;
 
         const employees = await employeeService.getEmployees(false);
+        setAllEmployees(employees);
         const employeeSmallContractCount = employees.filter(e => e.employeeType === 'personell' && e.contractType === 'small').length;
         const employeeLargeContractCount = employees.filter(e => e.employeeType === 'personell' && e.contractType === 'large').length;
 
@@ -785,114 +797,126 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
     if (selectedPlan?.status === 'published') {
       try {
         setSaving(true);
-        const unavailableShifts = validAvailabilities.filter(avail => avail.preferenceLevel === 3);
-        console.log('🔍 Shifts marked as unavailable:', unavailableShifts.map(a => a.shiftId));
 
-        const conflictCheckData = {
-          planId: selectedPlanId,
-          planType: 'shift' as const,
-          availabilities: validAvailabilities.map(avail => ({
-            shiftId: avail.shiftId,
-            preferenceLevel: avail.preferenceLevel
-          }))
-        };
-        console.log('🔍 Sending conflict check request:', conflictCheckData);
+        // Build SwapConstraintContext from local data
+        const timeSlotMap = new Map(selectedPlan.timeSlots?.map(ts => [ts.id, ts]) || []);
 
-        const conflictResult = await employeeService.checkAvailabilityConflicts(employee.id, conflictCheckData);
-        console.log('🔍 Conflict check result:', conflictResult);
+        // Get all availabilities for all employees from the plan
+        const allPlanAvailabilities = await Promise.all(
+          allEmployees.map(async (emp) => {
+            try {
+              const empAvails = await employeeService.getAvailabilities(emp.id);
+              return empAvails.filter(a => a.planId === selectedPlanId && a.shiftId);
+            } catch {
+              return [];
+            }
+          })
+        );
+        const flatAvailabilities = allPlanAvailabilities.flat();
 
-        if (conflictResult.conflicts && conflictResult.conflicts.length > 0) {
-          // Use frontend constraint checking for replacement candidates
-          let conflictsWithCandidates = conflictResult.conflicts;
-
-          if (conflictResult.contextData) {
-            const defaultCreatedAt = '1970-01-01T00:00:00.000Z';
-            const defaultAssignedAt = '1970-01-01T00:00:00.000Z';
-            const normalizeEmployeeType = (value: string): Employee['employeeType'] => {
-              const allowed = ['manager', 'personell', 'apprentice', 'guest'] as const;
-              return allowed.includes(value as (typeof allowed)[number]) ? (value as Employee['employeeType']) : 'personell';
-            };
-            const normalizeContractType = (value: string | null): Employee['contractType'] | undefined => {
-              if (value === 'small' || value === 'large' || value === 'flexible') return value;
-              return undefined;
-            };
-            const toEmployee = (e: ConflictContextData['employees'][number]): Employee => ({
-              id: e.id,
-              username: '',
-              email: '',
-              firstname: e.firstname,
-              lastname: e.lastname,
-              employeeType: normalizeEmployeeType(e.employeeType),
-              contractType: normalizeContractType(e.contractType),
-              canWorkAlone: e.canWorkAlone,
-              isTrainee: e.isTrainee,
-              isActive: e.isActive,
-              createdAt: defaultCreatedAt,
-              roles: [],
-            });
-            const toAssignment = (
-              a: ConflictContextData['assignments'][number],
-              planId: string
-            ): ShiftAssignment => ({
-              id: `${planId}-${a.shiftId}-${a.employeeId}`,
-              planId,
-              shiftId: a.shiftId,
-              employeeId: a.employeeId,
-              assignedAt: defaultAssignedAt,
-              assignedBy: 'system',
-            });
-
-            const assignments = conflictResult.contextData.assignments.map(a => toAssignment(a, selectedPlanId));
-
-            // Build SwapConstraintContext from backend data
-            const ctx: SwapConstraintContext = {
-              employees: conflictResult.contextData.employees.map(toEmployee),
-              shifts: conflictResult.contextData.shifts.map(s => ({
-                id: s.id,
-                planId: s.planId,
-                dayOfWeek: s.dayOfWeek,
-                timeSlotId: s.timeSlotId,
-                minEmployees: s.minEmployees,
-                maxEmployees: s.maxEmployees,
-                timeSlot: { id: s.timeSlotId, name: '', startTime: '', endTime: '' },
-                assignments: assignments.filter(a => a.shiftId === s.id)
-              })),
-              availabilities: conflictResult.contextData.availabilities.map(a => ({
-                id: `${selectedPlanId}-${a.shiftId}-${a.employeeId}`,
-                employeeId: a.employeeId,
-                planId: selectedPlanId,
-                shiftId: a.shiftId,
-                preferenceLevel: a.preferenceLevel as 1 | 2 | 3
-              })),
-              assignments
-            };
-
-            // Compute replacement candidates for each conflict using frontend logic
-            conflictsWithCandidates = conflictResult.conflicts.map(conflict => {
-              if (conflict.shiftId) {
-                const candidates = findReplacementCandidates(conflict.shiftId, conflict.employeeId, ctx);
-                return {
-                  ...conflict,
-                  replacementCandidates: candidates.map(c => ({
-                    employeeId: c.employee.id,
-                    employeeName: `${c.employee.firstname} ${c.employee.lastname}`,
-                    preferenceLevel: c.preferenceLevel,
-                    isTrainee: c.employee.isTrainee,
-                    canWorkAlone: c.employee.canWorkAlone,
-                    currentShiftCount: ctx.assignments.filter(a => a.employeeId === c.employee.id).length
-                  }))
-                };
-              }
-              return conflict;
-            });
-
-            console.log('🔍 Computed replacement candidates using frontend logic');
+        // Build assignments from shift data
+        const assignments: ShiftAssignment[] = [];
+        selectedPlan.shifts?.forEach(shift => {
+          const shiftData = shift as ShiftWithData;
+          if (shiftData.assignments) {
+            shiftData.assignments.forEach(a => assignments.push(a));
           }
+        });
 
-          // Show conflict modal
-          console.log('⚠️ Conflicts found:', conflictsWithCandidates);
-          setConflicts(conflictsWithCandidates);
+        const ctx: SwapConstraintContext = {
+          employees: allEmployees,
+          shifts: (selectedPlan.shifts || []).map(s => ({
+            ...s,
+            timeSlot: timeSlotMap.get(s.timeSlotId) || { id: s.timeSlotId, name: '', startTime: '', endTime: '' },
+            assignments: assignments.filter(a => a.shiftId === s.id)
+          })) as ShiftWithData[],
+          availabilities: flatAvailabilities,
+          assignments
+        };
+
+        // Detect conflicts using frontend logic
+        const shiftConflicts = detectShiftAvailabilityConflicts(
+          employee.id,
+          validAvailabilities.map(a => ({ shiftId: a.shiftId!, preferenceLevel: a.preferenceLevel })),
+          ctx
+        );
+
+        console.log('🔍 Frontend conflict detection result:', shiftConflicts);
+
+        if (shiftConflicts.length > 0) {
+          // Convert to AvailabilityConflict format for the modal
+          const dayNames: Record<number, string> = {
+            1: 'Montag', 2: 'Dienstag', 3: 'Mittwoch', 4: 'Donnerstag',
+            5: 'Freitag', 6: 'Samstag', 7: 'Sonntag'
+          };
+
+          const conflictsForModal: AvailabilityConflict[] = shiftConflicts.map(c => {
+            const shift = ctx.shifts.find(s => s.id === c.shiftId);
+            const timeSlot = shift ? timeSlotMap.get(shift.timeSlotId) : undefined;
+
+            return {
+              type: 'shift' as const,
+              planId: selectedPlanId,
+              planName: selectedPlan?.name || '',
+              planStatus: selectedPlan?.status || '',
+              employeeId: c.employeeId,
+              employeeName: `${employee.firstname} ${employee.lastname}`,
+              shiftId: c.shiftId,
+              shiftDetails: shift ? {
+                dayOfWeek: shift.dayOfWeek,
+                dayName: dayNames[shift.dayOfWeek] || `Tag ${shift.dayOfWeek}`,
+                timeSlotName: timeSlot?.name || '',
+                startTime: timeSlot?.startTime || '',
+                endTime: timeSlot?.endTime || ''
+              } : undefined,
+              swapCandidates: c.swapCandidates.map(sc => {
+                // Get swap shift details
+                const swapShiftData = ctx.shifts.find(sh => sh.id === sc.theirShiftId);
+                const swapTimeSlot = swapShiftData ? timeSlotMap.get(swapShiftData.timeSlotId) : undefined;
+
+                // Get all current shifts for this candidate
+                const candidateAssignments = ctx.assignments.filter(a => a.employeeId === sc.employee.id);
+                const currentShifts = candidateAssignments.map(a => {
+                  const s = ctx.shifts.find(sh => sh.id === a.shiftId);
+                  const ts = s ? timeSlotMap.get(s.timeSlotId) : undefined;
+                  return {
+                    shiftId: a.shiftId,
+                    dayOfWeek: s?.dayOfWeek || 0,
+                    dayName: dayNames[s?.dayOfWeek || 0] || '',
+                    timeSlotName: ts?.name || '',
+                    startTime: ts?.startTime || '',
+                    endTime: ts?.endTime || ''
+                  };
+                });
+
+                return {
+                  employeeId: sc.employee.id,
+                  employeeName: `${sc.employee.firstname} ${sc.employee.lastname}`,
+                  isTrainee: sc.employee.isTrainee || false,
+                  canWorkAlone: sc.employee.canWorkAlone || false,
+                  swapShift: swapShiftData ? {
+                    shiftId: sc.theirShiftId,
+                    dayOfWeek: swapShiftData.dayOfWeek,
+                    dayName: dayNames[swapShiftData.dayOfWeek] || `Tag ${swapShiftData.dayOfWeek}`,
+                    timeSlotName: swapTimeSlot?.name || '',
+                    startTime: swapTimeSlot?.startTime || '',
+                    endTime: swapTimeSlot?.endTime || ''
+                  } : undefined,
+                  theirPreferenceForSourceShift: sc.theirPreferenceForSourceShift,
+                  sourcePreferenceForTheirShift: sc.sourcePreferenceForTheirShift,
+                  currentShiftCount: candidateAssignments.length,
+                  currentShifts
+                };
+              }),
+              canUnassign: c.canUnassign,
+              unassignBlockedReason: c.unassignBlockedReason
+            };
+          });
+
+          console.log('⚠️ Conflicts found:', conflictsForModal);
+          setConflicts(conflictsForModal);
           setPendingSaveData({ type: 'shift', data: requestData });
+          setPendingContext({ type: 'shift', ctx });
           setShowConflictModal(true);
           setSaving(false);
           return;
@@ -913,11 +937,16 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
     await performShiftSave(requestData);
   };
 
-  const performShiftSave = async (requestData: any) => {
+  const performShiftSave = async (requestData: any, resolutions?: ConflictResolution[]) => {
     await executeWithValidation(async () => {
       setSaving(true);
 
-      await employeeService.updateAvailabilities(employee.id, requestData);
+      // Include resolutions in the request if provided
+      const dataWithResolutions = resolutions && resolutions.length > 0
+        ? { ...requestData, resolutions }
+        : requestData;
+
+      await employeeService.updateAvailabilities(employee.id, dataWithResolutions);
 
       showNotification({
         type: 'success',
@@ -953,19 +982,81 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
     if (selectedWeeklyPlan.status === 'published') {
       try {
         setSaving(true);
-        const conflictResult = await employeeService.checkAvailabilityConflicts(employee.id, {
-          planId: selectedWeeklyPlanId,
-          planType: 'weekly',
-          availabilities: preferences.map(pref => ({
-            weekId: pref.weekId,
-            preferenceLevel: pref.preferenceLevel || 3
-          }))
-        });
 
-        if (conflictResult.conflicts && conflictResult.conflicts.length > 0) {
-          // Show conflict modal
-          setConflicts(conflictResult.conflicts);
+        // Build WeeklySwapConstraintContext from local data
+        const weeklyCtx: WeeklySwapConstraintContext = {
+          employees: selectedWeeklyPlan.employees || [],
+          weeks: selectedWeeklyPlan.weeks || []
+        };
+
+        // Detect conflicts using frontend logic
+        const weeklyConflicts = detectWeeklyAvailabilityConflicts(
+          employee.id,
+          preferences.map(p => ({ weekId: p.weekId, preferenceLevel: p.preferenceLevel || 3 })),
+          weeklyCtx
+        );
+
+        console.log('🔍 Frontend weekly conflict detection result:', weeklyConflicts);
+
+        if (weeklyConflicts.length > 0) {
+          // Convert to AvailabilityConflict format for the modal
+          const conflictsForModal: AvailabilityConflict[] = weeklyConflicts.map(c => {
+            const week = weeklyCtx.weeks.find(w => w.id === c.weekId);
+
+            return {
+              type: 'weekly' as const,
+              planId: selectedWeeklyPlanId,
+              planName: selectedWeeklyPlan?.name || '',
+              planStatus: selectedWeeklyPlan?.status || '',
+              employeeId: c.employeeId,
+              employeeName: `${employee.firstname} ${employee.lastname}`,
+              weekId: c.weekId,
+              weekDetails: week ? {
+                weekNumber: week.weekNumber,
+                startDate: week.startDate,
+                endDate: week.endDate
+              } : undefined,
+              swapCandidates: c.swapCandidates.map(sc => {
+                // Get swap week details
+                const swapWeekData = weeklyCtx.weeks.find(w => w.id === sc.theirWeekId);
+
+                // Get all current weeks for this candidate
+                const currentWeeks = sc.employee.assignedWeeks.map(weekId => {
+                  const w = weeklyCtx.weeks.find(wk => wk.id === weekId);
+                  return {
+                    weekId,
+                    weekNumber: w?.weekNumber || 0,
+                    startDate: w?.startDate || '',
+                    endDate: w?.endDate || ''
+                  };
+                });
+
+                return {
+                  employeeId: sc.employee.id,
+                  employeeName: `${sc.employee.firstname} ${sc.employee.lastname}`,
+                  isTrainee: sc.employee.isTrainee || false,
+                  canWorkAlone: false, // Not applicable for weekly plans
+                  swapWeek: swapWeekData ? {
+                    weekId: sc.theirWeekId,
+                    weekNumber: swapWeekData.weekNumber,
+                    startDate: swapWeekData.startDate,
+                    endDate: swapWeekData.endDate
+                  } : undefined,
+                  theirPreferenceForSourceShift: sc.theirPreferenceForSourceWeek,
+                  sourcePreferenceForTheirShift: sc.sourcePreferenceForTheirWeek,
+                  currentWeekCount: sc.employee.assignedWeeks.length,
+                  currentWeeks
+                };
+              }),
+              canUnassign: c.canUnassign,
+              unassignBlockedReason: c.unassignBlockedReason
+            };
+          });
+
+          console.log('⚠️ Weekly conflicts found:', conflictsForModal);
+          setConflicts(conflictsForModal);
           setPendingSaveData({ type: 'weekly', data: { preferences, requiredWeeks } });
+          setPendingContext({ type: 'weekly', ctx: weeklyCtx });
           setShowConflictModal(true);
           setSaving(false);
           return;
@@ -982,16 +1073,21 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
     await performWeeklySave({ preferences, requiredWeeks });
   };
 
-  const performWeeklySave = async (data: { preferences: any[]; requiredWeeks: number }) => {
+  const performWeeklySave = async (data: { preferences: any[]; requiredWeeks: number }, resolutions?: ConflictResolution[]) => {
     await executeWithValidation(async () => {
       setSaving(true);
 
+      // Include resolutions in the request if provided
+      const dataWithResolutions = resolutions && resolutions.length > 0
+        ? { ...data, resolutions }
+        : data;
+
       if (isOwnProfile) {
         // Save own preferences
-        await weeklyPlanService.saveMyPreferences(selectedWeeklyPlanId, data);
+        await weeklyPlanService.saveMyPreferences(selectedWeeklyPlanId, dataWithResolutions);
       } else if (isAdmin) {
         // Admin saving for another employee
-        await weeklyPlanService.saveEmployeePreferences(selectedWeeklyPlanId, employee.id, data);
+        await weeklyPlanService.saveEmployeePreferences(selectedWeeklyPlanId, employee.id, dataWithResolutions);
       }
 
       showNotification({
@@ -1005,26 +1101,147 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
     });
   };
 
-  const handleConflictResolved = async () => {
+  const handleConflictResolved = async (resolutions: ConflictResolution[]) => {
     setShowConflictModal(false);
 
-    // After resolving conflicts, proceed with the save
-    if (pendingSaveData) {
-      if (pendingSaveData.type === 'shift') {
-        await performShiftSave(pendingSaveData.data);
-      } else {
-        await performWeeklySave(pendingSaveData.data);
+    try {
+      // Process assignment changes based on resolutions
+      if (pendingContext && resolutions.length > 0) {
+        if (pendingContext.type === 'shift' && selectedPlan) {
+          const ctx = pendingContext.ctx as SwapConstraintContext;
+
+          // Compute new assignments based on resolutions
+          let updatedAssignments = [...ctx.assignments];
+
+          for (const resolution of resolutions) {
+            if (resolution.action === 'swap' && resolution.shiftId && resolution.swapEmployeeId && resolution.swapShiftId) {
+              // SWAP: Both employees exchange their shifts
+              // 1. Remove source employee from their shift
+              updatedAssignments = updatedAssignments.filter(
+                a => !(a.shiftId === resolution.shiftId && a.employeeId === resolution.employeeId)
+              );
+              // 2. Remove swap employee from their shift
+              updatedAssignments = updatedAssignments.filter(
+                a => !(a.shiftId === resolution.swapShiftId && a.employeeId === resolution.swapEmployeeId)
+              );
+              // 3. Assign swap employee to source's old shift
+              updatedAssignments.push({
+                id: `${selectedPlanId}-${resolution.shiftId}-${resolution.swapEmployeeId}`,
+                planId: selectedPlanId,
+                shiftId: resolution.shiftId,
+                employeeId: resolution.swapEmployeeId,
+                assignedAt: new Date().toISOString(),
+                assignedBy: user?.id || 'system'
+              });
+              // 4. Assign source employee to swap employee's old shift
+              updatedAssignments.push({
+                id: `${selectedPlanId}-${resolution.swapShiftId}-${resolution.employeeId}`,
+                planId: selectedPlanId,
+                shiftId: resolution.swapShiftId,
+                employeeId: resolution.employeeId,
+                assignedAt: new Date().toISOString(),
+                assignedBy: user?.id || 'system'
+              });
+            } else if (resolution.action === 'unassign' && resolution.shiftId) {
+              // Remove the assignment
+              updatedAssignments = updatedAssignments.filter(
+                a => !(a.shiftId === resolution.shiftId && a.employeeId === resolution.employeeId)
+              );
+            }
+            // 'force_keep' does nothing to assignments
+          }
+
+          // Call createAssignments to persist the updated assignments
+          const assignmentsToCreate = updatedAssignments.map(a => ({
+            shiftId: a.shiftId,
+            employeeId: a.employeeId
+          }));
+
+          console.log('📝 Updating shift assignments:', assignmentsToCreate);
+          await shiftPlanService.createAssignments(selectedPlanId, { assignments: assignmentsToCreate });
+
+        } else if (pendingContext.type === 'weekly' && selectedWeeklyPlan) {
+          const ctx = pendingContext.ctx as WeeklySwapConstraintContext;
+
+          // Build new assignments map
+          const weekAssignments: { weekId: string; employeeId: string }[] = [];
+
+          // Start with existing assignments
+          for (const emp of ctx.employees) {
+            for (const weekId of emp.assignedWeeks) {
+              weekAssignments.push({ weekId, employeeId: emp.id });
+            }
+          }
+
+          // Apply resolutions
+          for (const resolution of resolutions) {
+            if (resolution.action === 'swap' && resolution.weekId && resolution.swapEmployeeId && resolution.swapWeekId) {
+              // SWAP: Both employees exchange their weeks
+              // 1. Remove source employee from their week
+              const removeSourceIdx = weekAssignments.findIndex(
+                a => a.weekId === resolution.weekId && a.employeeId === resolution.employeeId
+              );
+              if (removeSourceIdx >= 0) weekAssignments.splice(removeSourceIdx, 1);
+
+              // 2. Remove swap employee from their week
+              const removeSwapIdx = weekAssignments.findIndex(
+                a => a.weekId === resolution.swapWeekId && a.employeeId === resolution.swapEmployeeId
+              );
+              if (removeSwapIdx >= 0) weekAssignments.splice(removeSwapIdx, 1);
+
+              // 3. Assign swap employee to source's old week
+              weekAssignments.push({
+                weekId: resolution.weekId,
+                employeeId: resolution.swapEmployeeId
+              });
+
+              // 4. Assign source employee to swap employee's old week
+              weekAssignments.push({
+                weekId: resolution.swapWeekId,
+                employeeId: resolution.employeeId
+              });
+            } else if (resolution.action === 'unassign' && resolution.weekId) {
+              // Remove the assignment
+              const removeIdx = weekAssignments.findIndex(
+                a => a.weekId === resolution.weekId && a.employeeId === resolution.employeeId
+              );
+              if (removeIdx >= 0) weekAssignments.splice(removeIdx, 1);
+            }
+            // 'force_keep' does nothing to assignments
+          }
+
+          console.log('📝 Updating weekly assignments:', weekAssignments);
+          await weeklyPlanService.createAssignments(selectedWeeklyPlanId, { assignments: weekAssignments });
+        }
       }
+
+      // After resolving conflicts, proceed with the save including resolutions
+      if (pendingSaveData) {
+        if (pendingSaveData.type === 'shift') {
+          await performShiftSave(pendingSaveData.data, resolutions);
+        } else {
+          await performWeeklySave(pendingSaveData.data, resolutions);
+        }
+      }
+    } catch (err) {
+      console.error('Error applying conflict resolutions:', err);
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: 'Fehler beim Anwenden der Konfliktauflösung'
+      });
     }
 
     setConflicts([]);
     setPendingSaveData(null);
+    setPendingContext(null);
   };
 
   const handleConflictCancel = () => {
     setShowConflictModal(false);
     setConflicts([]);
     setPendingSaveData(null);
+    setPendingContext(null);
 
     showNotification({
       type: 'info',
