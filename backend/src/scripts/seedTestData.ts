@@ -319,9 +319,9 @@ export async function seedTestData(): Promise<void> {
                     const timeSlotId = timeSlotMap[shiftData.time];
 
                     await db.run(
-                        `INSERT INTO shifts (id, plan_id, time_slot_id, day_of_week, required_employees, color) 
-                        VALUES (?, ?, ?, ?, ?, ?)`,
-                        [shiftId, planId, timeSlotId, dayOfWeek, 2, '#3498db']
+                        `INSERT INTO shifts (id, plan_id, time_slot_id, day_of_week, color) 
+                        VALUES (?, ?, ?, ?, ?)`,
+                        [shiftId, planId, timeSlotId, dayOfWeek, '#3498db']
                     );
 
                     shiftMap[`${dayName}_${shiftType}`] = shiftId;

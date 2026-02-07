@@ -1114,15 +1114,26 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
           let updatedAssignments = [...ctx.assignments];
 
           for (const resolution of resolutions) {
-            if (resolution.action === 'swap' && resolution.shiftId && resolution.swapEmployeeId && resolution.swapShiftId) {
+            if (resolution.action === 'swap' && resolution.shiftId && resolution.swapEmployeeId) {
               // SWAP: Both employees exchange their shifts
+              // Find the swap employee's CURRENT shift in the updated assignments
+              const swapEmployeeCurrentAssignment = updatedAssignments.find(
+                a => a.employeeId === resolution.swapEmployeeId
+              );
+              const swapEmployeeCurrentShiftId = swapEmployeeCurrentAssignment?.shiftId;
+
+              if (!swapEmployeeCurrentShiftId) {
+                console.warn(`Swap employee ${resolution.swapEmployeeId} has no current shift assignment, skipping swap`);
+                continue;
+              }
+
               // 1. Remove source employee from their shift
               updatedAssignments = updatedAssignments.filter(
                 a => !(a.shiftId === resolution.shiftId && a.employeeId === resolution.employeeId)
               );
-              // 2. Remove swap employee from their shift
+              // 2. Remove swap employee from their CURRENT shift (not the original one)
               updatedAssignments = updatedAssignments.filter(
-                a => !(a.shiftId === resolution.swapShiftId && a.employeeId === resolution.swapEmployeeId)
+                a => !(a.shiftId === swapEmployeeCurrentShiftId && a.employeeId === resolution.swapEmployeeId)
               );
               // 3. Assign swap employee to source's old shift
               updatedAssignments.push({
@@ -1133,11 +1144,11 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                 assignedAt: new Date().toISOString(),
                 assignedBy: user?.id || 'system'
               });
-              // 4. Assign source employee to swap employee's old shift
+              // 4. Assign source employee to swap employee's CURRENT shift
               updatedAssignments.push({
-                id: `${selectedPlanId}-${resolution.swapShiftId}-${resolution.employeeId}`,
+                id: `${selectedPlanId}-${swapEmployeeCurrentShiftId}-${resolution.employeeId}`,
                 planId: selectedPlanId,
-                shiftId: resolution.swapShiftId,
+                shiftId: swapEmployeeCurrentShiftId,
                 employeeId: resolution.employeeId,
                 assignedAt: new Date().toISOString(),
                 assignedBy: user?.id || 'system'
@@ -1175,17 +1186,28 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
 
           // Apply resolutions
           for (const resolution of resolutions) {
-            if (resolution.action === 'swap' && resolution.weekId && resolution.swapEmployeeId && resolution.swapWeekId) {
+            if (resolution.action === 'swap' && resolution.weekId && resolution.swapEmployeeId) {
               // SWAP: Both employees exchange their weeks
+              // Find the swap employee's CURRENT week in the updated assignments
+              const swapEmployeeCurrentAssignment = weekAssignments.find(
+                a => a.employeeId === resolution.swapEmployeeId
+              );
+              const swapEmployeeCurrentWeekId = swapEmployeeCurrentAssignment?.weekId;
+
+              if (!swapEmployeeCurrentWeekId) {
+                console.warn(`Swap employee ${resolution.swapEmployeeId} has no current week assignment, skipping swap`);
+                continue;
+              }
+
               // 1. Remove source employee from their week
               const removeSourceIdx = weekAssignments.findIndex(
                 a => a.weekId === resolution.weekId && a.employeeId === resolution.employeeId
               );
               if (removeSourceIdx >= 0) weekAssignments.splice(removeSourceIdx, 1);
 
-              // 2. Remove swap employee from their week
+              // 2. Remove swap employee from their CURRENT week (not the original one)
               const removeSwapIdx = weekAssignments.findIndex(
-                a => a.weekId === resolution.swapWeekId && a.employeeId === resolution.swapEmployeeId
+                a => a.weekId === swapEmployeeCurrentWeekId && a.employeeId === resolution.swapEmployeeId
               );
               if (removeSwapIdx >= 0) weekAssignments.splice(removeSwapIdx, 1);
 
@@ -1195,9 +1217,9 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                 employeeId: resolution.swapEmployeeId
               });
 
-              // 4. Assign source employee to swap employee's old week
+              // 4. Assign source employee to swap employee's CURRENT week
               weekAssignments.push({
-                weekId: resolution.swapWeekId,
+                weekId: swapEmployeeCurrentWeekId,
                 employeeId: resolution.employeeId
               });
             } else if (resolution.action === 'unassign' && resolution.weekId) {
