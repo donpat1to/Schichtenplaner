@@ -64,13 +64,19 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    const { password, firstname, lastname } = req.body;
+    const { password, firstname, lastname, username } = req.body;
 
-    console.log('👤 Creating admin with data:', { firstname, lastname });
+    console.log('👤 Creating admin with data:', { firstname, lastname, username });
 
     // Validation
-    if (!password || !firstname || !lastname) {
-      res.status(400).json({ error: 'Passwort, Vorname und Nachname sind erforderlich' });
+    if (!password || !firstname || !lastname || !username) {
+      res.status(400).json({ error: 'Passwort, Vorname, Nachname und Benutzername sind erforderlich' });
+      return;
+    }
+
+    // Username validation
+    if (username.length < 3) {
+      res.status(400).json({ error: 'Der Benutzername muss mindestens 3 Zeichen lang sein' });
       return;
     }
 
@@ -96,9 +102,9 @@ export const setupAdmin = async (req: Request, res: Response): Promise<void> => 
     try {
       // ✅ CORRECTED: Create admin with valid 'manager' type and 'flexible' contract
       await db.run(
-        `INSERT INTO employees (id, email, password, firstname, lastname, employee_type, contract_type, can_work_alone, is_active, is_trainee)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [adminId, email, hashedPassword, firstname, lastname, 'manager', 'flexible', true, 1, false]
+        `INSERT INTO employees (id, username, email, password, firstname, lastname, employee_type, contract_type, can_work_alone, is_active, is_trainee)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [adminId, username, email, hashedPassword, firstname, lastname, 'manager', 'flexible', true, 1, false]
       );
 
       // Assign admin role in employee_roles table

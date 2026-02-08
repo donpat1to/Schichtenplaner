@@ -5,6 +5,7 @@ const API_BASE_URL = '/api';
 
 // ===== TYP-DEFINITIONEN =====
 interface SetupFormData {
+  username: string;
   password: string;
   confirmPassword: string;
   firstname: string;
@@ -21,6 +22,7 @@ interface SetupStep {
 const useSetup = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState<SetupFormData>({
+    username: '',
     password: '',
     confirmPassword: '',
     firstname: '',
@@ -50,6 +52,14 @@ const useSetup = () => {
 
   // ===== VALIDIERUNGS-FUNKTIONEN =====
   const validateStep1 = (): boolean => {
+    if (!formData.username.trim()) {
+      setError('Bitte geben Sie einen Benutzernamen ein.');
+      return false;
+    }
+    if (formData.username.trim().length < 3) {
+      setError('Der Benutzername muss mindestens 3 Zeichen lang sein.');
+      return false;
+    }
     if (!formData.firstname.trim()) {
       setError('Bitte geben Sie einen Vornamen ein.');
       return false;
@@ -138,6 +148,7 @@ const useSetup = () => {
       setError('');
 
       const payload = {
+        username: formData.username,
         password: formData.password,
         firstname: formData.firstname,
         lastname: formData.lastname
@@ -186,10 +197,11 @@ const useSetup = () => {
   const isStepCompleted = (stepIndex: number): boolean => {
     switch (stepIndex) {
       case 0:
+        return !!formData.username.trim() && formData.username.trim().length >= 3 &&
+          !!formData.firstname.trim() && !!formData.lastname.trim();
+      case 1:
         return formData.password.length >= 8 &&
           formData.password === formData.confirmPassword;
-      case 1:
-        return !!formData.firstname.trim() && !!formData.lastname.trim();
       default:
         return false;
     }
@@ -229,6 +241,40 @@ const Step1Content: React.FC<StepContentProps> = ({
   getEmailPreview
 }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    <div>
+      <label style={{
+        display: 'block',
+        marginBottom: '0.5rem',
+        fontWeight: '600',
+        color: '#495057'
+      }}>
+        Benutzername
+      </label>
+      <input
+        type="text"
+        name="username"
+        value={formData.username}
+        onChange={onInputChange}
+        style={{
+          width: '100%',
+          padding: '0.75rem',
+          border: '1px solid #ced4da',
+          borderRadius: '6px',
+          fontSize: '1rem'
+        }}
+        placeholder="admin"
+        required
+        autoComplete="username"
+      />
+      <div style={{
+        fontSize: '0.875rem',
+        color: '#6c757d',
+        marginTop: '0.25rem'
+      }}>
+        Mindestens 3 Zeichen
+      </div>
+    </div>
+
     <div>
       <label style={{
         display: 'block',
@@ -400,6 +446,10 @@ const Step3Content: React.FC<StepContentProps> = ({
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span style={{ color: '#6c757d' }}>Benutzername:</span>
+          <span style={{ fontWeight: '500' }}>{formData.username || '-'}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <span style={{ color: '#6c757d' }}>E-Mail:</span>
           <span style={{ fontWeight: '500' }}>{getEmailPreview()}</span>
         </div>
@@ -421,8 +471,8 @@ const Step3Content: React.FC<StepContentProps> = ({
       border: '1px solid #b6d7e8',
       color: '#2c3e50'
     }}>
-      <strong>💡 Wichtig:</strong> Nach dem Setup können Sie sich mit Ihrer
-      automatisch generierten E-Mail anmelden.
+      <strong>💡 Wichtig:</strong> Nach dem Setup können Sie sich mit Ihrem
+      Benutzernamen oder Ihrer E-Mail anmelden.
     </div>
   </div>
 );
