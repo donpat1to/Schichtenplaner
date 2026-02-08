@@ -1068,7 +1068,7 @@ const PlanEdit: React.FC = () => {
                                 Abbrechen
                             </button>
                             <button
-                                onClick={addTimeSlot}
+                                onClick={() => addTimeSlot()}
                                 disabled={isSubmitting || !timeSlotFormData.name.trim() || !timeSlotFormData.startTime || !timeSlotFormData.endTime}
                                 style={{
                                     ...addTextButton(false),
