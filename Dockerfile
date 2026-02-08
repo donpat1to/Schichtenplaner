@@ -34,7 +34,7 @@ WORKDIR /app
 
 # Install system dependencies including gettext-base for envsubst
 RUN apt-get update && apt-get install -y gettext-base && \
-    rm -rf /var/lib/apt/lists/*
+  rm -rf /var/lib/apt/lists/*
 
 RUN npm install -g pm2
 RUN mkdir -p /app/data
@@ -55,7 +55,7 @@ COPY --from=builder /app/backend/src/database/ ./dist/database/
 COPY --from=builder /app/backend/src/python-scripts/ ./python-scripts/
 
 # Install Python + OR-Tools
-RUN apt-get update && apt-get install -y python3 python3-pip build-essential \
+RUN apt-get update && apt-get install nano && apt-get install -y python3 python3-pip build-essential \
   && pip install --no-cache-dir --break-system-packages ortools
 
 # Create symlink so python3 is callable as python
@@ -73,10 +73,10 @@ RUN chmod +x /usr/local/bin/docker-init.sh
 
 # Create user and set permissions
 RUN groupadd -g 1001 nodejs && \
-    useradd -m -u 1001 -s /bin/bash -g nodejs schichtplan && \
-    chown -R schichtplan:nodejs /app && \
-    chmod 755 /app && \
-    chmod 775 /app/data
+  useradd -m -u 1001 -s /bin/bash -g nodejs schichtplan && \
+  chown -R schichtplan:nodejs /app && \
+  chmod 755 /app && \
+  chmod 775 /app/data
 
 ENV PM2_HOME=/app/.pm2
 
