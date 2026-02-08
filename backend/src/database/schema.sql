@@ -49,7 +49,6 @@ CREATE TABLE IF NOT EXISTS employees (
   is_active BOOLEAN DEFAULT TRUE,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   last_login TEXT DEFAULT NULL
-  UNIQUE(username, email)
 );
 
 -- Roles Employee Junction table (NACH employees und roles)
@@ -147,6 +146,7 @@ CREATE TABLE IF NOT EXISTS weekly_plans (
   description TEXT,
   start_date TEXT NOT NULL,
   end_date TEXT NOT NULL,
+  work_days TEXT DEFAULT '1,2,3,4,5',
   status TEXT CHECK(status IN ('draft', 'published', 'archived')) DEFAULT 'draft',
   created_by TEXT NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

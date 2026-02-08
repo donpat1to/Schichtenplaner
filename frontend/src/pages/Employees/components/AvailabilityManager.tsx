@@ -672,6 +672,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
             onMonthChange={handleMonthChange}
             mode="preferences"
             style='monthly'
+            workDays={selectedWeeklyPlan.workDays}
             weekPreferences={weeklyPreferencesMap}
             onPreferenceChange={toggleWeeklyPreference}
             disabled={!canEdit}

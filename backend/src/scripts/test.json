@@ -1,7 +1,7 @@
 {
   "plan_name": "test",
   "description": "Standard Vorlage für ZEBRA: Mo-Do Vormittag+Nachmittag, Fr nur Vormittag",
-  "period": "2025-10-01 bis 2026-02-01",
+  "period": "2026-02-01 bis 2026-04-01",
   "status": "draft",
   "created_by": "Max Mustermann",
   "shifts": {
@@ -235,20 +235,21 @@
   "weekly_plan": {
     "plan_name": "Test Wochenplan Q4 2025",
     "description": "Wochenplan für Oktober bis Anfang November 2025",
-    "period": "2025-10-06 bis 2025-11-16",
+    "period": "2026-02-04 bis 2026-03-25",
     "employee_preferences": {
       "Jerome": {
         "required_weeks": 3,
         "assignment_style": "consecutive",
         "assignment_style_consecutive": 2,
         "preferences": {
-          "40": 1,
-          "41": 2,
-          "42": 1,
-          "43": 3,
-          "44": 2,
-          "45": 1,
-          "46": 2
+          "6": 1,
+          "7": 2,
+          "8": 1,
+          "9": 3,
+          "10": 2,
+          "11": 1,
+          "12": 2,
+          "13": 2
         }
       },
       "Patrick": {
@@ -256,13 +257,14 @@
         "assignment_style": "flexible",
         "assignment_style_consecutive": 1,
         "preferences": {
-          "40": 2,
-          "41": 1,
-          "42": 3,
-          "43": 2,
-          "44": 1,
-          "45": 3,
-          "46": 3
+          "6": 2,
+          "7": 1,
+          "8": 3,
+          "9": 2,
+          "10": 1,
+          "11": 3,
+          "12": 3,
+          "13": 2
         }
       },
       "Andrey": {
@@ -270,13 +272,14 @@
         "assignment_style": "consecutive",
         "assignment_style_consecutive": 2,
         "preferences": {
-          "40": 1,
-          "41": 1,
-          "42": 2,
-          "43": 2,
-          "44": 3,
-          "45": 3,
-          "46": 1
+          "6": 1,
+          "7": 1,
+          "8": 2,
+          "9": 2,
+          "10": 3,
+          "11": 3,
+          "12": 1,
+          "13": 2
         }
       },
       "Fabian": {
@@ -284,13 +287,14 @@
         "assignment_style": "flexible",
         "assignment_style_consecutive": 1,
         "preferences": {
-          "40": 3,
-          "41": 2,
-          "42": 1,
-          "43": 1,
-          "44": 2,
-          "45": 3,
-          "46": 2
+          "6": 3,
+          "7": 2,
+          "8": 1,
+          "9": 1,
+          "10": 2,
+          "11": 3,
+          "12": 2,
+          "13": 2
         }
       },
       "Lu": {
@@ -298,13 +302,14 @@
         "assignment_style": "flexible",
         "assignment_style_consecutive": 1,
         "preferences": {
-          "40": 2,
-          "41": 3,
-          "42": 1,
-          "43": 2,
-          "44": 1,
-          "45": 3,
-          "46": 2
+          "6": 2,
+          "7": 3,
+          "8": 1,
+          "9": 2,
+          "10": 1,
+          "11": 3,
+          "12": 2,
+          "13": 2
         }
       },
       "Basti": {
@@ -312,13 +317,14 @@
         "assignment_style": "consecutive",
         "assignment_style_consecutive": 3,
         "preferences": {
-          "40": 1,
-          "41": 1,
-          "42": 1,
-          "43": 1,
-          "44": 1,
-          "45": 1,
-          "46": 1
+          "6": 1,
+          "7": 1,
+          "8": 1,
+          "9": 1,
+          "10": 1,
+          "11": 1,
+          "12": 1,
+          "13": 2
         }
       },
       "Kilian": {
@@ -326,13 +332,14 @@
         "assignment_style": "scattered",
         "assignment_style_consecutive": 1,
         "preferences": {
-          "40": 2,
-          "41": 2,
-          "42": 1,
-          "43": 3,
-          "44": 2,
-          "45": 1,
-          "46": 3
+          "6": 2,
+          "7": 2,
+          "8": 1,
+          "9": 3,
+          "10": 2,
+          "11": 1,
+          "12": 3,
+          "13": 2
         }
       },
       "Gerald": {
@@ -340,13 +347,14 @@
         "assignment_style": "consecutive",
         "assignment_style_consecutive": 2,
         "preferences": {
-          "40": 1,
-          "41": 3,
-          "42": 2,
-          "43": 1,
-          "44": 3,
-          "45": 2,
-          "46": 1
+          "6": 1,
+          "7": 3,
+          "8": 2,
+          "9": 1,
+          "10": 3,
+          "11": 2,
+          "12": 1,
+          "13": 2
         }
       },
       "Uliana": {
@@ -354,13 +362,14 @@
         "assignment_style": "scattered",
         "assignment_style_consecutive": 1,
         "preferences": {
-          "40": 3,
-          "41": 1,
-          "42": 2,
-          "43": 1,
-          "44": 2,
-          "45": 1,
-          "46": 2
+          "6": 3,
+          "7": 1,
+          "8": 2,
+          "9": 1,
+          "10": 2,
+          "11": 1,
+          "12": 2,
+          "13": 2
         }
       },
       "Nico": {
@@ -368,13 +377,14 @@
         "assignment_style": "flexible",
         "assignment_style_consecutive": 1,
         "preferences": {
-          "40": 2,
-          "41": 2,
-          "42": 3,
-          "43": 1,
-          "44": 1,
-          "45": 3,
-          "46": 2
+          "6": 2,
+          "7": 2,
+          "8": 3,
+          "9": 1,
+          "10": 1,
+          "11": 3,
+          "12": 2,
+          "13": 2
         }
       },
       "Linuuuus": {
@@ -382,13 +392,14 @@
         "assignment_style": "consecutive",
         "assignment_style_consecutive": 2,
         "preferences": {
-          "40": 1,
-          "41": 2,
-          "42": 1,
-          "43": 3,
-          "44": 2,
-          "45": 1,
-          "46": 3
+          "6": 1,
+          "7": 2,
+          "8": 1,
+          "9": 3,
+          "10": 2,
+          "11": 1,
+          "12": 3,
+          "13": 2
         }
       }
     }

@@ -13,7 +13,8 @@ import {
 } from '../models/WeeklyPlan';
 import { apiClient } from './apiClient';
 
-export interface WeeklyPlanListItem extends WeeklyPlan {
+export interface WeeklyPlanListItem extends Omit<WeeklyPlan, 'workDays'> {
+  workDays: number[];
   weekCount: number;
   assignmentCount: number;
   employeeCount: number;

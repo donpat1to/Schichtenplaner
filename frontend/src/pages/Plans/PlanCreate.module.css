@@ -245,3 +245,78 @@
     color: #bbb;
     cursor: not-allowed;
 }
+
+/* Work Days Selector */
+.workDaysSelector {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.workDaysButtons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.workDayButton {
+    width: 44px;
+    height: 44px;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    background-color: #f8f9fa;
+    color: #666;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.workDayButton:hover:not(:disabled) {
+    border-color: #2980b9;
+    background-color: #f1f8ff;
+}
+
+.workDayButton.active {
+    background-color: #2980b9;
+    border-color: #2980b9;
+    color: white;
+}
+
+.workDayButton:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.workDaysPresets {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.presetLabel {
+    font-size: 13px;
+    color: #666;
+}
+
+.presetButton {
+    padding: 6px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: white;
+    color: #2c3e50;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.presetButton:hover:not(:disabled) {
+    border-color: #2980b9;
+    background-color: #f1f8ff;
+    color: #2980b9;
+}
+
+.presetButton:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}

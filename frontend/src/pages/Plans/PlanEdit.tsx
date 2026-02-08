@@ -8,6 +8,8 @@ import {
     UpdateWeeklyPlanRequest,
     WeeklyPlanWithDetails,
     formatWeekRange,
+    WEEK_DAYS,
+    DEFAULT_WORK_DAYS,
 } from '../../models/WeeklyPlan';
 import { ShiftPlan, Shift, TimeSlot } from '../../models/ShiftPlan';
 import { useNotification } from '../../contexts/NotificationContext';
@@ -77,6 +79,7 @@ const PlanEdit: React.FC = () => {
         description: '',
         startDate: '',
         endDate: '',
+        workDays: DEFAULT_WORK_DAYS as number[],
         status: 'draft' as 'draft' | 'published' | 'archived',
     });
 
@@ -105,6 +108,7 @@ const PlanEdit: React.FC = () => {
                 description: weeklyPlan.description || '',
                 startDate: weeklyPlan.startDate || '',
                 endDate: weeklyPlan.endDate || '',
+                workDays: weeklyPlan.workDays || DEFAULT_WORK_DAYS,
                 status: weeklyPlan.status || 'draft',
             });
 
@@ -121,6 +125,7 @@ const PlanEdit: React.FC = () => {
                 description: shiftPlan.description || '',
                 startDate: shiftPlan.startDate || '',
                 endDate: shiftPlan.endDate || '',
+                workDays: DEFAULT_WORK_DAYS, // Shift plans don't use workDays
                 status: 'draft', // Shift plans don't have status by default
             });
 
@@ -173,6 +178,7 @@ const PlanEdit: React.FC = () => {
                     description: planInfo.description || undefined,
                     startDate: planInfo.startDate || undefined,
                     endDate: planInfo.endDate || undefined,
+                    workDays: planInfo.workDays,
                     status: planInfo.status,
                 };
                 await weeklyPlanService.updateWeeklyPlan(id, updateData);
@@ -198,6 +204,27 @@ const PlanEdit: React.FC = () => {
     const handleCalendarMonthChange = (year: number, month: number) => {
         setCalendarYear(year);
         setCalendarMonth(month);
+    };
+
+    const toggleWorkDay = (dayId: number) => {
+        setPlanInfo(prev => {
+            const currentDays = prev.workDays;
+            if (currentDays.includes(dayId)) {
+                // Don't allow removing if only one day left
+                if (currentDays.length === 1) return prev;
+                return { ...prev, workDays: currentDays.filter(d => d !== dayId) };
+            } else {
+                return { ...prev, workDays: [...currentDays, dayId].sort((a, b) => a - b) };
+            }
+        });
+    };
+
+    const setWorkDaysPreset = (preset: 'mo-fr' | 'mo-so') => {
+        if (preset === 'mo-fr') {
+            setPlanInfo(prev => ({ ...prev, workDays: [1, 2, 3, 4, 5] }));
+        } else {
+            setPlanInfo(prev => ({ ...prev, workDays: [1, 2, 3, 4, 5, 6, 7] }));
+        }
     };
 
     const getShift = (timeSlotId: string, dayOfWeek: number): Shift | null => {
@@ -656,6 +683,82 @@ const PlanEdit: React.FC = () => {
                             />
                         </div>
                     </div>
+
+                    {/* Work Days Selector - Only for Weekly Plans */}
+                    {planType === 'weekly' && (
+                        <div style={{ gridColumn: '1 / -1' }}>
+                            <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                                Arbeitstage
+                            </label>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                    {WEEK_DAYS.map(day => (
+                                        <button
+                                            key={day.id}
+                                            type="button"
+                                            onClick={() => toggleWorkDay(day.id)}
+                                            style={{
+                                                width: '44px',
+                                                height: '44px',
+                                                border: '2px solid ' + (planInfo.workDays.includes(day.id) ? '#2980b9' : '#e9ecef'),
+                                                borderRadius: '8px',
+                                                backgroundColor: planInfo.workDays.includes(day.id) ? '#2980b9' : '#f8f9fa',
+                                                color: planInfo.workDays.includes(day.id) ? 'white' : '#666',
+                                                fontWeight: 600,
+                                                fontSize: '14px',
+                                                cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                                                transition: 'all 0.2s',
+                                                opacity: isSubmitting ? 0.6 : 1,
+                                            }}
+                                            disabled={isSubmitting}
+                                            title={day.name}
+                                        >
+                                            {day.shortName}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <span style={{ fontSize: '13px', color: '#666' }}>Schnellauswahl:</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setWorkDaysPreset('mo-fr')}
+                                        style={{
+                                            padding: '6px 12px',
+                                            border: '1px solid #ddd',
+                                            borderRadius: '4px',
+                                            backgroundColor: 'white',
+                                            color: '#2c3e50',
+                                            fontSize: '13px',
+                                            cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                                            transition: 'all 0.2s',
+                                            opacity: isSubmitting ? 0.6 : 1,
+                                        }}
+                                        disabled={isSubmitting}
+                                    >
+                                        Mo-Fr
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setWorkDaysPreset('mo-so')}
+                                        style={{
+                                            padding: '6px 12px',
+                                            border: '1px solid #ddd',
+                                            borderRadius: '4px',
+                                            backgroundColor: 'white',
+                                            color: '#2c3e50',
+                                            fontSize: '13px',
+                                            cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                                            transition: 'all 0.2s',
+                                            opacity: isSubmitting ? 0.6 : 1,
+                                        }}
+                                        disabled={isSubmitting}
+                                    >
+                                        Mo-So
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <div style={{ marginTop: '20px' }}>
@@ -705,6 +808,7 @@ const PlanEdit: React.FC = () => {
                                 weeks={weeklyPlan?.weeks || []}
                                 onMonthChange={handleCalendarMonthChange}
                                 style='monthly'
+                                workDays={planInfo.workDays}
                             />
                         </div>
                     </div>

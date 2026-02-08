@@ -13,7 +13,8 @@ import {
   PlanWeek,
   EmployeeWithPreferences,
   WeeklyAssignment,
-  CreateAssignmentsRequest
+  CreateAssignmentsRequest,
+  DEFAULT_WORK_DAYS
 } from '../models/WeeklyPlan.js';
 import { AuthRequest } from '../middleware/auth.js';
 import ExcelJS from 'exceljs';
@@ -72,6 +73,12 @@ function generateWeeksFromDateRange(startDate: string, endDate: string): Omit<Pl
   }
 
   return weeks;
+}
+
+// Helper function to convert work_days string to array
+function parseWorkDays(workDaysStr: string | null): number[] {
+  if (!workDaysStr) return DEFAULT_WORK_DAYS;
+  return workDaysStr.split(',').map(d => parseInt(d.trim(), 10)).filter(d => !isNaN(d));
 }
 
 // Helper function to get plan with all details
@@ -161,6 +168,7 @@ async function getWeeklyPlanById(planId: string): Promise<WeeklyPlanWithDetails 
     description: plan.description,
     startDate: plan.start_date,
     endDate: plan.end_date,
+    workDays: parseWorkDays(plan.work_days),
     status: plan.status as 'draft' | 'published' | 'archived',
     createdBy: plan.created_by,
     createdAt: plan.created_at,
@@ -214,6 +222,7 @@ export const getWeeklyPlans = async (req: Request, res: Response): Promise<void>
           description: plan.description,
           startDate: plan.start_date,
           endDate: plan.end_date,
+          workDays: parseWorkDays(plan.work_days),
           status: plan.status,
           createdBy: plan.created_by,
           createdAt: plan.created_at,
@@ -251,7 +260,7 @@ export const getWeeklyPlan = async (req: Request, res: Response): Promise<void> 
 
 export const createWeeklyPlan = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, description, startDate, endDate }: CreateWeeklyPlanRequest = req.body;
+    const { name, description, startDate, endDate, workDays }: CreateWeeklyPlanRequest = req.body;
     const userId = (req as AuthRequest).user?.userId;
 
     if (!userId) {
@@ -265,15 +274,16 @@ export const createWeeklyPlan = async (req: Request, res: Response): Promise<voi
     }
 
     const planId = uuidv4();
+    const workDaysStr = (workDays || DEFAULT_WORK_DAYS).join(',');
 
     await db.run('BEGIN TRANSACTION');
 
     try {
       // Create the plan
       await db.run(
-        `INSERT INTO weekly_plans (id, name, description, start_date, end_date, status, created_by)
-         VALUES (?, ?, ?, ?, ?, 'draft', ?)`,
-        [planId, name, description || '', startDate, endDate, userId]
+        `INSERT INTO weekly_plans (id, name, description, start_date, end_date, work_days, status, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, 'draft', ?)`,
+        [planId, name, description || '', startDate, endDate, workDaysStr, userId]
       );
 
       // Generate and insert weeks
@@ -304,7 +314,7 @@ export const createWeeklyPlan = async (req: Request, res: Response): Promise<voi
 export const updateWeeklyPlan = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { name, description, status, startDate, endDate }: UpdateWeeklyPlanRequest = req.body;
+    const { name, description, status, startDate, endDate, workDays }: UpdateWeeklyPlanRequest = req.body;
 
     const existingPlan = await db.get<{
       id: string;
@@ -312,6 +322,7 @@ export const updateWeeklyPlan = async (req: Request, res: Response): Promise<voi
       description: string;
       start_date: string;
       end_date: string;
+      work_days: string;
       status: 'draft' | 'published' | 'archived';
       created_by: string;
       created_at: string;
@@ -333,14 +344,18 @@ export const updateWeeklyPlan = async (req: Request, res: Response): Promise<voi
     await db.run('BEGIN TRANSACTION');
 
     try {
+      // Convert workDays array to string if provided
+      const workDaysStr = workDays ? workDays.join(',') : null;
+
       // Update basic plan information
       await db.run(
         `UPDATE weekly_plans
          SET name = COALESCE(?, name),
              description = COALESCE(?, description),
+             work_days = COALESCE(?, work_days),
              status = COALESCE(?, status)
          WHERE id = ?`,
-        [name, description, status, id]
+        [name, description, workDaysStr, status, id]
       );
 
       // If start or end dates are provided, need to update and regenerate weeks

@@ -10,6 +10,14 @@ import { WeeklyPlanWithDetails } from '../../models/WeeklyPlan';
 import { Employee } from '../../models/Employee';
 import UnifiedCalendarModal from './components/UnifiedCalendarModal';
 
+// Format date to YYYY-MM-DD in local timezone (avoids UTC conversion issues)
+const formatDateLocal = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 // Unified plan type for combined display
 interface UnifiedPlan {
   id: string;
@@ -203,7 +211,7 @@ const Dashboard: React.FC = () => {
             );
 
             for (const date of occurrences) {
-              const dateStr = date.toISOString().split('T')[0];
+              const dateStr = formatDateLocal(date);
               assignments.push({
                 id: `shift-${plan.id}-${shift.id}-${dateStr}`,
                 date: formatShiftDate(dateStr),
@@ -331,10 +339,10 @@ const Dashboard: React.FC = () => {
   };
 
   const formatShiftDate = (dateString: string): string => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = formatDateLocal(new Date());
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowString = tomorrow.toISOString().split('T')[0];
+    const tomorrowString = formatDateLocal(tomorrow);
 
     if (dateString === today) {
       return 'Heute';

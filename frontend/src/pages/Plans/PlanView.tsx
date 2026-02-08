@@ -2007,6 +2007,7 @@ const PlanView: React.FC = () => {
                   manualAssignmentMode={true}
                   draggedEmployeeId={weeklyDraggedEmployeeId}
                   style='list'
+                  workDays={weeklyPlan.workDays}
                   validDropTargets={weeklyDraggedEmployeeId ? getWeeklyValidDropTargets(weeklyDraggedEmployeeId) : undefined}
                   onRemoveAssignment={handleRemoveWeeklyAssignment}
                   manualAssignments={weeklyManualAssignments}
@@ -2049,6 +2050,7 @@ const PlanView: React.FC = () => {
                   onMonthChange={handleMonthChange}
                   swapModeActive={true}
                   style='list'
+                  workDays={weeklyPlan.workDays}
                   sourceSelection={sourceSelection}
                   eligibleTargets={eligibilityMap}
                 />
@@ -2060,7 +2062,8 @@ const PlanView: React.FC = () => {
                 weeks={weeklyPlan.weeks}
                 employees={weeklyPlan.employees}
                 onMonthChange={handleMonthChange}
-                style='list'
+                style='monthly'
+                workDays={weeklyPlan.workDays}
               />
             )}
           </div>

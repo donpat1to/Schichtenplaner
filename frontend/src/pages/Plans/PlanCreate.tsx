@@ -5,6 +5,7 @@ import { shiftPlanService } from '../../services/shiftPlanService';
 import { weeklyPlanService } from '../../services/weeklyPlanService';
 import { useNotification } from '../../contexts/NotificationContext';
 import { useBackendValidation } from '../../hooks/useBackendValidation';
+import { WEEK_DAYS, DEFAULT_WORK_DAYS } from '../../models/WeeklyPlan';
 import styles from './PlanCreate.module.css';
 
 type PlanType = 'shift' | 'weekly';
@@ -26,6 +27,7 @@ const PlanCreate: React.FC = () => {
   const [description, setDescription] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [workDays, setWorkDays] = useState<number[]>(DEFAULT_WORK_DAYS);
   const [selectedPreset, setSelectedPreset] = useState('');
   const [presets, setPresets] = useState<TemplatePreset[]>([]);
   const [isLoadingPresets, setIsLoadingPresets] = useState(false);
@@ -44,8 +46,29 @@ const PlanCreate: React.FC = () => {
     setDescription('');
     setStartDate('');
     setEndDate('');
+    setWorkDays(DEFAULT_WORK_DAYS);
     setSelectedPreset('');
   }, [planType]);
+
+  const toggleWorkDay = (dayId: number) => {
+    setWorkDays(prev => {
+      if (prev.includes(dayId)) {
+        // Don't allow removing if only one day left
+        if (prev.length === 1) return prev;
+        return prev.filter(d => d !== dayId);
+      } else {
+        return [...prev, dayId].sort((a, b) => a - b);
+      }
+    });
+  };
+
+  const setWorkDaysPreset = (preset: 'mo-fr' | 'mo-so') => {
+    if (preset === 'mo-fr') {
+      setWorkDays([1, 2, 3, 4, 5]);
+    } else {
+      setWorkDays([1, 2, 3, 4, 5, 6, 7]);
+    }
+  };
 
   const loadTemplatePresets = async () => {
     setIsLoadingPresets(true);
@@ -156,7 +179,8 @@ const PlanCreate: React.FC = () => {
           name: planName.trim(),
           description: description.trim() || undefined,
           startDate,
-          endDate
+          endDate,
+          workDays
         });
 
         const weekCount = calculateWeekCount();
@@ -314,6 +338,47 @@ const PlanCreate: React.FC = () => {
                 Keine Vorlagen verfügbar.
               </p>
             )}
+          </div>
+        )}
+
+        {planType === 'weekly' && (
+          <div className={styles.formGroup}>
+            <label>Arbeitstage</label>
+            <div className={styles.workDaysSelector}>
+              <div className={styles.workDaysButtons}>
+                {WEEK_DAYS.map(day => (
+                  <button
+                    key={day.id}
+                    type="button"
+                    onClick={() => toggleWorkDay(day.id)}
+                    className={`${styles.workDayButton} ${workDays.includes(day.id) ? styles.active : ''}`}
+                    disabled={isSubmitting}
+                    title={day.name}
+                  >
+                    {day.shortName}
+                  </button>
+                ))}
+              </div>
+              <div className={styles.workDaysPresets}>
+                <span className={styles.presetLabel}>Schnellauswahl:</span>
+                <button
+                  type="button"
+                  onClick={() => setWorkDaysPreset('mo-fr')}
+                  className={styles.presetButton}
+                  disabled={isSubmitting}
+                >
+                  Mo-Fr
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWorkDaysPreset('mo-so')}
+                  className={styles.presetButton}
+                  disabled={isSubmitting}
+                >
+                  Mo-So
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

@@ -28,6 +28,9 @@ export interface CalendarProps {
     onPreferenceChange?: (weekId: string) => void;
     disabled?: boolean;
 
+    // Work days filter (1=Monday, 7=Sunday)
+    workDays?: number[];
+
     // Swap mode props
     swapModeActive?: boolean;
     sourceSelection?: { employeeId: string; weekId: string } | null;
@@ -101,6 +104,7 @@ const Calendar: React.FC<CalendarProps> = ({
     weekPreferences = {},
     onPreferenceChange,
     disabled = false,
+    workDays,
     swapModeActive = false,
     sourceSelection = null,
     eligibleTargets = new Map(),
@@ -111,12 +115,16 @@ const Calendar: React.FC<CalendarProps> = ({
     manualAssignments = [],
     hideNavigation = false,
 }) => {
+    // Default to all days if workDays not provided
+    const activeWorkDays = workDays || [1, 2, 3, 4, 5, 6, 7];
     const monthNames = [
         'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
         'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
     ];
 
-    const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+    const allDayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+    // Filter day names based on active work days (1=Monday index 0, 7=Sunday index 6)
+    const dayNames = allDayNames.filter((_, index) => activeWorkDays.includes(index + 1));
 
     // Determine calendar boundaries based on mode
     let firstDayOfCalendar: Date;
@@ -223,6 +231,14 @@ const Calendar: React.FC<CalendarProps> = ({
             target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
         }
         return 1 + Math.ceil((firstThursday - target.valueOf()) / 604800000);
+    };
+
+    // Check if a date is a work day
+    const isWorkDay = (date: Date): boolean => {
+        // Convert JS day (0=Sunday) to our format (1=Monday, 7=Sunday)
+        const jsDay = date.getDay();
+        const dayOfWeek = jsDay === 0 ? 7 : jsDay;
+        return activeWorkDays.includes(dayOfWeek);
     };
 
     // Get plan week for a calendar week
@@ -398,7 +414,9 @@ const Calendar: React.FC<CalendarProps> = ({
 
             <div className={styles.calendarGrid}>
                 {/* Day names header */}
-                <div className={styles.headerRow}>
+                <div className={styles.headerRow} style={{
+                    gridTemplateColumns: `50px repeat(${activeWorkDays.length}, 1fr)`
+                }}>
                     <div className={styles.weekNumberHeader}>KW</div>
                     {dayNames.map((day, index) => (
                         <div key={index} className={styles.dayName}>
@@ -421,9 +439,11 @@ const Calendar: React.FC<CalendarProps> = ({
 
                             {/* Content area with days and employees/preferences */}
                             <div className={styles.weekContent}>
-                                {/* Upper row: Day cells */}
-                                <div className={styles.daysRow}>
-                                    {week.map((day, dayIndex) => {
+                                {/* Upper row: Day cells (filtered by work days) */}
+                                <div className={styles.daysRow} style={{
+                                    gridTemplateColumns: `repeat(${activeWorkDays.length}, 1fr)`
+                                }}>
+                                    {week.filter(day => isWorkDay(day.date)).map((day, dayIndex) => {
                                         const dayClass = [
                                             styles.day,
                                             !day.isCurrentMonth ? styles.adjacentMonth : '',

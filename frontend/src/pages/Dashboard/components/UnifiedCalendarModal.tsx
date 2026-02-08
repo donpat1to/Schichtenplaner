@@ -8,6 +8,14 @@ import { WeeklyPlanListItem } from '../../../services/weeklyPlanService';
 import DayAssignmentsPopup from './DayAssignmentsPopup';
 import { CalendarDayAssignment } from '../Dashboard';
 
+// Format date to YYYY-MM-DD in local timezone (avoids UTC conversion issues)
+const formatDateLocal = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 interface UnifiedCalendarModalProps {
   shiftPlans: ShiftPlan[];
   weeklyPlans: WeeklyPlanListItem[];
@@ -51,7 +59,7 @@ const UnifiedCalendarModal: React.FC<UnifiedCalendarModalProps> = ({
 
               for (const date of dates) {
                 assignments.push({
-                  date: date.toISOString().split('T')[0],
+                  date: formatDateLocal(date),
                   employeeId: assignment.employeeId,
                   employeeName: '', // Will be populated if needed
                   planName: planDetails.name,
@@ -73,6 +81,7 @@ const UnifiedCalendarModal: React.FC<UnifiedCalendarModalProps> = ({
       for (const plan of weeklyPlans) {
         try {
           const planDetails = await weeklyPlanService.getWeeklyPlan(plan.id);
+          const planWorkDays = planDetails.workDays || [1, 2, 3, 4, 5];
 
           // Iterate through employees and their assigned weeks
           for (const employee of planDetails.employees || []) {
@@ -82,13 +91,20 @@ const UnifiedCalendarModal: React.FC<UnifiedCalendarModalProps> = ({
               const week = planDetails.weeks?.find(w => w.id === weekId);
               if (!week) continue;
 
-              // Add an entry for each day of the week
+              // Add an entry for each day of the week (filtered by work days)
               const weekStart = new Date(week.startDate);
               const weekEnd = new Date(week.endDate);
 
               for (let date = new Date(weekStart); date <= weekEnd; date.setDate(date.getDate() + 1)) {
+                // Convert JS day (0=Sunday) to our format (1=Monday, 7=Sunday)
+                const jsDay = date.getDay();
+                const dayOfWeek = jsDay === 0 ? 7 : jsDay;
+
+                // Skip non-work days
+                if (!planWorkDays.includes(dayOfWeek)) continue;
+
                 assignments.push({
-                  date: date.toISOString().split('T')[0],
+                  date: formatDateLocal(date),
                   employeeId: employee.id,
                   employeeName,
                   planName: planDetails.name,
@@ -167,7 +183,7 @@ const UnifiedCalendarModal: React.FC<UnifiedCalendarModalProps> = ({
   }, [currentDate]);
 
   const getAssignmentsForDate = (date: Date): CalendarDayAssignment[] => {
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = formatDateLocal(date);
     return calendarAssignments.filter(a => a.date === dateStr);
   };
 
@@ -180,7 +196,7 @@ const UnifiedCalendarModal: React.FC<UnifiedCalendarModalProps> = ({
   };
 
   const handleDayClick = (date: Date) => {
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = formatDateLocal(date);
     if (hasAssignments(date)) {
       setSelectedDate(dateStr);
     }

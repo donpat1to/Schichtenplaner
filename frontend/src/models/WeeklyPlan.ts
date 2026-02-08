@@ -6,6 +6,7 @@ export interface WeeklyPlan {
   description?: string;
   startDate: string;
   endDate: string;
+  workDays: number[];
   status: 'draft' | 'published' | 'archived';
   createdBy: string;
   createdAt: string;
@@ -14,6 +15,19 @@ export interface WeeklyPlan {
   requirements?: WeeklyWorkRequirement[];
   assignments?: WeeklyAssignment[];
 }
+
+// Week day constants for work day configuration
+export const WEEK_DAYS = [
+  { id: 1, name: 'Montag', shortName: 'Mo' },
+  { id: 2, name: 'Dienstag', shortName: 'Di' },
+  { id: 3, name: 'Mittwoch', shortName: 'Mi' },
+  { id: 4, name: 'Donnerstag', shortName: 'Do' },
+  { id: 5, name: 'Freitag', shortName: 'Fr' },
+  { id: 6, name: 'Samstag', shortName: 'Sa' },
+  { id: 7, name: 'Sonntag', shortName: 'So' },
+];
+
+export const DEFAULT_WORK_DAYS = [1, 2, 3, 4, 5];
 
 export interface PlanWeek {
   id: string;
@@ -62,6 +76,7 @@ export interface CreateWeeklyPlanRequest {
   description?: string;
   startDate: string;
   endDate: string;
+  workDays?: number[];
 }
 
 export interface UpdateWeeklyPlanRequest {
@@ -69,6 +84,7 @@ export interface UpdateWeeklyPlanRequest {
   description?: string;
   startDate?: string;
   endDate?: string;
+  workDays?: number[];
   status?: 'draft' | 'published' | 'archived';
 }
 
