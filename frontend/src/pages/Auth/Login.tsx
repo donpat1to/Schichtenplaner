@@ -14,7 +14,7 @@ interface IdpProvider {
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 // For redirects (OAuth flow), we need the actual backend URL, not the proxy path
 // In production (same origin), this is empty; in dev, it points to the backend directly
-const APP_URL = process.env.APP_URL || '';
+const APP_URL = process.env.APP_URL || 'http://localhost:3002';
 
 const Login: React.FC = () => {
   const [identifier, setIdentifier] = useState('');
