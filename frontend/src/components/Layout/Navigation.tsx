@@ -15,6 +15,7 @@ const Navigation: React.FC = () => {
   const headerContentRef = useRef<HTMLDivElement>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const pillNavMeasurementRef = useRef<HTMLDivElement>(null);
+  const userMenuMeasurementRef = useRef<HTMLDivElement>(null);
 
   const navigationItems = [
     { path: '/plans', label: 'Pläne', roles: ['admin', 'maintenance', 'user'] },
@@ -45,7 +46,8 @@ const Navigation: React.FC = () => {
 
     // Approximate widths for other components
     const logoWidth = 180; // Logo width
-    const userMenuWidth = 280; // User menu width
+    const measuredUserMenuWidth = userMenuMeasurementRef.current?.offsetWidth ?? 0;
+    const userMenuWidth = measuredUserMenuWidth > 0 ? measuredUserMenuWidth : 280; // User menu width
     const mobileButtonWidth = 50; // Mobile menu button width
 
     // Total width needed for desktop layout
@@ -127,6 +129,12 @@ const Navigation: React.FC = () => {
     const timer = setTimeout(checkLayout, 100);
     return () => clearTimeout(timer);
   }, [pillNavItems, checkLayout]);
+
+  // Re-check layout when user info changes (name/roles affect width)
+  useEffect(() => {
+    const timer = setTimeout(checkLayout, 100);
+    return () => clearTimeout(timer);
+  }, [user?.firstname, user?.lastname, user?.roles, checkLayout]);
 
   const handleLogout = () => {
     logout();
@@ -229,6 +237,18 @@ const Navigation: React.FC = () => {
       gap: '1.5rem',
       minWidth: '250px',
       flexShrink: 1,
+    },
+    userMenuMeasurement: {
+      position: 'absolute' as const,
+      top: '-9999px',
+      left: '-9999px',
+      visibility: 'hidden' as const,
+      pointerEvents: 'none' as const,
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      gap: '1.5rem',
+      whiteSpace: 'nowrap' as const,
     },
     userInfo: {
       fontWeight: 500,
@@ -434,6 +454,23 @@ const Navigation: React.FC = () => {
         </div>
 
         {/* Mobile Layout: User Info and Settings (wenn nötig) */}
+        {/* Hidden measurement for user menu width (keeps layout calculation accurate) */}
+        <div
+          ref={userMenuMeasurementRef}
+          style={styles.userMenuMeasurement}
+          aria-hidden="true"
+        >
+          <span style={styles.userInfo}>
+            {user?.firstname} {user?.lastname} <span style={{ color: '#999' }}>({user?.roles})</span>
+          </span>
+          <button type="button" tabIndex={-1} style={styles.settingsBtn}>
+            âš™ï¸
+          </button>
+          <button type="button" tabIndex={-1} style={styles.logoutBtn}>
+            Abmelden
+          </button>
+        </div>
+
         <div style={styles.mobileUserMenu}>
           <span style={styles.mobileUserText}>
             {user?.firstname} {user?.lastname?.charAt(0)}.

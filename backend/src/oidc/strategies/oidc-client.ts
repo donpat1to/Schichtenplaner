@@ -69,6 +69,7 @@ export async function buildAuthorizationUrl(
   const config = await discoverAndConfigure(idp);
 
   const callbackURL = `${process.env.BACKEND_URL || 'http://localhost:3002'}/api/auth/external/${idp.slug}/callback`;
+  //const callbackURL = `${process.env.FRONTEND_URL || 'http://localhost:3002'}/api/auth/external/${idp.slug}/callback`;
 
   // Generate PKCE state, code verifier, code challenge, nonce (PKCE conditional on idp.pkce)
   const pkceEnabled = idp.pkce !== false;
@@ -144,7 +145,7 @@ export async function handleCallback(
 
   const config = await discoverAndConfigure(idp);
 
-  const redirectUri = `${process.env.BACKEND_URL || 'http://localhost:3002'}/api/auth/external/${idp.slug}/callback`;
+  //const redirectUri = `${process.env.BACKEND_URL || 'http://localhost:3002'}/api/auth/external/${idp.slug}/callback`;
 
   console.log(`[OIDC] Exchanging code for tokens...`);
 
