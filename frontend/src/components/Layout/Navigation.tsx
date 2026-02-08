@@ -9,13 +9,12 @@ const Navigation: React.FC = () => {
   const [activePath, setActivePath] = useState('/');
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileLayout, setIsMobileLayout] = useState(false);
-  const [pillNavWidth, setPillNavWidth] = useState(0);
 
-  const pillNavContainerRef = useRef<HTMLDivElement>(null);
   const headerContentRef = useRef<HTMLDivElement>(null);
-  const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pillNavMeasurementRef = useRef<HTMLDivElement>(null);
   const userMenuMeasurementRef = useRef<HTMLDivElement>(null);
+  const lastLayoutStateRef = useRef<boolean>(false);
 
   const navigationItems = [
     { path: '/plans', label: 'Pläne', roles: ['admin', 'maintenance', 'user'] },
@@ -39,42 +38,31 @@ const Navigation: React.FC = () => {
     const headerContent = headerContentRef.current;
     const headerWidth = headerContent.offsetWidth;
 
-    // Calculate minimum width needed
-    const minItemWidth = 120;
-    const totalItems = pillNavItems.length;
-    const requiredPillNavWidth = totalItems * minItemWidth;
-
-    // Approximate widths for other components
-    const logoWidth = 180; // Logo width
+    // Get actual measured widths
+    const measuredPillNavWidth = pillNavMeasurementRef.current?.offsetWidth ?? 0;
     const measuredUserMenuWidth = userMenuMeasurementRef.current?.offsetWidth ?? 0;
-    const userMenuWidth = measuredUserMenuWidth > 0 ? measuredUserMenuWidth : 280; // User menu width
-    const mobileButtonWidth = 50; // Mobile menu button width
 
-    // Total width needed for desktop layout
-    const totalRequiredWidth = logoWidth + requiredPillNavWidth + userMenuWidth;
+    // Fixed widths
+    const logoWidth = 180;
+    const mobileButtonWidth = 50;
 
-    // If we're in mobile layout, check if we have enough space to switch back
-    // We need headerWidth to be slightly larger than required to prevent flickering
-    if (isMobileLayout) {
-      if (headerWidth > totalRequiredWidth + 50) { // 50px buffer
-        setIsMobileLayout(false);
-        setIsMobileMenuOpen(false); // Close mobile menu when switching to desktop
-      }
-    } else {
-      // If we're in desktop layout, check if we need to switch to mobile
-      if (headerWidth < totalRequiredWidth || pillNavWidth < requiredPillNavWidth) {
-        setIsMobileLayout(true);
+    // Calculate total required width
+    const totalRequiredWidth = logoWidth + measuredPillNavWidth + 200 + measuredUserMenuWidth;
+
+    // Check if we need mobile layout
+    const needsMobileLayout = headerWidth < totalRequiredWidth;
+
+    // Only update if the layout state actually changed
+    if (needsMobileLayout !== lastLayoutStateRef.current) {
+      setIsMobileLayout(needsMobileLayout);
+      lastLayoutStateRef.current = needsMobileLayout;
+
+      // Close mobile menu when switching to desktop
+      if (!needsMobileLayout) {
+        setIsMobileMenuOpen(false);
       }
     }
-  }, [pillNavItems, pillNavWidth, isMobileLayout]);
-
-  // Measure the actual PillNav width when it's rendered
-  useEffect(() => {
-    if (!isMobileLayout && pillNavContainerRef.current) {
-      const width = pillNavContainerRef.current.offsetWidth;
-      setPillNavWidth(width);
-    }
-  }, [isMobileLayout]);
+  }, [pillNavItems]);
 
   useEffect(() => {
     setActivePath(window.location.pathname);
@@ -85,56 +73,80 @@ const Navigation: React.FC = () => {
 
     window.addEventListener('scroll', handleScroll);
 
-    // Check initial layout
+    // Initial layout check with debounce
     const checkInitialLayout = () => {
-      // First check window width as a rough estimate
-      if (window.innerWidth < 900) {
-        setIsMobileLayout(true);
-      } else {
-        setIsMobileLayout(false);
-      }
-
-      // Then set up more precise measurement
       setTimeout(checkLayout, 100);
     };
 
     checkInitialLayout();
 
-    // Initialize ResizeObserver for header content
-    const initResizeObserver = () => {
-      if (headerContentRef.current) {
-        resizeObserverRef.current = new ResizeObserver(checkLayout);
-        resizeObserverRef.current.observe(headerContentRef.current);
+    // Debounced resize handler
+    const handleResize = () => {
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
       }
 
-      window.addEventListener('resize', checkLayout);
+      // Use a longer debounce time to prevent flickering
+      resizeTimeoutRef.current = setTimeout(() => {
+        checkLayout();
+      }, 150);
     };
 
-    const timeoutId = setTimeout(initResizeObserver, 200);
+    window.addEventListener('resize', handleResize);
+
+    // Use IntersectionObserver instead of ResizeObserver for better performance
+    const initLayoutObserver = () => {
+      // Check layout after a brief delay to ensure DOM is ready
+      setTimeout(checkLayout, 200);
+    };
+
+    const timeoutId = setTimeout(initLayoutObserver, 300);
 
     return () => {
       window.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('resize', checkLayout);
+      window.removeEventListener('resize', handleResize);
 
-      if (resizeObserverRef.current) {
-        resizeObserverRef.current.disconnect();
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
       }
 
       clearTimeout(timeoutId);
     };
   }, [checkLayout]);
 
-  // Also check layout when pillNavItems changes (user roles might change)
+  // Check layout when user info changes (debounced)
   useEffect(() => {
-    const timer = setTimeout(checkLayout, 100);
-    return () => clearTimeout(timer);
-  }, [pillNavItems, checkLayout]);
+    if (resizeTimeoutRef.current) {
+      clearTimeout(resizeTimeoutRef.current);
+    }
 
-  // Re-check layout when user info changes (name/roles affect width)
-  useEffect(() => {
-    const timer = setTimeout(checkLayout, 100);
-    return () => clearTimeout(timer);
+    resizeTimeoutRef.current = setTimeout(() => {
+      checkLayout();
+    }, 100);
+
+    return () => {
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+    };
   }, [user?.firstname, user?.lastname, user?.roles, checkLayout]);
+
+  // Check layout when pillNavItems changes (debounced)
+  useEffect(() => {
+    if (resizeTimeoutRef.current) {
+      clearTimeout(resizeTimeoutRef.current);
+    }
+
+    resizeTimeoutRef.current = setTimeout(() => {
+      checkLayout();
+    }, 100);
+
+    return () => {
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+    };
+  }, [pillNavItems, checkLayout]);
 
   const handleLogout = () => {
     logout();
@@ -187,13 +199,12 @@ const Navigation: React.FC = () => {
       justifyContent: 'space-between',
       height: '70px',
       transition: 'all 0.3s ease',
+      overflow: 'hidden', // Prevent content from overflowing before switch
     },
     logo: {
-      flex: 1,
-      display: 'flex',
-      justifyContent: 'flex-start',
+      flexShrink: 0,
       minWidth: '150px',
-      flexShrink: 1,
+      flex: '0 0 auto',
     },
     logoButton: {
       background: 'none',
@@ -217,9 +228,11 @@ const Navigation: React.FC = () => {
       display: isMobileLayout ? 'none' : 'flex',
       justifyContent: 'center',
       alignItems: 'center',
-      flex: 2,
+      flex: '1 1 auto',
       minWidth: 0,
-      flexShrink: 1,
+      margin: '0 1rem',
+      opacity: isMobileLayout ? 0 : 1,
+      transition: 'opacity 0.2s ease',
     },
     pillNavContainer: {
       display: 'flex',
@@ -227,16 +240,26 @@ const Navigation: React.FC = () => {
       maxWidth: '600px',
       width: '100%',
       margin: '0 auto',
-      flexShrink: 1,
+    },
+    pillNavMeasurement: {
+      position: 'absolute' as const,
+      top: '-9999px',
+      left: '-9999px',
+      visibility: 'hidden' as const,
+      pointerEvents: 'none' as const,
+      display: 'inline-flex',
+      alignItems: 'center',
+      whiteSpace: 'nowrap' as const,
     },
     userMenu: {
-      flex: 1,
+      flexShrink: 0,
       display: isMobileLayout ? 'none' : 'flex',
       alignItems: 'center',
       justifyContent: 'flex-end',
       gap: '1.5rem',
       minWidth: '250px',
-      flexShrink: 1,
+      opacity: isMobileLayout ? 0 : 1,
+      transition: 'opacity 0.2s ease',
     },
     userMenuMeasurement: {
       position: 'absolute' as const,
@@ -297,6 +320,8 @@ const Navigation: React.FC = () => {
       borderRadius: '4px',
       transition: 'background-color 0.2s ease',
       flexShrink: 0,
+      opacity: isMobileLayout ? 1 : 0,
+      //transition: 'opacity 0.2s ease',
     },
     mobileNav: {
       display: isMobileMenuOpen ? 'flex' : 'none',
@@ -338,6 +363,8 @@ const Navigation: React.FC = () => {
       gap: '0.5rem',
       marginLeft: 'auto',
       flexShrink: 0,
+      opacity: isMobileLayout ? 1 : 0,
+      transition: 'opacity 0.2s ease',
     },
     mobileUserText: {
       fontWeight: 500,
@@ -353,7 +380,7 @@ const Navigation: React.FC = () => {
   return (
     <header style={styles.header}>
       <div style={styles.headerContent} ref={headerContentRef}>
-        {/* Logo - Links - Now a clickable button */}
+        {/* Logo */}
         <div style={styles.logo}>
           <button
             onClick={handleLogoClick}
@@ -388,8 +415,8 @@ const Navigation: React.FC = () => {
           </button>
         </div>
 
-        {/* PillNav - Zentriert - Dynamisch basierend auf Layout */}
-        <div style={styles.pillNavWrapper} ref={pillNavContainerRef}>
+        {/* PillNav */}
+        <div style={styles.pillNavWrapper}>
           <div style={styles.pillNavContainer}>
             <PillNav
               items={pillNavItems}
@@ -400,13 +427,12 @@ const Navigation: React.FC = () => {
           </div>
         </div>
 
-        {/* User Menu - Rechts - Dynamisch basierend auf Layout */}
+        {/* User Menu */}
         <div style={styles.userMenu}>
           <span style={styles.userInfo}>
             {user?.firstname} {user?.lastname} <span style={{ color: '#999' }}>({user?.roles})</span>
           </span>
 
-          {/* Settings Button - Unicode Gear Icon */}
           <button
             onClick={handleSettings}
             style={styles.settingsBtn}
@@ -453,8 +479,20 @@ const Navigation: React.FC = () => {
           </button>
         </div>
 
-        {/* Mobile Layout: User Info and Settings (wenn nötig) */}
-        {/* Hidden measurement for user menu width (keeps layout calculation accurate) */}
+        {/* Hidden measurements */}
+        <div
+          ref={pillNavMeasurementRef}
+          style={styles.pillNavMeasurement}
+          aria-hidden="true"
+        >
+          <PillNav
+            items={pillNavItems}
+            activeId={activePath}
+            onChange={() => { }}
+            variant="solid"
+          />
+        </div>
+
         <div
           ref={userMenuMeasurementRef}
           style={styles.userMenuMeasurement}
@@ -464,13 +502,14 @@ const Navigation: React.FC = () => {
             {user?.firstname} {user?.lastname} <span style={{ color: '#999' }}>({user?.roles})</span>
           </span>
           <button type="button" tabIndex={-1} style={styles.settingsBtn}>
-            âš™ï¸
+            ⚙️
           </button>
           <button type="button" tabIndex={-1} style={styles.logoutBtn}>
             Abmelden
           </button>
         </div>
 
+        {/* Mobile User Menu */}
         <div style={styles.mobileUserMenu}>
           <span style={styles.mobileUserText}>
             {user?.firstname} {user?.lastname?.charAt(0)}.
@@ -484,7 +523,7 @@ const Navigation: React.FC = () => {
           </button>
         </div>
 
-        {/* Mobile Menu Button - Nur wenn Mobile-Layout aktiv ist */}
+        {/* Mobile Menu Button */}
         <button
           style={styles.mobileMenuBtn}
           onClick={toggleMobileMenu}
@@ -499,7 +538,7 @@ const Navigation: React.FC = () => {
         </button>
       </div>
 
-      {/* Mobile Navigation - Nur wenn Mobile-Layout aktiv und Menü geöffnet ist */}
+      {/* Mobile Navigation */}
       {isMobileLayout && isMobileMenuOpen && (
         <nav style={styles.mobileNav}>
           {filteredNavigation.map((item) => (

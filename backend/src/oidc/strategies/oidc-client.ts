@@ -145,8 +145,6 @@ export async function handleCallback(
 
   const config = await discoverAndConfigure(idp);
 
-  //const redirectUri = `${process.env.BACKEND_URL || 'http://localhost:3002'}/api/auth/external/${idp.slug}/callback`;
-
   console.log(`[OIDC] Exchanging code for tokens...`);
 
   // Build token exchange options (include PKCE code verifier only if enabled)
