@@ -1430,9 +1430,6 @@ const PlanView: React.FC = () => {
       <div className={styles.container}>
         <div className={styles.error}>
           <h2>Plan nicht gefunden</h2>
-          <button onClick={() => navigate('/plans')} style={backTextButton(false)}>
-            Zurück zur Übersicht
-          </button>
         </div>
       </div>
     );
@@ -1956,6 +1953,7 @@ const PlanView: React.FC = () => {
                   onMonthChange={handleMonthChange}
                   manualAssignmentMode={true}
                   draggedEmployeeId={weeklyDraggedEmployeeId}
+                  style='list'
                   validDropTargets={weeklyDraggedEmployeeId ? getWeeklyValidDropTargets(weeklyDraggedEmployeeId) : undefined}
                   onRemoveAssignment={handleRemoveWeeklyAssignment}
                   manualAssignments={weeklyManualAssignments}
@@ -1997,6 +1995,7 @@ const PlanView: React.FC = () => {
                   employees={localWeeklyEmployees}
                   onMonthChange={handleMonthChange}
                   swapModeActive={true}
+                  style='list'
                   sourceSelection={sourceSelection}
                   eligibleTargets={eligibilityMap}
                 />
@@ -2008,6 +2007,7 @@ const PlanView: React.FC = () => {
                 weeks={weeklyPlan.weeks}
                 employees={weeklyPlan.employees}
                 onMonthChange={handleMonthChange}
+                style='list'
               />
             )}
           </div>

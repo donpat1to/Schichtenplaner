@@ -120,24 +120,7 @@ const MyAvailability: React.FC = () => {
   }
 
   return (
-    <div style={{ padding: '20px', maxWidth: '1900px', margin: '0 auto' }}>
-      <div style={{ marginBottom: '20px' }}>
-        <button
-          onClick={() => navigate('/')}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#f1f1f1',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            color: '#333',
-            marginBottom: '15px'
-          }}
-        >
-          ← Zurück zum Dashboard
-        </button>
-      </div>
-
+    <div style={{ padding: '10px', maxWidth: '1900px', margin: '0 auto' }}>
       <AvailabilityManager
         employee={employee}
         onSave={handleSave}

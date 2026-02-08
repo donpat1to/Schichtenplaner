@@ -236,7 +236,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
           setWeeklyPreferencesMap(prefs);
 
           // Only load requiredWeeks from backend if not changed by user
-          if (!requiredWeeksChanged && employeeData.requiredWeeks !== undefined) {
+          if (!isAdmin && !requiredWeeksChanged && employeeData.requiredWeeks !== undefined) {
             setRequiredWeeks(employeeData.requiredWeeks);
           }
         } else {
@@ -330,9 +330,12 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
   };
 
   const handleRequiredWeeksChange = (value: number) => {
+    if (isAdmin) return;
     setRequiredWeeks(value);
     setRequiredWeeksChanged(true);
   };
+
+  const effectiveRequiredWeeks = isAdmin ? 0 : requiredWeeks;
 
   // Unified preference cycling: undefined/3 -> 1 -> 2 -> 3 -> 1
   const getNextPreferenceLevel = (current: AvailabilityLevel | undefined): AvailabilityLevel => {
@@ -638,10 +641,10 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
             type="number"
             min="0"
             max={selectedWeeklyPlan.weeks.length}
-            value={requiredWeeks}
+            value={effectiveRequiredWeeks}
             onChange={(e) => handleRequiredWeeksChange(parseInt(e.target.value) || 0)}
             onKeyDown={(e) => e.preventDefault()}
-            disabled={!canEdit}
+            disabled={!canEdit || isAdmin}
             style={{
               padding: '8px 12px',
               border: '1px solid #ddd',
@@ -649,7 +652,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
               width: '80px',
               textAlign: 'center',
               fontSize: '16px',
-              opacity: canEdit ? 1 : 0.7
+              opacity: (!canEdit || isAdmin) ? 0.7 : 1
             }}
           />
           <span style={{ color: '#666', fontSize: '14px' }}>
@@ -665,6 +668,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
             weeks={selectedWeeklyPlan.weeks}
             onMonthChange={handleMonthChange}
             mode="preferences"
+            style='monthly'
             weekPreferences={weeklyPreferencesMap}
             onPreferenceChange={toggleWeeklyPreference}
             disabled={!canEdit}
@@ -1055,7 +1059,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
 
           console.log('⚠️ Weekly conflicts found:', conflictsForModal);
           setConflicts(conflictsForModal);
-          setPendingSaveData({ type: 'weekly', data: { preferences, requiredWeeks } });
+          setPendingSaveData({ type: 'weekly', data: { preferences, requiredWeeks: effectiveRequiredWeeks } });
           setPendingContext({ type: 'weekly', ctx: weeklyCtx });
           setShowConflictModal(true);
           setSaving(false);
@@ -1070,7 +1074,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
     }
 
     // No conflicts, proceed with save
-    await performWeeklySave({ preferences, requiredWeeks });
+    await performWeeklySave({ preferences, requiredWeeks: effectiveRequiredWeeks });
   };
 
   const performWeeklySave = async (data: { preferences: any[]; requiredWeeks: number }, resolutions?: ConflictResolution[]) => {
@@ -1335,7 +1339,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
       <div style={{ marginBottom: '20px' }}>
         <h3 style={{ margin: '0 0 10px 0', color: '#34495e' }}>
           {employeeFullName}
-          {isOwnProfile && <span style={{ fontSize: '14px', color: '#27ae60', marginLeft: '10px' }}>(Eigenes Profil)</span>}
+          {isOwnProfile && <span style={{ fontSize: '14px', color: '#27ae60', marginLeft: '10px' }}>(Ich)</span>}
         </h3>
         <p style={{ margin: 0, color: '#7f8c8d' }}>
           <strong>Email:</strong> {employee.email}

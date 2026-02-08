@@ -8,7 +8,7 @@ import AvailabilityManager from './components/AvailabilityManager';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
 
-type ViewMode = 'list' | 'create' | 'edit' | 'availability';
+type ViewMode = 'list' | 'create' | 'availability';
 
 const EmployeeManagement: React.FC = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -25,15 +25,15 @@ const EmployeeManagement: React.FC = () => {
   const loadEmployees = async () => {
     try {
       setLoading(true);
-      console.log('🔄 Loading employees...');
+      console.log('Loading employees...');
 
       // Add cache-busting parameter to prevent browser caching
       const data = await employeeService.getEmployees(true);
-      console.log('✅ Employees loaded:', data);
+      console.log('Employees loaded:', data);
 
       setEmployees(data);
     } catch (err: any) {
-      console.error('❌ Error loading employees:', err);
+      console.error('Error loading employees:', err);
       showNotification({
         type: 'error',
         title: 'Fehler',
@@ -47,11 +47,6 @@ const EmployeeManagement: React.FC = () => {
   const handleCreateEmployee = () => {
     setSelectedEmployee(null);
     setViewMode('create');
-  };
-
-  const handleEditEmployee = (employee: Employee) => {
-    setSelectedEmployee(employee);
-    setViewMode('edit');
   };
 
   const handleManageAvailability = (employee: Employee) => {
@@ -74,13 +69,17 @@ const EmployeeManagement: React.FC = () => {
     });
   };
 
-  const handleEmployeeUpdated = () => {
+  const handleEmployeeUpdatedInline = () => {
+    loadEmployees();
+  };
+
+  const handleAvailabilityUpdated = () => {
     loadEmployees();
     setViewMode('list');
     showNotification({
       type: 'success',
       title: 'Erfolg',
-      message: 'Mitarbeiter wurde erfolgreich aktualisiert'
+      message: 'Verfügbarkeiten wurden erfolgreich aktualisiert'
     });
   };
 
@@ -163,7 +162,7 @@ const EmployeeManagement: React.FC = () => {
   if (loading && viewMode === 'list') {
     return (
       <div style={{ textAlign: 'center', padding: '40px' }}>
-        <div>⏳ Lade Mitarbeiter...</div>
+        <div>Lade Mitarbeiter...</div>
       </div>
     );
   }
@@ -179,8 +178,8 @@ const EmployeeManagement: React.FC = () => {
         gap: '15px'
       }}>
         <div>
-          <h1 style={{ margin: 0, color: '#2c3e50' }}>👥 Mitarbeiter Verwaltung</h1>
-          <p style={{ margin: '5px 0 0 0', color: '#7f8c8d' }}>
+          <h1 style={{ margin: 0, color: '#2c3e50' }}>Mitarbeiter Verwaltung</h1>
+          <p style={{ margin: '5px 0 0 0', color: '#7f8c8d', fontSize: '14px' }}>
             {employees.length} Mitarbeiter gefunden
           </p>
         </div>
@@ -218,7 +217,7 @@ const EmployeeManagement: React.FC = () => {
               cursor: 'pointer'
             }}
           >
-            ← Zurück zur Liste
+            Zurück zur Liste
           </button>
         )}
       </div>
@@ -227,25 +226,15 @@ const EmployeeManagement: React.FC = () => {
       {viewMode === 'list' && (
         <EmployeeList
           employees={employees}
-          onEdit={handleEditEmployee}
           onDelete={handleDeleteEmployee}
           onManageAvailability={handleManageAvailability}
+          onEmployeeUpdated={handleEmployeeUpdatedInline}
         />
       )}
 
       {viewMode === 'create' && (
         <EmployeeForm
-          mode="create"
           onSuccess={handleEmployeeCreated}
-          onCancel={handleBackToList}
-        />
-      )}
-
-      {viewMode === 'edit' && selectedEmployee && (
-        <EmployeeForm
-          mode="edit"
-          employee={selectedEmployee}
-          onSuccess={handleEmployeeUpdated}
           onCancel={handleBackToList}
         />
       )}
@@ -253,7 +242,7 @@ const EmployeeManagement: React.FC = () => {
       {viewMode === 'availability' && selectedEmployee && (
         <AvailabilityManager
           employee={selectedEmployee}
-          onSave={handleEmployeeUpdated}
+          onSave={handleAvailabilityUpdated}
           onCancel={handleBackToList}
         />
       )}

@@ -698,6 +698,7 @@ const PlanEdit: React.FC = () => {
                                 month={calendarMonth}
                                 weeks={weeklyPlan?.weeks || []}
                                 onMonthChange={handleCalendarMonthChange}
+                                style='monthly'
                             />
                         </div>
                     </div>

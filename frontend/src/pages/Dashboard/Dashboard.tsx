@@ -1,22 +1,53 @@
-// frontend/src/pages/Dashboard/Dashboard.tsx - Updated calculations
+// frontend/src/pages/Dashboard/Dashboard.tsx - Updated with unified plan display
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { shiftPlanService } from '../../services/shiftPlanService';
+import { weeklyPlanService, WeeklyPlanListItem } from '../../services/weeklyPlanService';
 import { employeeService } from '../../services/employeeService';
-import { ShiftPlan } from '../../models/ShiftPlan';
+import { ShiftPlan, ShiftPlanWithData } from '../../models/ShiftPlan';
+import { WeeklyPlanWithDetails } from '../../models/WeeklyPlan';
 import { Employee } from '../../models/Employee';
+import UnifiedCalendarModal from './components/UnifiedCalendarModal';
+
+// Unified plan type for combined display
+interface UnifiedPlan {
+  id: string;
+  name: string;
+  type: 'shift' | 'weekly';
+  status: 'draft' | 'published' | 'archived';
+  startDate: string;
+  endDate: string;
+  createdAt: string;
+}
+
+// Upcoming assignment for current user
+interface UpcomingAssignment {
+  id: string;
+  date: string;           // Formatted display date
+  sortDate: string;       // ISO date for sorting
+  time?: string;          // Only for shift plans
+  planName: string;
+  planType: 'shift' | 'weekly';
+  details: string;        // Time slot name or "KW X"
+}
+
+// Calendar day assignment
+export interface CalendarDayAssignment {
+  date: string;
+  employeeId: string;
+  employeeName: string;
+  planName: string;
+  planType: 'shift' | 'weekly';
+  timeSlotName?: string;
+  startTime?: string;
+  endTime?: string;
+}
 
 interface DashboardData {
-  currentShiftPlan: ShiftPlan | null;
-  upcomingShifts: Array<{
-    id: string;
-    date: string;
-    time: string;
-    type: string;
-    assigned: boolean;
-    planName: string;
-  }>;
+  publishedPlans: UnifiedPlan[];      // All published plans
+  allPlans: UnifiedPlan[];            // All plans of all statuses
+  upcomingAssignments: UpcomingAssignment[];
   teamStats: {
     totalEmployees: number;
     personell: number;
@@ -24,24 +55,25 @@ interface DashboardData {
     trainee: number;
     experienced: number;
   };
-  recentPlans: ShiftPlan[];
 }
 
 const Dashboard: React.FC = () => {
   const { user, hasRole } = useAuth();
   const [loading, setLoading] = useState(true);
-  //const [currentPlanShifts, setCurrentPlanShifts] = useState<ShiftAssignment[]>([]);
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
+  const [shiftPlansData, setShiftPlansData] = useState<ShiftPlan[]>([]);
+  const [weeklyPlansData, setWeeklyPlansData] = useState<WeeklyPlanListItem[]>([]);
   const [data, setData] = useState<DashboardData>({
-    currentShiftPlan: null,
-    upcomingShifts: [],
+    publishedPlans: [],
+    allPlans: [],
+    upcomingAssignments: [],
     teamStats: {
       totalEmployees: 0,
       personell: 0,
       manager: 0,
       trainee: 0,
       experienced: 0
-    },
-    recentPlans: []
+    }
   });
 
   useEffect(() => {
@@ -52,137 +84,226 @@ const Dashboard: React.FC = () => {
     try {
       setLoading(true);
 
-      console.log('🔄 Loading dashboard data...');
+      console.log('Loading dashboard data...');
 
-      const [shiftPlans, employees] = await Promise.all([
+      const [shiftPlans, weeklyPlans, employees] = await Promise.all([
         shiftPlanService.getShiftPlans(),
+        weeklyPlanService.getWeeklyPlans(),
         employeeService.getEmployees(),
       ]);
 
-      // Find current shift plan
-      const today = new Date().toISOString().split('T')[0];
-      const currentPlan = findCurrentShiftPlan(shiftPlans, today);
+      // Store raw plans for calendar modal
+      setShiftPlansData(shiftPlans);
+      setWeeklyPlansData(weeklyPlans);
 
-      // Load shifts for current plan
-      /*if (currentPlan) {
-        const shifts = await shiftAssignmentService.getShiftAssignments(currentPlan.id);
-        setCurrentPlanShifts(shifts);
-      } else {
-        setCurrentPlanShifts([]);
-      }*/
+      // Create unified plan list
+      const allPlans = createUnifiedPlanList(shiftPlans, weeklyPlans);
+      const publishedPlans = allPlans.filter(p => p.status === 'published');
 
-      console.log('📊 Loaded data:', {
-        plans: shiftPlans.length,
-        employees: employees.length,
-        //currentPlanShifts
-      });
-
-      // Debug: Log plan details
-      shiftPlans.forEach(plan => {
-        console.log(`Plan: ${plan.name}`, {
-          status: plan.status,
-          startDate: plan.startDate,
-          endDate: plan.endDate,
-          //scheduledShifts: plan.scheduledShifts?.length || 0,
-          isTemplate: plan.isTemplate
-        });
-      });
-
-      // Find current shift plan (published and current date within range)
-      //const today = new Date().toISOString().split('T')[0];
-      //const currentPlan = findCurrentShiftPlan(shiftPlans, today);
-
-      // Get user's upcoming shifts
-      const userShifts = await loadUserUpcomingShifts(shiftPlans, today);
+      // Load user's upcoming assignments
+      const upcomingAssignments = await loadUserUpcomingAssignments(
+        shiftPlans.filter(p => p.status === 'published' && !p.isTemplate),
+        weeklyPlans.filter(p => p.status === 'published'),
+        user?.id
+      );
 
       // Calculate team stats
       const activeEmployees = employees.filter(emp => emp.isActive);
       const teamStats = calculateTeamStats(activeEmployees);
 
-      // Get recent plans (non-templates, sorted by creation date)
-      const recentPlans = getRecentPlans(shiftPlans);
-
-      setData({
-        currentShiftPlan: currentPlan,
-        upcomingShifts: userShifts,
-        teamStats,
-        recentPlans
+      console.log('Dashboard data loaded:', {
+        allPlans: allPlans.length,
+        publishedPlans: publishedPlans.length,
+        upcomingAssignments: upcomingAssignments.length,
+        teamStats
       });
 
-      console.log('✅ Dashboard data loaded:', {
-        currentPlan: currentPlan?.name,
-        //userShifts: userShifts.length,
-        teamStats,
-        recentPlans: recentPlans.length
+      setData({
+        publishedPlans,
+        allPlans,
+        upcomingAssignments,
+        teamStats
       });
 
     } catch (error) {
-      console.error('❌ Error loading dashboard data:', error);
+      console.error('Error loading dashboard data:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const findCurrentShiftPlan = (plans: ShiftPlan[], today: string): ShiftPlan | null => {
-    // First, try to find a published plan where today is within the date range
-    const activePlan = plans.find(plan =>
-      plan.status === 'published' &&
-      !plan.isTemplate &&
-      plan.startDate &&
-      plan.endDate &&
-      plan.startDate <= today &&
-      plan.endDate >= today
-    );
+  const createUnifiedPlanList = (
+    shiftPlans: ShiftPlan[],
+    weeklyPlans: WeeklyPlanListItem[]
+  ): UnifiedPlan[] => {
+    const unifiedShiftPlans: UnifiedPlan[] = shiftPlans
+      .filter(p => !p.isTemplate)
+      .map(plan => ({
+        id: plan.id,
+        name: plan.name,
+        type: 'shift' as const,
+        status: plan.status,
+        startDate: plan.startDate || '',
+        endDate: plan.endDate || '',
+        createdAt: plan.createdAt
+      }));
 
-    if (activePlan) {
-      console.log('✅ Found active plan:', activePlan.name);
-      return activePlan;
-    }
+    const unifiedWeeklyPlans: UnifiedPlan[] = weeklyPlans.map(plan => ({
+      id: plan.id,
+      name: plan.name,
+      type: 'weekly' as const,
+      status: plan.status,
+      startDate: plan.startDate,
+      endDate: plan.endDate,
+      createdAt: plan.createdAt
+    }));
 
-    // If no active plan found, try to find the most recent published plan
-    const publishedPlans = plans
-      .filter(plan => plan.status === 'published' && !plan.isTemplate)
+    // Combine and sort by creation date (newest first)
+    return [...unifiedShiftPlans, ...unifiedWeeklyPlans]
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-    console.log('📅 Published plans available:', publishedPlans.map(p => p.name));
-
-    return publishedPlans[0] || null;
   };
 
-  const loadUserUpcomingShifts = async (shiftPlans: ShiftPlan[], today: string): Promise<DashboardData['upcomingShifts']> => {
-    if (!user) return [];
+  const loadUserUpcomingAssignments = async (
+    shiftPlans: ShiftPlan[],
+    weeklyPlans: WeeklyPlanListItem[],
+    userId?: string
+  ): Promise<UpcomingAssignment[]> => {
+    if (!userId) return [];
+
+    const assignments: UpcomingAssignment[] = [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
     try {
-      const userShifts: DashboardData['upcomingShifts'] = [];
-
-      // Check each plan for user assignments
+      // Load shift plan assignments
       for (const plan of shiftPlans) {
+        if (!plan.startDate || !plan.endDate) continue;
 
+        try {
+          const planDetails = await shiftPlanService.getShiftPlan(plan.id) as ShiftPlanWithData;
+
+          // Find user's assignments
+          for (const shift of planDetails.shifts || []) {
+            const userAssignment = shift.assignments?.find(a => a.employeeId === userId);
+            if (!userAssignment) continue;
+
+            // Calculate next occurrence dates based on dayOfWeek
+            const occurrences = getNextOccurrences(
+              plan.startDate,
+              plan.endDate,
+              shift.dayOfWeek,
+              today,
+              3 // Get next 3 occurrences
+            );
+
+            for (const date of occurrences) {
+              const dateStr = date.toISOString().split('T')[0];
+              assignments.push({
+                id: `shift-${plan.id}-${shift.id}-${dateStr}`,
+                date: formatShiftDate(dateStr),
+                sortDate: dateStr,
+                time: `${shift.timeSlot?.startTime || ''} - ${shift.timeSlot?.endTime || ''}`,
+                planName: plan.name,
+                planType: 'shift',
+                details: shift.timeSlot?.name || 'Schicht'
+              });
+            }
+          }
+        } catch (err) {
+          console.error(`Error loading shift plan ${plan.id}:`, err);
+        }
       }
 
-      // Sort by date and limit to 5 upcoming shifts
-      return userShifts
-        .sort((a, b) => {
-          // Convert formatted dates back to Date objects for sorting
-          const dateA = a.date === 'Heute' ? today : a.date === 'Morgen' ?
-            new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split('T')[0] : a.date;
-          const dateB = b.date === 'Heute' ? today : b.date === 'Morgen' ?
-            new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split('T')[0] : b.date;
+      // Load weekly plan assignments
+      // WeeklyPlanWithDetails stores assignments on each employee's assignedWeeks array
+      for (const plan of weeklyPlans) {
+        try {
+          const planDetails = await weeklyPlanService.getWeeklyPlan(plan.id);
 
-          return new Date(dateA).getTime() - new Date(dateB).getTime();
-        })
+          // Find the current user in the employees list
+          const userEmployee = planDetails.employees?.find(e => e.id === userId);
+          if (!userEmployee) continue;
+
+          // Get user's assigned weeks
+          for (const weekId of userEmployee.assignedWeeks || []) {
+            const week = planDetails.weeks?.find(w => w.id === weekId);
+            if (!week) continue;
+
+            const weekStart = new Date(week.startDate);
+            // Only include future weeks or current week
+            if (weekStart < today) {
+              const weekEnd = new Date(week.endDate);
+              weekEnd.setHours(23, 59, 59, 999);
+              if (weekEnd < today) continue;
+            }
+
+            const weekNumber = getCalendarWeekNumber(weekStart);
+            assignments.push({
+              id: `weekly-${plan.id}-${week.id}`,
+              date: formatShiftDate(week.startDate),
+              sortDate: week.startDate,
+              planName: plan.name,
+              planType: 'weekly',
+              details: `KW ${weekNumber}`
+            });
+          }
+        } catch (err) {
+          console.error(`Error loading weekly plan ${plan.id}:`, err);
+        }
+      }
+
+      // Sort by date and limit to 5
+      return assignments
+        .sort((a, b) => new Date(a.sortDate).getTime() - new Date(b.sortDate).getTime())
         .slice(0, 5);
 
     } catch (error) {
-      console.error('Error loading user shifts:', error);
+      console.error('Error loading user assignments:', error);
       return [];
     }
   };
 
+  const getNextOccurrences = (
+    startDate: string,
+    endDate: string,
+    dayOfWeek: number,
+    today: Date,
+    count: number
+  ): Date[] => {
+    const occurrences: Date[] = [];
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    // Find the first occurrence of this dayOfWeek on or after today
+    let current = new Date(Math.max(start.getTime(), today.getTime()));
+
+    // Adjust to the target day of week (1=Monday, 7=Sunday)
+    const targetDay = dayOfWeek === 7 ? 0 : dayOfWeek; // Convert to JS day (0=Sunday)
+    const currentDay = current.getDay();
+    let daysUntilTarget = targetDay - currentDay;
+    if (daysUntilTarget < 0) daysUntilTarget += 7;
+    current.setDate(current.getDate() + daysUntilTarget);
+
+    while (occurrences.length < count && current <= end) {
+      if (current >= today) {
+        occurrences.push(new Date(current));
+      }
+      current.setDate(current.getDate() + 7);
+    }
+
+    return occurrences;
+  };
+
+  const getCalendarWeekNumber = (date: Date): number => {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  };
+
   const calculateTeamStats = (employees: Employee[]) => {
     const totalEmployees = employees.length;
-
-    // Count by type
     const managerCount = employees.filter(e => e.employeeType === 'manager').length;
     const personellCount = employees.filter(e => e.employeeType === 'personell').length;
     const traineeCount = employees.filter(e => e.isTrainee === true).length;
@@ -195,13 +316,6 @@ const Dashboard: React.FC = () => {
       trainee: traineeCount,
       experienced: experiencedCount,
     };
-  };
-
-  const getRecentPlans = (plans: ShiftPlan[]): ShiftPlan[] => {
-    return plans
-      .filter(plan => !plan.isTemplate)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 3);
   };
 
   const formatShiftDate = (dateString: string): string => {
@@ -223,56 +337,35 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const formatPlanPeriod = (plan: ShiftPlan): string => {
-    if (!plan.startDate || !plan.endDate) return 'Kein Zeitraum definiert';
+  const formatPlanPeriod = (startDate?: string, endDate?: string): string => {
+    if (!startDate || !endDate) return 'Kein Zeitraum definiert';
 
-    const start = new Date(plan.startDate).toLocaleDateString('de-DE');
-    const end = new Date(plan.endDate).toLocaleDateString('de-DE');
+    const start = new Date(startDate).toLocaleDateString('de-DE');
+    const end = new Date(endDate).toLocaleDateString('de-DE');
     return `${start} - ${end}`;
   };
 
-  /*const calculatePlanProgress = (plan: ShiftPlan, shifts: ShiftAssignments[]): {
-    covered: number; total: number; percentage: number
-  } => {
-    if (!plan.id || shifts.length === 0) {
-      console.log(`📊 Plan ${plan.name} has no scheduled shifts`);
-      return { covered: 0, total: 0, percentage: 0 };
-    }
+  const getPlanTypeBadge = (type: 'shift' | 'weekly') => ({
+    label: type === 'shift' ? 'Schichtplan' : 'Wochenplan',
+    color: type === 'shift' ? '#3498db' : '#9b59b6'
+  });
 
-    const currentDate = new Date();
-    const totalShifts = shifts.length;
-    const coveredShifts = shifts.filter(shift => {
-      const shiftDate = new Date(shift.date);
-      return currentDate > shiftDate;
-    }).length;
+  const getStatusBadge = (status: 'draft' | 'published' | 'archived') => ({
+    label: status === 'published' ? 'Veröffentlicht' : status === 'draft' ? 'Entwurf' : 'Archiviert',
+    color: status === 'published' ? '#2ecc71' : status === 'draft' ? '#f39c12' : '#95a5a6'
+  });
 
-    const percentage = totalShifts > 0 ? Math.round((coveredShifts / totalShifts) * 100) : 0;
-
-    console.log(`📊 Plan ${plan.name} progress:`, {
-      totalShifts,
-      coveredShifts,
-      percentage
-    });
-
-    return {
-      covered: coveredShifts,
-      total: totalShifts,
-      percentage
-    };
-  };*/
+  const getPlanLink = (plan: UnifiedPlan): string => {
+    return plan.type === 'shift' ? `/plans/${plan.id}` : `/plans/${plan.id}`;
+  };
 
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '40px' }}>
-        <div>⏳ Lade Dashboard...</div>
+        <div>Lade Dashboard...</div>
       </div>
     );
   }
-
-  /*const progress = data.currentShiftPlan
-    ? calculatePlanProgress(data.currentShiftPlan, currentPlanShifts)
-    : { covered: 0, total: 0, percentage: 0 };*/
-  const progress = { covered: 0, total: 0, percentage: 0 };
 
   return (
     <div>
@@ -287,9 +380,9 @@ const Dashboard: React.FC = () => {
           marginRight: '-50vw',
           background: `
             radial-gradient(ellipse farthest-corner at center 53%,
-              #d9b9f3ff 10%, 
-              #ddc5f1ff 22%, 
-              #e9d4f8ff 32%, 
+              #d9b9f3ff 10%,
+              #ddc5f1ff 22%,
+              #e9d4f8ff 32%,
               #FBFAF6 55%)
           `,
           textAlign: 'center',
@@ -325,7 +418,7 @@ const Dashboard: React.FC = () => {
         </p>
       </div>
 
-      {/* Quick Actions - Nur für Admins/Instandhalter */}
+      {/* Quick Actions - Only for Admins/Maintenance */}
       {hasRole(['admin', 'maintenance']) && (
         <div style={{ marginBottom: '30px' }}>
           <h2 style={{ marginBottom: '15px', color: '#2c3e50' }}>Schnellaktionen</h2>
@@ -348,7 +441,7 @@ const Dashboard: React.FC = () => {
               }} onMouseLeave={(e) => {
                 e.currentTarget.style.transform = 'translateY(0)';
               }}>
-                <div style={{ fontSize: '24px', marginBottom: '8px' }}>📅</div>
+                <div style={{ fontSize: '24px', marginBottom: '8px' }}>&#128197;</div>
                 <div style={{ fontWeight: 'bold' }}>Neuen Schichtplan</div>
                 <div style={{ fontSize: '14px', opacity: 0.9 }}>Erstellen</div>
               </div>
@@ -368,7 +461,7 @@ const Dashboard: React.FC = () => {
               }} onMouseLeave={(e) => {
                 e.currentTarget.style.transform = 'translateY(0)';
               }}>
-                <div style={{ fontSize: '24px', marginBottom: '8px' }}>👥</div>
+                <div style={{ fontSize: '24px', marginBottom: '8px' }}>&#128101;</div>
                 <div style={{ fontWeight: 'bold' }}>Mitarbeiter</div>
                 <div style={{ fontSize: '14px', opacity: 0.9 }}>Verwalten</div>
               </div>
@@ -388,7 +481,7 @@ const Dashboard: React.FC = () => {
               }} onMouseLeave={(e) => {
                 e.currentTarget.style.transform = 'translateY(0)';
               }}>
-                <div style={{ fontSize: '24px', marginBottom: '8px' }}>📋</div>
+                <div style={{ fontSize: '24px', marginBottom: '8px' }}>&#128203;</div>
                 <div style={{ fontWeight: 'bold' }}>Alle Pläne</div>
                 <div style={{ fontSize: '14px', opacity: 0.9 }}>Anzeigen</div>
               </div>
@@ -397,14 +490,14 @@ const Dashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Haupt-Grid mit Informationen */}
+      {/* Main Grid with Information */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
         gap: '25px',
         marginBottom: '30px'
       }}>
-        {/* Aktueller Schichtplan */}
+        {/* Aktuelle Pläne (Published Plans) */}
         <div style={{
           backgroundColor: 'white',
           padding: '20px',
@@ -412,62 +505,89 @@ const Dashboard: React.FC = () => {
           border: '1px solid #e0e0e0',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
         }}>
-          <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>📊 Aktueller Schichtplan</h3>
-          {data.currentShiftPlan ? (
-            <>
-              <div style={{ marginBottom: '15px' }}>
-                <div style={{ fontWeight: 'bold', fontSize: '18px' }}>
-                  {data.currentShiftPlan.name}
-                </div>
-                <div style={{ color: '#666', fontSize: '14px' }}>
-                  {formatPlanPeriod(data.currentShiftPlan)}
-                </div>
-              </div>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '15px'
+          }}>
+            <h3 style={{ margin: 0, color: '#2c3e50' }}>&#128202; Aktuelle Pläne</h3>
+            {data.publishedPlans.length > 0 && (
+              <button
+                onClick={() => setShowCalendarModal(true)}
+                style={{
+                  padding: '6px 12px',
+                  backgroundColor: '#854eca',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '13px'
+                }}
+              >
+                Kalender anzeigen
+              </button>
+            )}
+          </div>
 
-              <div style={{ marginBottom: '15px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                  <span>Fortschritt:</span>
-                  <span>
-                    {progress.covered}/{progress.total} Schichten ({progress.percentage}%)
-                  </span>
-                </div>
-                <div style={{
-                  width: '100%',
-                  backgroundColor: '#ecf0f1',
-                  borderRadius: '10px',
-                  overflow: 'hidden'
-                }}>
-                  <div style={{
-                    width: `${progress.percentage}%`,
-                    backgroundColor: progress.percentage > 0 ? '#854eca' : '#95a5a6',
-                    height: '8px',
-                    borderRadius: '10px',
-                    transition: 'width 0.3s ease'
-                  }} />
-                </div>
-                {progress.total === 0 && (
-                  <div style={{ fontSize: '12px', color: '#e74c3c', marginTop: '5px' }}>
-                    Keine Schichten im Plan definiert
-                  </div>
-                )}
-              </div>
-
-              <div style={{
-                display: 'inline-block',
-                backgroundColor: data.currentShiftPlan.status === 'published' ? '#2ecc71' : '#f39c12',
-                color: 'white',
-                padding: '4px 12px',
-                borderRadius: '20px',
-                fontSize: '12px',
-                fontWeight: 'bold'
-              }}>
-                {data.currentShiftPlan.status === 'published' ? 'Aktiv' : 'Entwurf'}
-              </div>
-            </>
+          {data.publishedPlans.length > 0 ? (
+            <div style={{ display: 'grid', gap: '12px' }}>
+              {data.publishedPlans.slice(0, 4).map(plan => {
+                const typeBadge = getPlanTypeBadge(plan.type);
+                return (
+                  <Link
+                    key={plan.id}
+                    to={getPlanLink(plan)}
+                    style={{ textDecoration: 'none', color: 'inherit' }}
+                  >
+                    <div style={{
+                      padding: '12px',
+                      backgroundColor: '#f8f9fa',
+                      borderRadius: '6px',
+                      borderLeft: `4px solid ${typeBadge.color}`,
+                      cursor: 'pointer',
+                      transition: 'transform 0.1s ease'
+                    }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'translateX(4px)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'translateX(0)';
+                      }}
+                    >
+                      <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
+                        {plan.name}
+                      </div>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        marginBottom: '4px'
+                      }}>
+                        <span style={{
+                          display: 'inline-block',
+                          padding: '2px 8px',
+                          backgroundColor: typeBadge.color,
+                          color: 'white',
+                          borderRadius: '10px',
+                          fontSize: '11px',
+                          fontWeight: 'bold'
+                        }}>
+                          {typeBadge.label}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '13px', color: '#666' }}>
+                        {formatPlanPeriod(plan.startDate, plan.endDate)}
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
           ) : (
             <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
-              <div style={{ fontSize: '48px', marginBottom: '10px' }}>📅</div>
-              <div>Kein aktiver Schichtplan</div>
+              <div style={{ fontSize: '48px', marginBottom: '10px' }}>&#128197;</div>
+              <div>Keine aktiven Pläne</div>
               {hasRole(['admin', 'maintenance']) && (
                 <Link to="/plans/new">
                   <button style={{
@@ -488,94 +608,6 @@ const Dashboard: React.FC = () => {
         </div>
 
         {/* Team-Statistiken */}
-        <div style={{
-          backgroundColor: 'white',
-          padding: '20px',
-          borderRadius: '8px',
-          border: '1px solid #e0e0e0',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-        }}>
-          <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>👥 Team-Übersicht</h3>
-          <div style={{ display: 'grid', gap: '12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>Gesamte Belegschaft:</span>
-              <span style={{ fontWeight: 'bold', fontSize: '18px' }}>
-                {data.teamStats.totalEmployees}
-              </span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>Chef:</span>
-              <span style={{ fontWeight: 'bold', color: '#2ecc71' }}>
-                {data.teamStats.manager}
-              </span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>Personal:</span>
-              <span style={{ fontWeight: 'bold', color: '#f39c12' }}>
-                {data.teamStats.personell}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Unteres Grid */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
-        gap: '25px'
-      }}>
-        {/* Meine nächsten Schichten (für normale User) */}
-        {hasRole(['user']) && (
-          <div style={{
-            backgroundColor: 'white',
-            padding: '20px',
-            borderRadius: '8px',
-            border: '1px solid #e0e0e0',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-          }}>
-            <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>⏰ Meine nächsten Schichten</h3>
-            {data.upcomingShifts.length > 0 ? (
-              <div style={{ display: 'grid', gap: '10px' }}>
-                {data.upcomingShifts.map(shift => (
-                  <div key={shift.id} style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '12px',
-                    backgroundColor: '#f8f9fa',
-                    borderRadius: '6px',
-                    border: '1px solid #d4edda'
-                  }}>
-                    <div>
-                      <div style={{ fontWeight: 'bold' }}>{shift.date}</div>
-                      <div style={{ fontSize: '14px', color: '#666' }}>{shift.time}</div>
-                      <div style={{ fontSize: '12px', color: '#999' }}>{shift.type}</div>
-                      <div style={{ fontSize: '11px', color: '#666' }}>{shift.planName}</div>
-                    </div>
-                    <div style={{
-                      padding: '4px 8px',
-                      backgroundColor: '#d4edda',
-                      color: '#155724',
-                      borderRadius: '4px',
-                      fontSize: '12px',
-                      fontWeight: 'bold'
-                    }}>
-                      Zugewiesen
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
-                <div style={{ fontSize: '48px', marginBottom: '10px' }}>⏰</div>
-                <div>Keine anstehenden Schichten</div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Letzte Schichtpläne (für Admins/Instandhalter) */}
         {hasRole(['admin', 'maintenance']) && (
           <div style={{
             backgroundColor: 'white',
@@ -584,47 +616,210 @@ const Dashboard: React.FC = () => {
             border: '1px solid #e0e0e0',
             boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
           }}>
-            <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>📝 Schichtpläne</h3>
-            {data.recentPlans.length > 0 ? (
-              <div style={{ display: 'grid', gap: '12px' }}>
-                {data.recentPlans.map(plan => (
-                  <div key={plan.id} style={{
-                    padding: '12px',
-                    backgroundColor: '#f8f9fa',
-                    borderRadius: '6px',
-                    borderLeft: `4px solid ${plan.status === 'published' ? '#2ecc71' :
-                      plan.status === 'draft' ? '#f39c12' : '#95a5a6'
-                      }`
-                  }}>
-                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
-                      {plan.name}
-                    </div>
-                    <div style={{ fontSize: '14px', color: '#666' }}>
-                      {formatPlanPeriod(plan)}
-                    </div>
-                    <div style={{
-                      fontSize: '12px',
-                      color: '#999',
+            <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>&#128101; Team-Übersicht</h3>
+            <div style={{ display: 'grid', gap: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Gesamte Belegschaft:</span>
+                <span style={{ fontWeight: 'bold', fontSize: '18px' }}>
+                  {data.teamStats.totalEmployees}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Chef:</span>
+                <span style={{ fontWeight: 'bold', color: '#2ecc71' }}>
+                  {data.teamStats.manager}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Personal:</span>
+                <span style={{ fontWeight: 'bold', color: '#f39c12' }}>
+                  {data.teamStats.personell}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+
+      {/* Lower Grid */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
+        gap: '25px'
+      }}>
+        {/* Meine nächsten Schichten (for regular users) */}
+        {user?.employeeType === 'personell' && (
+          <div style={{
+            backgroundColor: 'white',
+            padding: '20px',
+            borderRadius: '8px',
+            border: '1px solid #e0e0e0',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+          }}>
+            <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>&#9200; Meine nächsten Schichten</h3>
+            {data.upcomingAssignments.length > 0 ? (
+              <div style={{ display: 'grid', gap: '10px' }}>
+                {data.upcomingAssignments.map(assignment => {
+                  const typeBadge = getPlanTypeBadge(assignment.planType);
+                  return (
+                    <div key={assignment.id} style={{
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                      marginTop: '4px'
+                      padding: '12px',
+                      backgroundColor: '#f8f9fa',
+                      borderRadius: '6px',
+                      borderLeft: `3px solid ${typeBadge.color}`
                     }}>
-                      <span>
-                        Status: {plan.status === 'published' ? 'Veröffentlicht' :
-                          plan.status === 'draft' ? 'Entwurf' : 'Archiviert'}
-                      </span>
-                      <Link to={`/plans/${plan.id}`} style={{ color: '#3498db', textDecoration: 'none' }}>
-                        Anzeigen →
-                      </Link>
+                      <div>
+                        <div style={{ fontWeight: 'bold' }}>{assignment.date}</div>
+                        {assignment.time && (
+                          <div style={{ fontSize: '14px', color: '#666' }}>{assignment.time}</div>
+                        )}
+                        <div style={{ fontSize: '12px', color: '#999' }}>{assignment.details}</div>
+                        <div style={{
+                          fontSize: '11px',
+                          color: '#666',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          marginTop: '4px'
+                        }}>
+                          {assignment.planName}
+                          <span style={{
+                            padding: '1px 6px',
+                            backgroundColor: typeBadge.color,
+                            color: 'white',
+                            borderRadius: '8px',
+                            fontSize: '10px'
+                          }}>
+                            {typeBadge.label}
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{
+                        padding: '4px 8px',
+                        backgroundColor: '#d4edda',
+                        color: '#155724',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        fontWeight: 'bold'
+                      }}>
+                        Zugewiesen
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
-                <div style={{ fontSize: '48px', marginBottom: '10px' }}>📋</div>
-                <div>Noch keine Schichtpläne erstellt</div>
+                <div style={{ fontSize: '48px', marginBottom: '10px' }}>&#9200;</div>
+                <div>Keine anstehenden Schichten</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Alle Pläne (for Admins/Maintenance) */}
+        {hasRole(['admin', 'maintenance']) && (
+          <div style={{
+            backgroundColor: 'white',
+            padding: '20px',
+            borderRadius: '8px',
+            border: '1px solid #e0e0e0',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+          }}>
+            <h3 style={{ margin: '0 0 15px 0', color: '#2c3e50' }}>&#128221; Alle Pläne</h3>
+            {data.allPlans.length > 0 ? (
+              <div style={{ display: 'grid', gap: '12px' }}>
+                {data.allPlans.slice(0, 5).map(plan => {
+                  const typeBadge = getPlanTypeBadge(plan.type);
+                  const statusBadge = getStatusBadge(plan.status);
+                  return (
+                    <div key={plan.id} style={{
+                      padding: '12px',
+                      backgroundColor: '#f8f9fa',
+                      borderRadius: '6px',
+                      borderLeft: `4px solid ${statusBadge.color}`
+                    }}>
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start'
+                      }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
+                            {plan.name}
+                          </div>
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            marginBottom: '4px',
+                            flexWrap: 'wrap'
+                          }}>
+                            <span style={{
+                              display: 'inline-block',
+                              padding: '2px 8px',
+                              backgroundColor: typeBadge.color,
+                              color: 'white',
+                              borderRadius: '10px',
+                              fontSize: '10px',
+                              fontWeight: 'bold'
+                            }}>
+                              {typeBadge.label}
+                            </span>
+                            <span style={{
+                              display: 'inline-block',
+                              padding: '2px 8px',
+                              backgroundColor: statusBadge.color,
+                              color: 'white',
+                              borderRadius: '10px',
+                              fontSize: '10px',
+                              fontWeight: 'bold'
+                            }}>
+                              {statusBadge.label}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '13px', color: '#666' }}>
+                            {formatPlanPeriod(plan.startDate, plan.endDate)}
+                          </div>
+                        </div>
+                        <Link
+                          to={getPlanLink(plan)}
+                          style={{
+                            color: '#3498db',
+                            textDecoration: 'none',
+                            fontSize: '13px',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          Anzeigen &#8594;
+                        </Link>
+                      </div>
+                    </div>
+                  );
+                })}
+                {data.allPlans.length > 5 && (
+                  <Link
+                    to="/plans"
+                    style={{
+                      textAlign: 'center',
+                      color: '#3498db',
+                      textDecoration: 'none',
+                      padding: '8px',
+                      fontSize: '13px'
+                    }}
+                  >
+                    Alle {data.allPlans.length} Pläne anzeigen &#8594;
+                  </Link>
+                )}
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+                <div style={{ fontSize: '48px', marginBottom: '10px' }}>&#128203;</div>
+                <div>Noch keine Pläne erstellt</div>
                 <Link to="/plans/new">
                   <button style={{
                     marginTop: '10px',
@@ -643,6 +838,15 @@ const Dashboard: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Calendar Modal */}
+      {showCalendarModal && (
+        <UnifiedCalendarModal
+          shiftPlans={shiftPlansData.filter(p => p.status === 'published' && !p.isTemplate)}
+          weeklyPlans={weeklyPlansData.filter(p => p.status === 'published')}
+          onClose={() => setShowCalendarModal(false)}
+        />
+      )}
     </div>
   );
 };

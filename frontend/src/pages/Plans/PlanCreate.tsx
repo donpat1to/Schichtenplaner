@@ -184,13 +184,6 @@ const PlanCreate: React.FC = () => {
     <div className={styles.container}>
       <div className={styles.header}>
         <h1>Neuen Plan erstellen</h1>
-        <button
-          onClick={() => navigate('/plans')}
-          className={styles.backButton}
-          disabled={isSubmitting}
-        >
-          Zurück zur Übersicht
-        </button>
       </div>
 
       <div className={styles.planTypeSelector}>

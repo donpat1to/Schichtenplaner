@@ -23,6 +23,7 @@ export interface CalendarProps {
 
     // Preference mode props
     mode?: 'view' | 'preferences';
+    style: 'list' | 'monthly';
     weekPreferences?: Record<string, 1 | 2 | 3>;
     onPreferenceChange?: (weekId: string) => void;
     disabled?: boolean;
@@ -96,6 +97,7 @@ const Calendar: React.FC<CalendarProps> = ({
     getDayInfo,
     onDayClick,
     mode = 'view',
+    style = 'monthly',
     weekPreferences = {},
     onPreferenceChange,
     disabled = false,
@@ -107,7 +109,7 @@ const Calendar: React.FC<CalendarProps> = ({
     validDropTargets,
     onRemoveAssignment,
     manualAssignments = [],
-    hideNavigation = mode === 'view',
+    hideNavigation = false,
 }) => {
     const monthNames = [
         'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
@@ -120,7 +122,7 @@ const Calendar: React.FC<CalendarProps> = ({
     let firstDayOfCalendar: Date;
     let lastDayOfCalendar: Date;
 
-    if (mode === 'view' && weeks.length > 0) {
+    if (mode === 'view' && style === 'list' && weeks.length > 0) {
         // Sort weeks by start date
         const sortedWeeks = [...weeks].sort((a, b) =>
             new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
@@ -177,7 +179,7 @@ const Calendar: React.FC<CalendarProps> = ({
             for (let i = 0; i < 7; i++) {
                 const date = new Date(currentDate);
                 // In swap mode, all days are considered "current" (no graying out)
-                const isCurrentMonth = mode === 'view' ? true : date.getMonth() === month;
+                const isCurrentMonth = (style === 'list') ? true : date.getMonth() === month;
 
                 const dayInfo = getDayInfo ? getDayInfo(date) : undefined;
 

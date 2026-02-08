@@ -1,16 +1,18 @@
 // EmployeeList.tsx
 import React, { useState } from 'react';
 import { ROLE_CONFIG, EMPLOYEE_TYPE_CONFIG } from '../../../models/defaults/employeeDefaults';
-import { Employee } from '../../../models/Employee';
+import { Employee, UpdateEmployeeRequest } from '../../../models/Employee';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useNotification } from '../../../contexts/NotificationContext';
+import { employeeService } from '../../../services/employeeService';
 import { ICONS, iconButtonStyle, BUTTON_COLORS } from '../../../utils/buttonStyles';
+import EmployeeRowDetails from './EmployeeRowDetails';
 
 interface EmployeeListProps {
   employees: Employee[];
-  onEdit: (employee: Employee) => void;
   onDelete: (employee: Employee) => void;
   onManageAvailability: (employee: Employee) => void;
+  onEmployeeUpdated: () => void;
 }
 
 type SortField = 'name' | 'employeeType' | 'canWorkAlone' | 'role' | 'lastLogin';
@@ -21,14 +23,16 @@ type EmployeeType = 'manager' | 'personell' | 'apprentice' | 'guest';
 
 const EmployeeList: React.FC<EmployeeListProps> = ({
   employees,
-  onEdit,
   onDelete,
-  onManageAvailability
+  onManageAvailability,
+  onEmployeeUpdated
 }) => {
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('active');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [expandedEmployeeId, setExpandedEmployeeId] = useState<string | null>(null);
+  const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
   const { user: currentUser, hasRole } = useAuth();
   const { showNotification, confirmDialog } = useNotification();
 
@@ -36,7 +40,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
   const filteredEmployees = employees.filter(employee => {
     if (filter === 'active' && !employee.isActive) return false;
     if (filter === 'inactive' && employee.isActive) return false;
-    
+
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       const fullName = `${employee.firstname || ''} ${employee.lastname || ''}`.toLowerCase();
@@ -48,7 +52,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
         (employee.roles && employee.roles.some(role => role.toLowerCase().includes(term)))
       );
     }
-    
+
     return true;
   });
 
@@ -137,22 +141,22 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
       type === 'manager'
         ? '#fadbd8' // light red
         : type === 'personell'
-        ? isTrainee ? '#d5f4e6' : '#d6eaf8' // light green for trainee, light blue for experienced
-        : type === 'apprentice'
-        ? '#e8d7f7' // light purple for apprentice
-        : '#f8f9fa'; // light gray for guest
+          ? isTrainee ? '#d5f4e6' : '#d6eaf8' // light green for trainee, light blue for experienced
+          : type === 'apprentice'
+            ? '#e8d7f7' // light purple for apprentice
+            : '#f8f9fa'; // light gray for guest
 
     return { text: config.label, color: config.color, bgColor };
   };
 
   const getStatusBadge = (isActive: boolean) => {
-    return isActive 
+    return isActive
       ? { text: 'Aktiv', color: '#27ae60', bgColor: '#d5f4e6' }
       : { text: 'Inaktiv', color: '#e74c3c', bgColor: '#fadbd8' };
   };
 
   const getIndependenceBadge = (canWorkAlone: boolean) => {
-    return canWorkAlone 
+    return canWorkAlone
       ? { text: 'Eigenständig', color: '#27ae60', bgColor: '#d5f4e6' }
       : { text: 'Betreuung', color: '#e74c3c', bgColor: '#fadbd8' };
   };
@@ -167,8 +171,8 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
       highestRole === 'user'
         ? '#d5f4e6'
         : highestRole === 'maintenance'
-        ? '#d6eaf8'
-        : '#fadbd8'; // admin
+          ? '#d6eaf8'
+          : '#fadbd8'; // admin
 
     return { text: label, color, bgColor, roles };
   };
@@ -206,6 +210,51 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
         throw error;
       }
     }
+  };
+
+  // Handle row click to expand/collapse
+  const handleRowClick = (employeeId: string, event: React.MouseEvent) => {
+    // Prevent expansion if clicking on action buttons
+    const target = event.target as HTMLElement;
+    if (target.closest('button')) {
+      return;
+    }
+
+    if (expandedEmployeeId === employeeId) {
+      // Collapse current row
+      setExpandedEmployeeId(null);
+      setEditingEmployeeId(null);
+    } else {
+      // Expand new row, collapse previous
+      setExpandedEmployeeId(employeeId);
+      setEditingEmployeeId(null);
+    }
+  };
+
+  // Toggle edit mode for expanded row
+  const handleEditToggle = (employeeId: string) => {
+    if (editingEmployeeId === employeeId) {
+      setEditingEmployeeId(null);
+    } else {
+      setEditingEmployeeId(employeeId);
+    }
+  };
+
+  // Handle inline save
+  const handleInlineSave = async (employeeId: string, data: UpdateEmployeeRequest) => {
+    await employeeService.updateEmployee(employeeId, data);
+    showNotification({
+      type: 'success',
+      title: 'Erfolg',
+      message: 'Mitarbeiter wurde erfolgreich aktualisiert'
+    });
+    setEditingEmployeeId(null);
+    onEmployeeUpdated();
+  };
+
+  // Handle cancel edit
+  const handleCancelEdit = () => {
+    setEditingEmployeeId(null);
   };
 
   if (employees.length === 0) {
@@ -287,7 +336,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
         {/* Tabellen-Header */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: '2fr 1.5fr 1fr 1fr 1fr 1fr 120px',
+          gridTemplateColumns: '30px 2fr 1.5fr 1fr 1fr 1fr 1fr 120px',
           gap: '15px',
           padding: '15px 20px',
           backgroundColor: '#f8f9fa',
@@ -296,32 +345,33 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
           color: '#2c3e50',
           alignItems: 'center'
         }}>
-          <div 
+          <div></div>
+          <div
             onClick={() => handleSort('name')}
             style={{ cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: '5px' }}
           >
             Name & E-Mail {getSortIndicator('name')}
           </div>
-          <div 
+          <div
             onClick={() => handleSort('employeeType')}
             style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: '5px', justifyContent: 'center' }}
           >
             Typ {getSortIndicator('employeeType')}
           </div>
-          <div 
+          <div
             onClick={() => handleSort('canWorkAlone')}
             style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: '5px', justifyContent: 'center' }}
           >
             Eigenständigkeit {getSortIndicator('canWorkAlone')}
           </div>
-          <div 
+          <div
             onClick={() => handleSort('role')}
             style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: '5px', justifyContent: 'center' }}
           >
             Rolle {getSortIndicator('role')}
           </div>
           <div style={{ textAlign: 'center' }}>Status</div>
-          <div 
+          <div
             onClick={() => handleSort('lastLogin')}
             style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: '5px', justifyContent: 'center' }}
           >
@@ -338,175 +388,195 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
           const status = getStatusBadge(employee.isActive);
           const canEdit = canEditEmployee(employee);
           const canDelete = canDeleteEmployee(employee);
-          
+          const isExpanded = expandedEmployeeId === employee.id;
+          const isEditing = editingEmployeeId === employee.id;
+
           return (
-            <div
-              key={employee.id}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '2fr 1.5fr 1fr 1fr 1fr 1fr 120px',
-                gap: '15px',
-                padding: '15px 20px',
-                borderBottom: '1px solid #f0f0f0',
-                alignItems: 'center'
-              }}
-            >
-              {/* Name & E-Mail */}
-              <div>
-                <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
-                  {(employee.firstname || employee.lastname)
-                    ? `${employee.firstname || ''} ${employee.lastname || ''}`.trim()
-                    : `@${employee.username}`
+            <React.Fragment key={employee.id}>
+              <div
+                onClick={(e) => handleRowClick(employee.id, e)}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '30px 2fr 1.5fr 1fr 1fr 1fr 1fr 120px',
+                  gap: '15px',
+                  padding: '15px 20px',
+                  borderBottom: isExpanded ? 'none' : '1px solid #f0f0f0',
+                  alignItems: 'center',
+                  cursor: 'pointer',
+                  backgroundColor: isExpanded ? '#f8f9fa' : 'white',
+                  transition: 'background-color 0.2s'
+                }}
+              >
+                {/* Expand Indicator */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '10px',
+                  color: '#6c757d',
+                  transition: 'transform 0.2s',
+                  transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)'
+                }}>
+                  ▶
+                </div>
+
+                {/* Name & E-Mail */}
+                <div>
+                  <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
+                    {(employee.firstname || employee.lastname)
+                      ? `${employee.firstname || ''} ${employee.lastname || ''}`.trim()
+                      : `@${employee.username}`
+                    }
+                    {(employee.firstname || employee.lastname) && (
+                      <span style={{
+                        marginLeft: '6px',
+                        fontSize: '12px',
+                        color: '#888',
+                        fontWeight: 'normal'
+                      }}>
+                        @{employee.username}
+                      </span>
+                    )}
+                    {employee.id === currentUser?.id && (
+                      <span style={{
+                        marginLeft: '8px',
+                        fontSize: '12px',
+                        color: '#3498db',
+                        fontWeight: 'normal'
+                      }}>
+                        (Sie)
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ color: '#666', fontSize: '14px' }}>
+                    {employee.email}
+                  </div>
+                </div>
+
+                {/* Mitarbeiter Typ */}
+                <div style={{ textAlign: 'center' }}>
+                  <span
+                    style={{
+                      backgroundColor: employeeType.bgColor,
+                      color: employeeType.color,
+                      padding: '6px 12px',
+                      borderRadius: '15px',
+                      fontSize: '12px',
+                      fontWeight: 'bold',
+                      display: 'inline-block'
+                    }}
+                  >
+                    {employeeType.text}
+                  </span>
+                </div>
+
+                {/* Eigenständigkeit */}
+                <div style={{ textAlign: 'center' }}>
+                  <span
+                    style={{
+                      backgroundColor: independence.bgColor,
+                      color: independence.color,
+                      padding: '6px 12px',
+                      borderRadius: '15px',
+                      fontSize: '12px',
+                      fontWeight: 'bold',
+                      display: 'inline-block'
+                    }}
+                  >
+                    {independence.text}
+                  </span>
+                </div>
+
+                {/* Rolle */}
+                <div style={{ textAlign: 'center' }}>
+                  <span
+                    style={{
+                      backgroundColor: roleInfo.bgColor,
+                      color: roleInfo.color,
+                      padding: '6px 12px',
+                      borderRadius: '15px',
+                      fontSize: '12px',
+                      fontWeight: 'bold',
+                      display: 'inline-block',
+                      minWidth: '80px'
+                    }}
+                    title={employee.roles?.join(', ') || 'user'}
+                  >
+                    {formatRoleDisplay(employee.roles)}
+                  </span>
+                </div>
+
+                {/* Status */}
+                <div style={{ textAlign: 'center' }}>
+                  <span
+                    style={{
+                      backgroundColor: status.bgColor,
+                      color: status.color,
+                      padding: '6px 12px',
+                      borderRadius: '15px',
+                      fontSize: '12px',
+                      fontWeight: 'bold',
+                      display: 'inline-block',
+                      minWidth: '70px'
+                    }}
+                  >
+                    {status.text}
+                  </span>
+                </div>
+
+                {/* Letzter Login */}
+                <div style={{ textAlign: 'center', fontSize: '14px', color: '#666' }}>
+                  {employee.lastLogin
+                    ? new Date(employee.lastLogin).toLocaleDateString('de-DE')
+                    : 'Noch nie'
                   }
-                  {(employee.firstname || employee.lastname) && (
-                    <span style={{
-                      marginLeft: '6px',
-                      fontSize: '12px',
-                      color: '#888',
-                      fontWeight: 'normal'
-                    }}>
-                      @{employee.username}
-                    </span>
+                </div>
+
+                {/* Aktionen */}
+                <div style={{
+                  display: 'flex',
+                  gap: '8px',
+                  justifyContent: 'center',
+                  flexWrap: 'wrap'
+                }}>
+                  {/* Verfügbarkeit Button */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onManageAvailability(employee); }}
+                    style={iconButtonStyle(BUTTON_COLORS.info, false)}
+                    title="Verfügbarkeit verwalten"
+                  >
+                    {ICONS.calendar}
+                  </button>
+
+                  {/* Löschen Button */}
+                  {canDelete && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteClick(employee); }}
+                      style={iconButtonStyle(BUTTON_COLORS.delete, false)}
+                      title="Mitarbeiter löschen"
+                    >
+                      {ICONS.delete}
+                    </button>
                   )}
-                  {employee.id === currentUser?.id && (
-                    <span style={{
-                      marginLeft: '8px',
-                      fontSize: '12px',
-                      color: '#3498db',
-                      fontWeight: 'normal'
-                    }}>
-                      (Sie)
-                    </span>
+
+                  {/* Platzhalter für Symmetrie */}
+                  {!canDelete && (
+                    <div style={{ width: '32px', height: '32px' }}></div>
                   )}
                 </div>
-                <div style={{ color: '#666', fontSize: '14px' }}>
-                  {employee.email}
-                </div>
               </div>
 
-              {/* Mitarbeiter Typ */}
-              <div style={{ textAlign: 'center' }}>
-                <span
-                  style={{
-                    backgroundColor: employeeType.bgColor,
-                    color: employeeType.color,
-                    padding: '6px 12px',
-                    borderRadius: '15px',
-                    fontSize: '12px',
-                    fontWeight: 'bold',
-                    display: 'inline-block'
-                  }}
-                >
-                  {employeeType.text}
-                </span>
-              </div>
-
-              {/* Eigenständigkeit */}
-              <div style={{ textAlign: 'center' }}>
-                <span
-                  style={{
-                    backgroundColor: independence.bgColor,
-                    color: independence.color,
-                    padding: '6px 12px',
-                    borderRadius: '15px',
-                    fontSize: '12px',
-                    fontWeight: 'bold',
-                    display: 'inline-block'
-                  }}
-                >
-                  {independence.text}
-                </span>
-              </div>
-
-              {/* Rolle */}
-              <div style={{ textAlign: 'center' }}>
-                <span
-                  style={{
-                    backgroundColor: roleInfo.bgColor,
-                    color: roleInfo.color,
-                    padding: '6px 12px',
-                    borderRadius: '15px',
-                    fontSize: '12px',
-                    fontWeight: 'bold',
-                    display: 'inline-block',
-                    minWidth: '80px'
-                  }}
-                  title={employee.roles?.join(', ') || 'user'}
-                >
-                  {formatRoleDisplay(employee.roles)}
-                </span>
-              </div>
-
-              {/* Status */}
-              <div style={{ textAlign: 'center' }}>
-                <span
-                  style={{
-                    backgroundColor: status.bgColor,
-                    color: status.color,
-                    padding: '6px 12px',
-                    borderRadius: '15px',
-                    fontSize: '12px',
-                    fontWeight: 'bold',
-                    display: 'inline-block',
-                    minWidth: '70px'
-                  }}
-                >
-                  {status.text}
-                </span>
-              </div>
-
-              {/* Letzter Login */}
-              <div style={{ textAlign: 'center', fontSize: '14px', color: '#666' }}>
-                {employee.lastLogin 
-                  ? new Date(employee.lastLogin).toLocaleDateString('de-DE')
-                  : 'Noch nie'
-                }
-              </div>
-
-              {/* Aktionen */}
-              <div style={{ 
-                display: 'flex', 
-                gap: '8px', 
-                justifyContent: 'center',
-                flexWrap: 'wrap'
-              }}>
-                {/* Verfügbarkeit Button */}
-                <button
-                  onClick={() => onManageAvailability(employee)}
-                  style={iconButtonStyle(BUTTON_COLORS.info, false)}
-                  title="Verfügbarkeit verwalten"
-                >
-                  {ICONS.calendar}
-                </button>
-
-                {/* Bearbeiten Button */}
-                {canEdit && (
-                  <button
-                    onClick={() => onEdit(employee)}
-                    style={iconButtonStyle(BUTTON_COLORS.edit, false)}
-                    title="Mitarbeiter bearbeiten"
-                  >
-                    {ICONS.edit}
-                  </button>
-                )}
-
-                {/* Löschen Button */}
-                {canDelete && (
-                  <button
-                    onClick={() => handleDeleteClick(employee)}
-                    style={iconButtonStyle(BUTTON_COLORS.delete, false)}
-                    title="Mitarbeiter löschen"
-                  >
-                    {ICONS.delete}
-                  </button>
-                )}
-
-                {/* Platzhalter für Symmetrie */}
-                {!canEdit && !canDelete && (
-                  <div style={{ width: '32px', height: '32px' }}></div>
-                )}
-              </div>
-            </div>
+              {/* Expanded Detail Section */}
+              {isExpanded && (
+                <EmployeeRowDetails
+                  employee={employee}
+                  isEditMode={isEditing && canEdit}
+                  onToggleEditMode={() => canEdit && handleEditToggle(employee.id)}
+                  onSave={(data) => handleInlineSave(employee.id, data)}
+                  onCancel={handleCancelEdit}
+                />
+              )}
+            </React.Fragment>
           );
         })}
       </div>
@@ -521,12 +591,13 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
         fontSize: '14px',
         color: '#2c3e50'
       }}>
-        <strong>💡 Informationen zu Berechtigungen:</strong>
+        <strong>Informationen zu Berechtigungen:</strong>
         <ul style={{ margin: '8px 0 0 20px', padding: 0 }}>
           <li><strong>Admins</strong> können alle Benutzer bearbeiten und löschen</li>
           <li><strong>Instandhalter</strong> können nur Mitarbeiter bearbeiten</li>
           <li>Mindestens <strong>ein Admin</strong> muss immer im System vorhanden sein</li>
           <li>Benutzer können sich <strong>nicht selbst löschen</strong></li>
+          <li><strong>Klicken Sie auf eine Zeile</strong> um Details anzuzeigen und zu bearbeiten</li>
         </ul>
       </div>
 
@@ -539,7 +610,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
         borderRadius: '6px',
         fontSize: '14px'
       }}>
-        <strong>🎯 Legende Mitarbeiter Typen:</strong>
+        <strong>Legende Mitarbeiter Typen:</strong>
         <div style={{ display: 'flex', gap: '15px', marginTop: '10px', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
             <span style={{
@@ -549,7 +620,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
               borderRadius: '12px',
               fontSize: '11px',
               fontWeight: 'bold'
-            }}>👨‍💼 CHEF</span>
+            }}>CHEF</span>
             <span style={{ fontSize: '12px', color: '#666' }}>Vollzugriff</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -560,7 +631,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
               borderRadius: '12px',
               fontSize: '11px',
               fontWeight: 'bold'
-            }}>👨‍🏭 PERSONAL</span>
+            }}>PERSONAL</span>
             <span style={{ fontSize: '12px', color: '#666' }}>Reguläre Mitarbeiter</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -571,7 +642,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
               borderRadius: '12px',
               fontSize: '11px',
               fontWeight: 'bold'
-            }}>👨‍🎓 AUSZUBILDENDER</span>
+            }}>AUSZUBILDENDER</span>
             <span style={{ fontSize: '12px', color: '#666' }}>Auszubildende</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -582,7 +653,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({
               borderRadius: '12px',
               fontSize: '11px',
               fontWeight: 'bold'
-            }}>👤 GAST</span>
+            }}>GAST</span>
             <span style={{ fontSize: '12px', color: '#666' }}>Externe Mitarbeiter</span>
           </div>
         </div>

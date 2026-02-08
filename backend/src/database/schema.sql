@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS employees (
   is_active BOOLEAN DEFAULT TRUE,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   last_login TEXT DEFAULT NULL
+  UNIQUE(username, email)
 );
 
 -- Roles Employee Junction table (NACH employees und roles)
