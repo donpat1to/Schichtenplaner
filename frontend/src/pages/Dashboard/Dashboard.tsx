@@ -54,6 +54,9 @@ interface DashboardData {
     manager: number;
     trainee: number;
     experienced: number;
+    contractSmall: number;
+    contractLarge: number;
+    contractFlexible: number;
   };
 }
 
@@ -72,7 +75,10 @@ const Dashboard: React.FC = () => {
       personell: 0,
       manager: 0,
       trainee: 0,
-      experienced: 0
+      experienced: 0,
+      contractSmall: 0,
+      contractLarge: 0,
+      contractFlexible: 0
     }
   });
 
@@ -308,6 +314,9 @@ const Dashboard: React.FC = () => {
     const personellCount = employees.filter(e => e.employeeType === 'personell').length;
     const traineeCount = employees.filter(e => e.isTrainee === true).length;
     const experiencedCount = employees.filter(e => e.isTrainee === false).length;
+    const contractSmallCount = employees.filter(e => e.contractType === 'small').length;
+    const contractLargeCount = employees.filter(e => e.contractType === 'large').length;
+    const contractFlexibleCount = employees.filter(e => e.contractType === 'flexible').length;
 
     return {
       totalEmployees,
@@ -315,6 +324,9 @@ const Dashboard: React.FC = () => {
       manager: managerCount,
       trainee: traineeCount,
       experienced: experiencedCount,
+      contractSmall: contractSmallCount,
+      contractLarge: contractLargeCount,
+      contractFlexible: contractFlexibleCount,
     };
   };
 
@@ -634,6 +646,50 @@ const Dashboard: React.FC = () => {
                 <span>Personal:</span>
                 <span style={{ fontWeight: 'bold', color: '#f39c12' }}>
                   {data.teamStats.personell}
+                </span>
+              </div>
+              <div style={{
+                borderTop: '1px solid #eee',
+                paddingTop: '12px',
+                marginTop: '4px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <span>Erfahrene:</span>
+                <span style={{ fontWeight: 'bold', color: '#f39c12' }}>
+                  {data.teamStats.experienced}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Neulinge:</span>
+                <span style={{ fontWeight: 'bold', color: '#f39c12' }}>
+                  {data.teamStats.trainee}
+                </span>
+              </div>
+              <div style={{
+                borderTop: '1px solid #eee',
+                paddingTop: '12px',
+                marginTop: '4px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <span>Kleinvertrag:</span>
+                <span style={{ fontWeight: 'bold', color: '#f39c12' }}>
+                  {data.teamStats.contractSmall}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Großvertrag:</span>
+                <span style={{ fontWeight: 'bold', color: '#f39c12' }}>
+                  {data.teamStats.contractLarge}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Flexibel:</span>
+                <span style={{ fontWeight: 'bold', color: '#27ae60' }}>
+                  {data.teamStats.contractFlexible}
                 </span>
               </div>
             </div>

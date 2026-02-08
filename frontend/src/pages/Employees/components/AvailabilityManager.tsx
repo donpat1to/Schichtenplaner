@@ -101,15 +101,18 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
     { level: 3 as AvailabilityLevel, label: 'Nicht möglich', color: '#e74c3c', bgColor: '#fadbd8', description: 'Nicht verfügbar' }
   ];
 
-  // Check if the selected plan is published
+  // Check if the selected plan is a draft (only status where regular users can edit)
+  const isPlanDraft = planType === 'shift'
+    ? selectedPlan?.status === 'draft'
+    : selectedWeeklyPlan?.status === 'draft';
+
+  // Check if the selected plan is published (for conflict detection)
   const isPlanPublished = planType === 'shift'
     ? selectedPlan?.status === 'published'
     : selectedWeeklyPlan?.status === 'published';
 
-  // Check permission - for published plans only admin can edit, for drafts admin or own profile
-  const canEdit = isPlanPublished
-    ? isAdmin
-    : (isAdmin || isOwnProfile);
+  // Check permission - users can only edit drafts, admins can edit any status
+  const canEdit = isAdmin || (isOwnProfile && isPlanDraft);
 
   // Load initial data based on plan type
   useEffect(() => {
@@ -1329,8 +1332,8 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
           borderRadius: '6px',
           color: '#856404'
         }}>
-          <strong>Hinweis:</strong> {isPlanPublished && isOwnProfile
-            ? 'Der ausgewählte Plan ist bereits veröffentlicht. Nur Administratoren können Verfügbarkeiten für veröffentlichte Pläne ändern.'
+          <strong>Hinweis:</strong> {!isPlanDraft && isOwnProfile
+            ? 'Der ausgewählte Plan ist nicht mehr im Entwurfsstatus. Nur Administratoren können Verfügbarkeiten für veröffentlichte oder archivierte Pläne ändern.'
             : 'Sie können die Verfügbarkeiten dieses Mitarbeiters nur anzeigen, aber nicht bearbeiten.'}
         </div>
       )}
@@ -1421,7 +1424,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                 }}
               >
                 <option value="">Bitte auswählen...</option>
-                {shiftPlans.map(plan => (
+                {shiftPlans.filter(plan => plan.status !== 'archived').map(plan => (
                   <option key={plan.id} value={plan.id}>
                     {plan.name} {plan.shifts && `(${plan.shifts.length} Shifts)`}
                   </option>
@@ -1466,7 +1469,7 @@ const AvailabilityManager: React.FC<AvailabilityManagerProps> = ({
                 }}
               >
                 <option value="">Bitte auswählen...</option>
-                {weeklyPlans.map(plan => (
+                {weeklyPlans.filter(plan => plan.status !== 'archived').map(plan => (
                   <option key={plan.id} value={plan.id}>
                     {plan.name} {plan.weeks && `(${plan.weeks.length} Wochen)`}
                   </option>

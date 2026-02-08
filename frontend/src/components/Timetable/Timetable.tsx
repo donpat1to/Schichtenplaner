@@ -25,6 +25,7 @@ export interface TimetableProps {
     shifts: Shift[];
     timeSlots: TimeSlot[];
     days: DayInfo[];
+    activeDaysFromParent?: number[]; // Days to show (from parent component)
     shiftAssignments?: ShiftAssignment[];
     assignmentResult?: AssignmentResult | null;
     employees?: Employee[];
@@ -76,6 +77,7 @@ const Timetable: React.FC<TimetableProps> = ({
     shifts = [],
     timeSlots = [],
     days = [],
+    activeDaysFromParent,
     shiftAssignments = [],
     assignmentResult = null,
     employees = [],
@@ -109,14 +111,22 @@ const Timetable: React.FC<TimetableProps> = ({
         description: '',
     });
 
-    // Get active days based on shifts
+    // Get active days based on shifts or parent prop
     const activeDays = useMemo(() => {
-        if (mode === 'edit' && days.length > 0) {
+        if (mode === 'edit') {
+            // Combine days from shifts and parent-provided activeDays
             const daysWithShifts = new Set(shifts.map(s => s.dayOfWeek));
-            return Array.from(daysWithShifts).sort((a, b) => a - b);
+            const parentDays = new Set(activeDaysFromParent || []);
+
+            // Merge both sets
+            const allActiveDays = new Set([...daysWithShifts, ...parentDays]);
+
+            if (allActiveDays.size > 0) {
+                return Array.from(allActiveDays).sort((a, b) => a - b);
+            }
         }
         return days.map(d => d.id);
-    }, [shifts, days, mode]);
+    }, [shifts, days, mode, activeDaysFromParent]);
 
     // Sort time slots by start time
     const sortedTimeSlots = useMemo(() => {
@@ -492,7 +502,8 @@ const Timetable: React.FC<TimetableProps> = ({
     // Check if timetable has data
     const hasTimeSlots = timeSlots.length > 0;
     const hasActiveDays = activeDays.length > 0;
-    const hasData = hasTimeSlots && hasActiveDays;
+    // In edit mode, show table if there are time slots (even without days) so user can add days
+    const hasData = mode === 'edit' ? hasTimeSlots : (hasTimeSlots && hasActiveDays);
 
     if (!hasData && mode === 'view') {
         return (

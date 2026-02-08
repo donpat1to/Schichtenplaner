@@ -68,9 +68,14 @@ const PlanList: React.FC = () => {
         }));
 
         // Combine and sort by creation date (newest first)
-        const allPlans = [...shiftPlans, ...weeklyPlans].sort((a, b) =>
+        let allPlans = [...shiftPlans, ...weeklyPlans].sort((a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
+
+        // Users without admin/maintenance role can only see published plans
+        if (!hasRole(['admin', 'maintenance'])) {
+          allPlans = allPlans.filter(plan => plan.status === 'published');
+        }
 
         setPlans(allPlans);
       } catch (error) {

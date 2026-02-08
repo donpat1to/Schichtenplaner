@@ -266,8 +266,14 @@ const PlanEdit: React.FC = () => {
         setActiveDays(activeDays.filter(d => d !== dayOfWeek));
     };
 
-    const addTimeSlot = async () => {
-        if (!id || !timeSlotFormData.name || !timeSlotFormData.startTime || !timeSlotFormData.endTime) {
+    const addTimeSlot = async (name?: string, startTime?: string, endTime?: string, description?: string) => {
+        // Use parameters from Timetable form or fallback to modal form state
+        const slotName = name || timeSlotFormData.name;
+        const slotStart = startTime || timeSlotFormData.startTime;
+        const slotEnd = endTime || timeSlotFormData.endTime;
+        const slotDesc = description ?? timeSlotFormData.description;
+
+        if (!id || !slotName || !slotStart || !slotEnd) {
             showNotification({
                 type: 'error',
                 title: 'Fehlende Angaben',
@@ -278,10 +284,10 @@ const PlanEdit: React.FC = () => {
 
         await executeWithValidation(async () => {
             await shiftPlanService.addTimeSlot(id, {
-                name: timeSlotFormData.name,
-                startTime: timeSlotFormData.startTime,
-                endTime: timeSlotFormData.endTime,
-                description: timeSlotFormData.description || undefined,
+                name: slotName,
+                startTime: slotStart,
+                endTime: slotEnd,
+                description: slotDesc || undefined,
             });
 
             showNotification({
@@ -791,8 +797,6 @@ const PlanEdit: React.FC = () => {
                                     <tbody>
                                         {weeklyPlan?.weeks?.map((week, index) => {
                                             const assignmentsCount = weeklyPlan.assignments?.filter(a => a.weekId === week.id).length || 0;
-                                            const isUnderstaffed = assignmentsCount < week.minEmployees;
-                                            const isOverstaffed = assignmentsCount > week.maxEmployees;
 
                                             return (
                                                 <tr key={week.id} style={{
@@ -930,6 +934,7 @@ const PlanEdit: React.FC = () => {
                             shifts={shiftPlan?.shifts || []}
                             timeSlots={sortedTimeSlots}
                             days={DAYS_OF_WEEK}
+                            activeDaysFromParent={activeDays}
                             onAddDay={addDay}
                             onRemoveDay={removeDay}
                             onAddTimeSlot={addTimeSlot}

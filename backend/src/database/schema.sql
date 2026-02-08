@@ -232,7 +232,7 @@ CREATE TABLE IF NOT EXISTS identity_providers (
   scope TEXT DEFAULT '["openid", "profile", "email"]',
 
   -- Claim mapping (JSON object)
-  claim_mapping TEXT DEFAULT '{"id": "sub", "email": "email", "firstName": "given_name", "lastName": "family_name"}',
+  claim_mapping TEXT DEFAULT '{"id": "sub", "email": "email", "firstName": "firstName", "lastName": "lastName"}',
 
   -- Restrictions
   allowed_domains TEXT, -- JSON array of allowed email domains

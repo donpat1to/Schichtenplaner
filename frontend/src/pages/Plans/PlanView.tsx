@@ -85,6 +85,7 @@ const PlanView: React.FC = () => {
   const [isClearing, setIsClearing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportFormat, setExportFormat] = useState<'pdf' | 'excel' | null>(null);
+  const [isArchiving, setIsArchiving] = useState(false);
   const [dropdownWidth, setDropdownWidth] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -628,6 +629,48 @@ const PlanView: React.FC = () => {
     } finally {
       setIsExporting(false);
       setExportFormat(null);
+    }
+  };
+
+  // Handle archive plan
+  const handleArchivePlan = async () => {
+    if (!id) return;
+
+    const confirmed = await confirmDialog({
+      title: 'Plan archivieren',
+      message: 'Der Plan wird archiviert und ist nicht mehr aktiv. Er bleibt jedoch weiterhin einsehbar.',
+      confirmText: 'Archivieren',
+      cancelText: 'Abbrechen',
+      type: 'warning'
+    });
+
+    if (!confirmed) return;
+
+    try {
+      setIsArchiving(true);
+
+      if (planType === 'shift') {
+        await shiftPlanService.updateShiftPlan(id, { status: 'archived' });
+      } else {
+        await weeklyPlanService.updateWeeklyPlan(id, { status: 'archived' });
+      }
+
+      showNotification({
+        type: 'success',
+        title: 'Archiviert',
+        message: `Der ${planType === 'shift' ? 'Schichtplan' : 'Wochenplan'} wurde erfolgreich archiviert`
+      });
+
+      await loadPlanData();
+    } catch (error: any) {
+      console.error('Error archiving plan:', error);
+      showNotification({
+        type: 'error',
+        title: 'Fehler',
+        message: error.message || 'Archivieren fehlgeschlagen'
+      });
+    } finally {
+      setIsArchiving(false);
     }
   };
 
@@ -1835,6 +1878,16 @@ const PlanView: React.FC = () => {
                 {isExporting ? 'Exportiert...' : 'Export'}
               </button>
             )}
+
+            {/* Archive button */}
+            <button
+              onClick={handleArchivePlan}
+              disabled={isArchiving}
+              className={styles.secondaryButton}
+              style={{ marginLeft: '8px' }}
+            >
+              {isArchiving ? 'Archiviere...' : 'Archivieren'}
+            </button>
           </div>
         )}
 
