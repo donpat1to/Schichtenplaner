@@ -140,33 +140,16 @@ class UserMappingService {
 
     // Try to find existing identity link
     let employee = await this.findByIdentity(idpId, idpSubject);
-    //const whitelistCheck = await whitelistService.isAllowed(idpId, email, idpSubject, username);
-
-    /*if (!whitelistCheck.allowed) {
-      console.log(`[UserMapping] User ${idpSubject} not on whitelist for IdP ${idpId}`);
-      throw new Error('Your account is not pre-approved for registration. Please contact an administrator.');
-    }*/
 
     if (!employee) {
       // No identity link - try to find by email for account linking
       employee = await this.findByEmail(email);
-      //const whitelistCheck = await whitelistService.isAllowed(idpId, email, idpSubject, username);
-
-      /*if (!whitelistCheck.allowed) {
-        console.log(`[UserMapping] User ${email} not on whitelist for IdP ${idpId}`);
-        throw new Error('Your account is not pre-approved for registration. Please contact an administrator.');
-      }*/
 
       if (employee) {
         // Link existing employee to this IdP
         await this.createIdentityLink(employee.id, idpId, idpSubject, email, accessToken, refreshToken);
         console.log(`[UserMapping] Linked existing employee ${employee.id} to IdP ${idpId}`);
-        //const whitelistCheck = await whitelistService.isAllowed(idpId, email, idpSubject, username);
 
-        /*if (!whitelistCheck.allowed) {
-          console.log(`[UserMapping] User ${email} not on whitelist for IdP ${idpId}`);
-          throw new Error('Your account is not pre-approved for registration. Please contact an administrator.');
-        }*/
       } else {
         // New user - check registration mode
         if (config.registrationMode === 'whitelist') {
