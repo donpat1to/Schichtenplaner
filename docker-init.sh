@@ -21,11 +21,12 @@ if [ ! -f /app/.env ]; then
     
     # Create .env with all proxy settings
     cat > /app/.env << EOF
-NODE_ENV=production
+NODE_ENV=${NODE_ENV:-production}
 JWT_SECRET=${JWT_SECRET}
 TRUST_PROXY_ENABLED=${TRUST_PROXY_ENABLED:-true}
 TRUSTED_PROXY_IPS=${TRUSTED_PROXY_IPS:-172.0.0.0/8,10.0.0.0/8,192.168.0.0/16}
-HOSTNAME=${HOSTNAME:-localhost}
+APP_URL=${APP_URL:-http://localhost:3003}
+FORCE_HTTPS=${FORCE_HTTPS:-false}
 EOF
     
     echo "✅ .env Datei erstellt"

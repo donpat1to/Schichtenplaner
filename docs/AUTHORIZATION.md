@@ -371,10 +371,10 @@ const providers = await identityProviderService.getAvailableProviders();
 
 ```bash
 # Backend URL (required for callback URL generation)
-BACKEND_URL=https://schichtplaner.example.com
+APP_URL=https://schichtplaner.example.com
 
 # Frontend URL (for redirects after login)
-FRONTEND_URL=https://schichtplaner.example.com
+APP_URL=https://schichtplaner.example.com
 
 # Session secret (for OIDC state management)
 SESSION_SECRET=your-session-secret

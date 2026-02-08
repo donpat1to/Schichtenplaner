@@ -145,7 +145,7 @@ backend .env file:
 IDP_CONFIG=[{"id":"authentik","name":"Authentik","type":"oidc","enabled":true,"issuer":"https://auth.example.com/application/o/schichtplaner/","clientId":"schichtplaner-client","clientSecret":"your-client-secret-here","scope":["openid","profile","email"],"claimMapping":{"id":"sub","email":"email","firstName":"given_name","lastName":"family_name"},"defaultRole":"user","pkce":true}]
 
 # Backend URL (needed for callback URL generation)
-BACKEND_URL=https://schichtplaner.example.com
+APP_URL=https://schichtplaner.example.com
 
 Then restart the backend server.
 

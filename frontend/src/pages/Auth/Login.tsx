@@ -14,7 +14,7 @@ interface IdpProvider {
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 // For redirects (OAuth flow), we need the actual backend URL, not the proxy path
 // In production (same origin), this is empty; in dev, it points to the backend directly
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
+const APP_URL = process.env.APP_URL || '';
 
 const Login: React.FC = () => {
   const [identifier, setIdentifier] = useState('');
@@ -169,8 +169,8 @@ const Login: React.FC = () => {
 
   const handleIdpLogin = (provider: IdpProvider) => {
     const returnUrl = window.location.origin;
-    // Use BACKEND_URL for redirects (OAuth flow needs direct backend access, not proxy)
-    window.location.href = `${BACKEND_URL}/api${provider.loginUrl}?returnUrl=${encodeURIComponent(returnUrl)}`;
+    // Use APP_URL for redirects (OAuth flow needs direct backend access, not proxy)
+    window.location.href = `${APP_URL}/api${provider.loginUrl}?returnUrl=${encodeURIComponent(returnUrl)}`;
   };
 
   if (user) {

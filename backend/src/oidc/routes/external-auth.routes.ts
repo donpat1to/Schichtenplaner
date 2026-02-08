@@ -34,7 +34,7 @@ router.get('/providers', (req: Request, res: Response) => {
  */
 router.get('/:slug/login', async (req: Request, res: Response) => {
   const { slug } = req.params;
-  const returnUrl = (req.query.returnUrl as string) || process.env.FRONTEND_URL || 'http://localhost:3003';
+  const returnUrl = (req.query.returnUrl as string) || process.env.APP_URL || 'http://localhost:3003';
 
   try {
     const idp = idpConfigManager.getBySlug(slug);
@@ -67,7 +67,7 @@ router.get('/:slug/login', async (req: Request, res: Response) => {
 router.get('/:slug/callback', async (req: Request, res: Response) => {
   const { slug } = req.params;
   const { error, error_description } = req.query;
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3003';
+  const frontendUrl = process.env.APP_URL || 'http://localhost:3003';
 
   // Handle IdP errors
   if (error) {
@@ -89,7 +89,7 @@ router.get('/:slug/callback', async (req: Request, res: Response) => {
 
   try {
     // Build the full current URL from the request
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:3002';
+    const backendUrl = process.env.APP_URL || 'http://localhost:3002';
     const currentUrl = new URL(`${backendUrl}${req.originalUrl}`);
 
     const user = await handleCallback(idp, backendUrl, currentUrl);
