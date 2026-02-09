@@ -10,6 +10,7 @@ import {
   updateAvailabilities,
   changePassword,
   updateLastLogin,
+  changePasswordByAdmin,
 } from '../controllers/employeeController.js';
 import {
   handleValidationErrors,
@@ -19,7 +20,8 @@ import {
   validateId,
   validateEmployeeId,
   validateAvailabilities,
-  validatePagination
+  validatePagination,
+  validateAdminChangePassword
 } from '../middleware/validation.js';
 
 const router = express.Router();
@@ -36,6 +38,7 @@ router.delete('/:id', validateId, handleValidationErrors, requireRole(['admin'])
 
 // Password & Login Routes
 router.put('/:id/password', validateId, validateChangePassword, handleValidationErrors, authMiddleware, changePassword);
+router.put('/:id/password-by-admin', validateId, validateAdminChangePassword, handleValidationErrors, requireRole(['admin']), changePasswordByAdmin);
 router.put('/:id/last-login', validateId, handleValidationErrors, authMiddleware, updateLastLogin);
 
 // Availability Routes

@@ -210,6 +210,22 @@ export const validateEmployeeUpdate = [
     .withMessage('isActive must be a boolean')
 ];
 
+export const validateAdminChangePassword = [
+  body('newPassword')
+    .isLength({ min: 8 })
+    .withMessage('Password must be at least 8 characters')
+    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?])/)
+    .withMessage('Password must contain uppercase, lowercase, number and special character'),
+
+  body('confirmPassword')
+    .custom((value, { req }) => {
+      if (value !== req.body.newPassword) {
+        throw new Error('Passwords do not match');
+      }
+      return true;
+    })
+];
+
 export const validateChangePassword = [
   body('currentPassword')
     .optional()

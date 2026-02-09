@@ -770,6 +770,46 @@ export const updateAvailabilities = async (req: AuthRequest, res: Response): Pro
   }
 };
 
+export const changePasswordByAdmin = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+
+    // Get the current user from the auth middleware
+    const currentUser = (req as AuthRequest).user;
+
+    // Check if user is changing their own password or is an admin
+    if (currentUser?.role !== 'admin') {
+      res.status(403).json({ error: 'Only admins can change passwords' });
+      return;
+    }
+
+    // Check if employee exists and get password
+    const employee = await db.get<{ password: string }>('SELECT password FROM employees WHERE id = ?', [id]);
+    if (!employee) {
+      res.status(404).json({ error: 'Employee not found' });
+      return;
+    }
+
+    // Validate new password
+    if (!newPassword || newPassword.length < 8) {
+      res.status(400).json({ error: 'New password must be at least 8 characters long' });
+      return;
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password
+    await db.run('UPDATE employees SET password = ? WHERE id = ?', [hashedPassword, id]);
+
+    res.json({ message: 'Password updated successfully' });
+  } catch (error) {
+    console.error('Error changing password:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const changePassword = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { id } = req.params;

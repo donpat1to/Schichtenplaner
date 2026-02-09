@@ -202,6 +202,13 @@ export class EmployeeService {
     return apiClient.put<void>(`/employees/${id}/password`, data);
   }
 
+  async changePasswordByAdmin(
+    id: string,
+    data: { newPassword: string, confirmPassword: string }
+  ): Promise<void> {
+    return apiClient.put<void>(`/employees/${id}/password-by-admin`, data);
+  }
+
   async updateLastLogin(employeeId: string): Promise<void> {
     try {
       await apiClient.patch(`/employees/${employeeId}/last-login`);

@@ -179,8 +179,7 @@ const EmployeeRowDetails: React.FC<EmployeeRowDetailsProps> = ({
     setIsChangingPassword(true);
     try {
       await executeWithValidation(() =>
-        employeeService.changePassword(employee.id, {
-          currentPassword: '',
+        employeeService.changePasswordByAdmin(employee.id, {
           newPassword: passwordForm.newPassword,
           confirmPassword: passwordForm.confirmPassword
         })
