@@ -20,6 +20,7 @@ const Navigation: React.FC = () => {
     { path: '/plans', label: 'Pläne', roles: ['admin', 'maintenance', 'user'] },
     { path: '/my-availability', label: 'Verfügbarkeit', roles: ['admin', 'maintenance', 'user'] },
     { path: '/employees', label: 'Mitarbeiter', roles: ['admin', 'maintenance'] },
+    { path: '/holidays', label: 'Feiertage', roles: ['admin'] },
     { path: '/help', label: 'Hilfe', roles: ['admin', 'maintenance', 'user'] },
   ];
 

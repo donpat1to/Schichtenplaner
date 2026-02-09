@@ -16,6 +16,7 @@ import EmployeeManagement from './pages/Employees/EmployeeManagement';
 import Settings from './pages/Settings/Settings';
 import Help from './pages/Help/Help';
 import Setup from './pages/Setup/Setup';
+import HolidaysAdmin from './pages/Holidays/HolidaysAdmin';
 import ErrorBoundary from './components/ErrorBoundary/ErrorBoundary';
 import SecurityWarning from './components/SecurityWarning/SecurityWarning';
 import { ENABLE_PRO } from './config/runtime';
@@ -137,6 +138,7 @@ const AppContent: React.FC = () => {
       <Route path="/plans/:id/edit" element={<ProtectedRoute roles={['admin', 'maintenance']}><PlanEdit /></ProtectedRoute>} />
       <Route path="/my-availability" element={<ProtectedRoute><MyAvailability /></ProtectedRoute>} />
       <Route path="/employees" element={<ProtectedRoute roles={['admin', 'maintenance']}><EmployeeManagement /></ProtectedRoute>} />
+      <Route path="/holidays" element={<ProtectedRoute roles={['admin']}><HolidaysAdmin /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
       <Route path="/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
 

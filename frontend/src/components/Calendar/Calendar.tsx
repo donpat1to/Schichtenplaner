@@ -3,6 +3,7 @@ import React from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { EmployeeWithPreferences, PlanWeek } from '../../models/WeeklyPlan';
 import { WeekDropTarget } from '../../hooks/useManualWeekAssignmentValidation';
+import { ResolvedHoliday } from '../../models/Holiday';
 import DraggableEmployeeBox from '../SwapMode/DraggableEmployeeBox';
 import { ICONS } from '../../utils/buttonStyles';
 import styles from './Calendar.module.css';
@@ -45,6 +46,9 @@ export interface CalendarProps {
 
     // Layout props
     hideNavigation?: boolean;
+
+    // Holidays props
+    holidays?: ResolvedHoliday[];
 }
 
 // Droppable week component for manual assignment mode
@@ -114,6 +118,7 @@ const Calendar: React.FC<CalendarProps> = ({
     onRemoveAssignment,
     manualAssignments = [],
     hideNavigation = false,
+    holidays = [],
 }) => {
     // Default to all days if workDays not provided
     const activeWorkDays = workDays || [1, 2, 3, 4, 5, 6, 7];
@@ -233,6 +238,20 @@ const Calendar: React.FC<CalendarProps> = ({
         return 1 + Math.ceil((firstThursday - target.valueOf()) / 604800000);
     };
 
+    // Helper function to format a Date to YYYY-MM-DD string (local time, no timezone shift)
+    const formatLocalDate = (date: Date): string => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    // Helper function to parse a date string (YYYY-MM-DD) as local date
+    const parseLocalDate = (dateStr: string): Date => {
+        const [year, month, day] = dateStr.split('-').map(Number);
+        return new Date(year, month - 1, day);
+    };
+
     // Check if a date is a work day
     const isWorkDay = (date: Date): boolean => {
         // Convert JS day (0=Sunday) to our format (1=Monday, 7=Sunday)
@@ -241,13 +260,19 @@ const Calendar: React.FC<CalendarProps> = ({
         return activeWorkDays.includes(dayOfWeek);
     };
 
+    // Get holiday for a specific date
+    const getHolidayForDate = (date: Date): ResolvedHoliday | undefined => {
+        const dateStr = formatLocalDate(date);
+        return holidays.find(h => h.date === dateStr);
+    };
+
     // Get plan week for a calendar week
     const getPlanWeekForDate = (date: Date) => {
-        const dateStr = date.toISOString().split('T')[0];
+        const dateStr = formatLocalDate(date);
         return weeks.find(w => {
-            const start = new Date(w.startDate);
-            const end = new Date(w.endDate);
-            const checkDate = new Date(dateStr);
+            const start = parseLocalDate(w.startDate);
+            const end = parseLocalDate(w.endDate);
+            const checkDate = parseLocalDate(dateStr);
             return checkDate >= start && checkDate <= end;
         });
     };
@@ -445,12 +470,16 @@ const Calendar: React.FC<CalendarProps> = ({
                                 }}>
                                     {week.map((day, dayIndex) => {
                                         const isWorkDayCell = isWorkDay(day.date);
+                                        const holiday = getHolidayForDate(day.date);
                                         const dayClass = [
                                             styles.day,
                                             !day.isCurrentMonth ? styles.adjacentMonth : '',
                                             day.dayInfo?.isInPlan ? styles.inPlan : '',
                                             day.dayInfo?.isAssigned ? styles.assigned : '',
                                             !isWorkDayCell ? styles.nonWorkDay : '',
+                                            holiday ? styles.holiday : '',
+                                            holiday?.halfDay === 'morning' ? styles.halfDayMorning : '',
+                                            holiday?.halfDay === 'afternoon' ? styles.halfDayAfternoon : '',
                                         ].filter(Boolean).join(' ');
 
                                         const getPreferenceStyle = () => {
@@ -475,11 +504,13 @@ const Calendar: React.FC<CalendarProps> = ({
                                                 style={getPreferenceStyle()}
                                                 onClick={() => onDayClick?.(day.date, day.dayInfo?.weekId)}
                                                 title={
-                                                    day.dayInfo?.preferenceLevel
-                                                        ? `Präferenz: ${day.dayInfo.preferenceLevel === 1 ? 'Bevorzugt' :
-                                                            day.dayInfo.preferenceLevel === 2 ? 'Verfügbar' : 'Nicht verfügbar'
-                                                        }`
-                                                        : ''
+                                                    holiday
+                                                        ? `${holiday.name}${holiday.halfDay ? (holiday.halfDay === 'morning' ? ' (Vormittag frei)' : ' (Nachmittag frei)') : ''}`
+                                                        : day.dayInfo?.preferenceLevel
+                                                            ? `Präferenz: ${day.dayInfo.preferenceLevel === 1 ? 'Bevorzugt' :
+                                                                day.dayInfo.preferenceLevel === 2 ? 'Verfügbar' : 'Nicht verfügbar'
+                                                            }`
+                                                            : ''
                                                 }
                                             >
                                                 <div className={styles.dayNumber}>{day.date.getDate()}</div>
@@ -491,6 +522,12 @@ const Calendar: React.FC<CalendarProps> = ({
                                                 {day.dayInfo?.preferenceLevel && (
                                                     <div className={styles.preferenceIndicator}>
                                                         {day.dayInfo.preferenceLevel}
+                                                    </div>
+                                                )}
+
+                                                {holiday && (
+                                                    <div className={styles.holidayIndicator}>
+                                                        {holiday.name}
                                                     </div>
                                                 )}
 
@@ -577,6 +614,12 @@ const Calendar: React.FC<CalendarProps> = ({
                     <div className={styles.adjacentMonthDay}>31</div>
                     <span>Außerhalb des Monats</span>
                 </div>
+                {holidays.length > 0 && (
+                    <div className={styles.legendItem}>
+                        <div className={`${styles.legendColor} ${styles.holidayLegend}`}></div>
+                        <span>Feiertag</span>
+                    </div>
+                )}
             </div>
         </div >
     );

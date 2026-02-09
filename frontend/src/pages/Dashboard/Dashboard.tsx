@@ -8,6 +8,8 @@ import { employeeService } from '../../services/employeeService';
 import { ShiftPlan, ShiftPlanWithData } from '../../models/ShiftPlan';
 import { WeeklyPlanWithDetails } from '../../models/WeeklyPlan';
 import { Employee } from '../../models/Employee';
+import { ResolvedHoliday } from '../../models/Holiday';
+import { holidayService } from '../../services/holidayService';
 import UnifiedCalendarModal from './components/UnifiedCalendarModal';
 
 // Format date to YYYY-MM-DD in local timezone (avoids UTC conversion issues)
@@ -38,6 +40,7 @@ interface UpcomingAssignment {
   planName: string;
   planType: 'shift' | 'weekly';
   details: string;        // Time slot name or "KW X"
+  holidayName?: string;   // If assignment date falls on a holiday
 }
 
 // Calendar day assignment
@@ -100,10 +103,19 @@ const Dashboard: React.FC = () => {
 
       console.log('Loading dashboard data...');
 
-      const [shiftPlans, weeklyPlans, employees] = await Promise.all([
+      // Calculate date range for holidays (next 3 months)
+      const today = new Date();
+      const futureDate = new Date(today);
+      futureDate.setMonth(futureDate.getMonth() + 3);
+
+      const [shiftPlans, weeklyPlans, employees, holidays] = await Promise.all([
         shiftPlanService.getShiftPlans(),
         weeklyPlanService.getWeeklyPlans(),
         employeeService.getEmployees(),
+        holidayService.getHolidaysInRange(
+          formatDateLocal(today),
+          formatDateLocal(futureDate)
+        ).catch(() => [] as ResolvedHoliday[]) // Gracefully handle errors
       ]);
 
       // Store raw plans for calendar modal
@@ -118,7 +130,8 @@ const Dashboard: React.FC = () => {
       const upcomingAssignments = await loadUserUpcomingAssignments(
         shiftPlans.filter(p => p.status === 'published' && !p.isTemplate),
         weeklyPlans.filter(p => p.status === 'published'),
-        user?.id
+        user?.id,
+        holidays
       );
 
       // Calculate team stats
@@ -180,13 +193,20 @@ const Dashboard: React.FC = () => {
   const loadUserUpcomingAssignments = async (
     shiftPlans: ShiftPlan[],
     weeklyPlans: WeeklyPlanListItem[],
-    userId?: string
+    userId?: string,
+    holidays: ResolvedHoliday[] = []
   ): Promise<UpcomingAssignment[]> => {
     if (!userId) return [];
 
     const assignments: UpcomingAssignment[] = [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+
+    // Helper to find holiday for a date
+    const getHolidayForDate = (dateStr: string): string | undefined => {
+      const holiday = holidays.find(h => h.date === dateStr);
+      return holiday?.name;
+    };
 
     try {
       // Load shift plan assignments
@@ -219,7 +239,8 @@ const Dashboard: React.FC = () => {
                 time: `${shift.timeSlot?.startTime || ''} - ${shift.timeSlot?.endTime || ''}`,
                 planName: plan.name,
                 planType: 'shift',
-                details: shift.timeSlot?.name || 'Schicht'
+                details: shift.timeSlot?.name || 'Schicht',
+                holidayName: getHolidayForDate(dateStr)
               });
             }
           }
@@ -252,13 +273,16 @@ const Dashboard: React.FC = () => {
             }
 
             const weekNumber = getCalendarWeekNumber(weekStart);
+            // For weekly plans, check if start date is a holiday
+            const weekStartHoliday = getHolidayForDate(week.startDate);
             assignments.push({
               id: `weekly-${plan.id}-${week.id}`,
               date: formatShiftDate(week.startDate),
               sortDate: week.startDate,
               planName: plan.name,
               planType: 'weekly',
-              details: `KW ${weekNumber}`
+              details: `KW ${weekNumber}`,
+              holidayName: weekStartHoliday
             });
           }
         } catch (err) {
@@ -732,12 +756,26 @@ const Dashboard: React.FC = () => {
                       justifyContent: 'space-between',
                       alignItems: 'center',
                       padding: '12px',
-                      backgroundColor: '#f8f9fa',
+                      backgroundColor: assignment.holidayName ? '#fff3cd' : '#f8f9fa',
                       borderRadius: '6px',
-                      borderLeft: `3px solid ${typeBadge.color}`
+                      borderLeft: `3px solid ${assignment.holidayName ? '#ffc107' : typeBadge.color}`
                     }}>
                       <div>
-                        <div style={{ fontWeight: 'bold' }}>{assignment.date}</div>
+                        <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {assignment.date}
+                          {assignment.holidayName && (
+                            <span style={{
+                              padding: '2px 6px',
+                              backgroundColor: '#ffc107',
+                              color: '#856404',
+                              borderRadius: '8px',
+                              fontSize: '10px',
+                              fontWeight: 'bold'
+                            }}>
+                              {assignment.holidayName}
+                            </span>
+                          )}
+                        </div>
                         {assignment.time && (
                           <div style={{ fontSize: '14px', color: '#666' }}>{assignment.time}</div>
                         )}

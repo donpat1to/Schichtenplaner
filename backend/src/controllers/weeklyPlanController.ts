@@ -16,6 +16,7 @@ import {
   CreateAssignmentsRequest,
   DEFAULT_WORK_DAYS
 } from '../models/WeeklyPlan.js';
+import { Holiday, ResolvedHoliday } from '../models/Holiday.js';
 import { AuthRequest } from '../middleware/auth.js';
 import ExcelJS from 'exceljs';
 import { chromium } from 'playwright-chromium';
@@ -165,6 +166,152 @@ function getDateForDayInWeek(weekStartDate: string, dayOfWeek: number): string {
   const targetDate = new Date(start);
   targetDate.setDate(start.getDate() + offset);
   return formatDateShort(targetDate.toISOString().split('T')[0]);
+}
+
+// Helper function to parse a date string (YYYY-MM-DD) as local date
+function parseLocalDate(dateStr: string): Date {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+// Helper function to format a Date to YYYY-MM-DD string (local time)
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+// Helper function to convert DB row to Holiday object
+function mapRowToHoliday(row: any): Holiday {
+  return {
+    id: row.id,
+    name: row.name,
+    date: row.date,
+    endDate: row.end_date || undefined,
+    halfDay: row.half_day || undefined,
+    isRecurring: row.is_recurring === 1,
+    description: row.description || undefined,
+    createdAt: row.created_at,
+    createdBy: row.created_by
+  };
+}
+
+// Helper function to resolve recurring holidays to a specific date range
+function resolveHolidaysToDateRange(
+  holidays: Holiday[],
+  startDate: string,
+  endDate: string
+): ResolvedHoliday[] {
+  const resolved: ResolvedHoliday[] = [];
+  const start = parseLocalDate(startDate);
+  const end = parseLocalDate(endDate);
+  const startYear = start.getFullYear();
+  const endYear = end.getFullYear();
+
+  for (const holiday of holidays) {
+    if (holiday.isRecurring) {
+      // For recurring holidays, generate occurrences for each year in range
+      for (let year = startYear; year <= endYear; year++) {
+        const holidayDate = parseLocalDate(holiday.date);
+        const resolvedDate = new Date(year, holidayDate.getMonth(), holidayDate.getDate());
+
+        // Check if the resolved date falls within the range
+        if (resolvedDate >= start && resolvedDate <= end) {
+          const dateStr = formatLocalDate(resolvedDate);
+
+          if (holiday.endDate) {
+            // Multi-day recurring holiday
+            const origEndDate = parseLocalDate(holiday.endDate);
+            const daysDiff = Math.ceil((origEndDate.getTime() - holidayDate.getTime()) / (1000 * 60 * 60 * 24));
+            const resolvedEndDate = new Date(resolvedDate);
+            resolvedEndDate.setDate(resolvedEndDate.getDate() + daysDiff);
+
+            // Add each day of the multi-day holiday
+            let currentDate = new Date(resolvedDate);
+            while (currentDate <= resolvedEndDate && currentDate <= end) {
+              if (currentDate >= start) {
+                resolved.push({
+                  id: holiday.id,
+                  name: holiday.name,
+                  date: formatLocalDate(currentDate),
+                  halfDay: holiday.halfDay,
+                  description: holiday.description
+                });
+              }
+              currentDate.setDate(currentDate.getDate() + 1);
+            }
+          } else {
+            resolved.push({
+              id: holiday.id,
+              name: holiday.name,
+              date: dateStr,
+              halfDay: holiday.halfDay,
+              description: holiday.description
+            });
+          }
+        }
+      }
+    } else {
+      // Non-recurring holiday - check if it falls within range
+      const holidayDate = parseLocalDate(holiday.date);
+
+      if (holiday.endDate) {
+        // Multi-day non-recurring holiday
+        const endDateObj = parseLocalDate(holiday.endDate);
+        let currentDate = new Date(holidayDate);
+
+        while (currentDate <= endDateObj) {
+          if (currentDate >= start && currentDate <= end) {
+            resolved.push({
+              id: holiday.id,
+              name: holiday.name,
+              date: formatLocalDate(currentDate),
+              halfDay: holiday.halfDay,
+              description: holiday.description
+            });
+          }
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+      } else if (holidayDate >= start && holidayDate <= end) {
+        resolved.push({
+          id: holiday.id,
+          name: holiday.name,
+          date: holiday.date,
+          halfDay: holiday.halfDay,
+          description: holiday.description
+        });
+      }
+    }
+  }
+
+  // Sort by date
+  resolved.sort((a, b) => a.date.localeCompare(b.date));
+  return resolved;
+}
+
+// Helper function to get holiday for a specific date
+function getHolidayForDate(date: string, holidays: ResolvedHoliday[]): ResolvedHoliday | undefined {
+  return holidays.find(h => h.date === date);
+}
+
+// Helper function to get the full date (YYYY-MM-DD) for a specific day within a week
+function getFullDateForDayInWeek(weekStartDate: string, dayOfWeek: number): string {
+  const start = parseLocalDate(weekStartDate);
+  // weekStartDate is Monday (day 1), so calculate offset
+  // Monday = 1, so offset for Monday = 0, Tuesday = 1, etc.
+  // For Sunday (0), offset = 6
+  const offset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const targetDate = new Date(start);
+  targetDate.setDate(start.getDate() + offset);
+  return formatLocalDate(targetDate);
+}
+
+// Helper function to get holidays for the plan's date range
+async function getHolidaysForPlan(startDate: string, endDate: string): Promise<ResolvedHoliday[]> {
+  const rows = await db.all<any>(`SELECT * FROM legal_holidays`);
+  const holidays = rows.map(mapRowToHoliday);
+  return resolveHolidaysToDateRange(holidays, startDate, endDate);
 }
 
 // Helper function to get plan with all details
@@ -1158,12 +1305,17 @@ export const exportWeeklyPlanToExcel = async (req: Request, res: Response): Prom
       return;
     }
 
+    // Fetch holidays for the plan date range
+    const holidays = await getHolidaysForPlan(plan.startDate, plan.endDate);
+
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'Schichtplaner System';
     workbook.created = new Date();
 
     const headerFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: 'FFFFFFFF' } };
     const headerFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2C3E50' } };
+    const holidayFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3CD' } };
+    const holidayDateFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC107' } };
 
     const totalAssignments = plan.employees?.reduce((sum, emp) => sum + emp.assignedWeeks.length, 0) || 0;
     const allDays = getAllDaysForCalendar(plan.workDays);
@@ -1270,9 +1422,20 @@ export const exportWeeklyPlanToExcel = async (req: Request, res: Response): Prom
           cell.border = { top: thinBorder, bottom: bottomBorderStyle, left: colNumber === 1 ? thickBorder : thinBorder, right: thinBorder };
         } else {
           const dayIndex = colNumber - 3;
-          const isWorkDay = allDays[dayIndex]?.isWorkDay ?? true;
-          // Date cells: gray for non-work days, darker header-like background for work days
-          if (isWorkDay) {
+          const day = allDays[dayIndex];
+          const isWorkDay = day?.isWorkDay ?? true;
+
+          // Check if this day is a holiday
+          const fullDate = getFullDateForDayInWeek(week.startDate, day.id);
+          const holiday = getHolidayForDate(fullDate, holidays);
+
+          if (holiday) {
+            // Holiday: amber/yellow header
+            cell.fill = holidayDateFill;
+            cell.font = { bold: true, size: 9, color: { argb: 'FF856404' } };
+            // Add comment with holiday name
+            cell.note = holiday.name + (holiday.halfDay ? ` (${holiday.halfDay === 'morning' ? 'Vormittag' : 'Nachmittag'})` : '');
+          } else if (isWorkDay) {
             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE3E8ED' } };
           } else {
             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD0D0D0' } };
@@ -1292,12 +1455,21 @@ export const exportWeeklyPlanToExcel = async (req: Request, res: Response): Prom
           cell.border = { top: thinBorder, bottom: bottomBorderStyle, left: colNumber === 1 ? thickBorder : thinBorder, right: thinBorder };
         } else {
           const dayIndex = colNumber - 3;
-          const isWorkDay = allDays[dayIndex]?.isWorkDay ?? true;
+          const day = allDays[dayIndex];
+          const isWorkDay = day?.isWorkDay ?? true;
+
+          // Check if this day is a holiday
+          const fullDate = getFullDateForDayInWeek(week.startDate, day.id);
+          const holiday = getHolidayForDate(fullDate, holidays);
 
           if (!isWorkDay) {
             // Non-work day: gray out
             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0F0F0' } };
             cell.font = { color: { argb: 'FF999999' } };
+          } else if (holiday) {
+            // Holiday: amber/yellow fill
+            cell.fill = holidayFill;
+            cell.font = { color: { argb: 'FF856404' } };
           } else if (meetsMinimum) {
             // Work day with sufficient coverage
             cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F5E8' } };
@@ -1459,6 +1631,9 @@ export const exportWeeklyPlanToPDF = async (req: Request, res: Response): Promis
       return;
     }
 
+    // Fetch holidays for the plan date range
+    const holidays = await getHolidaysForPlan(plan.startDate, plan.endDate);
+
     const totalAssignments = plan.employees?.reduce((sum, emp) => sum + emp.assignedWeeks.length, 0) || 0;
     const allDays = getAllDaysForCalendar(plan.workDays);
 
@@ -1476,9 +1651,17 @@ export const exportWeeklyPlanToPDF = async (req: Request, res: Response): Promis
           <td class="period-cell">${formatDateShort(week.startDate)} - ${formatDateShort(week.endDate)}</td>
           ${allDays.map(day => {
             const dayDate = getDateForDayInWeek(week.startDate, day.id);
+            const fullDate = getFullDateForDayInWeek(week.startDate, day.id);
+            const holiday = getHolidayForDate(fullDate, holidays);
+
             if (!day.isWorkDay) {
               // Non-work day: grayed out
               return `<td class="non-work-day"><div class="day-date non-work-day-header">${dayDate}</div><div class="day-content non-work-day-content"></div></td>`;
+            }
+            if (holiday) {
+              // Holiday: yellow styling
+              const halfDayClass = holiday.halfDay ? ` holiday-half-${holiday.halfDay}` : '';
+              return `<td class="holiday${halfDayClass}"><div class="day-date holiday-header">${dayDate}</div><div class="day-content holiday-content">${employeeNames}<div class="holiday-name">${holiday.name}</div></div></td>`;
             }
             const contentClass = meetsMinimum ? 'coverage-ok' : 'coverage-low';
             return `<td><div class="day-date">${dayDate}</div><div class="day-content ${contentClass}">${employeeNames}</div></td>`;
@@ -1630,6 +1813,15 @@ export const exportWeeklyPlanToPDF = async (req: Request, res: Response): Promis
     .non-work-day-content { background: #f0f0f0; color: #999; min-height: 30px; }
     th.non-work-day-th { background: #7F8C8D; }
 
+    /* Holiday styling */
+    .holiday { background: #fff3cd; }
+    .holiday-header { background: #ffc107; color: #856404; }
+    .holiday-content { background: #fff3cd; color: #856404; }
+    .holiday-name { font-size: 7pt; font-style: italic; margin-top: 4px; }
+    .holiday-half-morning .holiday-content { background: linear-gradient(to bottom, #fff3cd 50%, #E8F5E8 50%); }
+    .holiday-half-afternoon .holiday-content { background: linear-gradient(to bottom, #E8F5E8 50%, #fff3cd 50%); }
+    .amber { background: #fff3cd; border-color: #ffc107; }
+
     /* Legend */
     .legend {
       margin: 10px 0;
@@ -1741,6 +1933,10 @@ export const exportWeeklyPlanToPDF = async (req: Request, res: Response): Promis
     <div class="legend-item">
       <div class="legend-color" style="background: #f0f0f0;"></div>
       <span>Kein Arbeitstag</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color amber"></div>
+      <span>Feiertag</span>
     </div>
     <div class="legend-item">
       <span class="purple">(T)</span>

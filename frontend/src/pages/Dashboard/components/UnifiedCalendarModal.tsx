@@ -2,9 +2,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { shiftPlanService } from '../../../services/shiftPlanService';
 import { weeklyPlanService } from '../../../services/weeklyPlanService';
+import { holidayService } from '../../../services/holidayService';
 import { ShiftPlan, ShiftPlanWithData } from '../../../models/ShiftPlan';
 import { WeeklyPlanWithDetails } from '../../../models/WeeklyPlan';
 import { WeeklyPlanListItem } from '../../../services/weeklyPlanService';
+import { ResolvedHoliday } from '../../../models/Holiday';
 import DayAssignmentsPopup from './DayAssignmentsPopup';
 import { CalendarDayAssignment } from '../Dashboard';
 
@@ -31,10 +33,30 @@ const UnifiedCalendarModal: React.FC<UnifiedCalendarModalProps> = ({
   const [loading, setLoading] = useState(true);
   const [calendarAssignments, setCalendarAssignments] = useState<CalendarDayAssignment[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [holidays, setHolidays] = useState<ResolvedHoliday[]>([]);
 
   useEffect(() => {
     loadCalendarData();
   }, [shiftPlans, weeklyPlans]);
+
+  // Load holidays when month changes
+  useEffect(() => {
+    loadHolidays();
+  }, [currentDate]);
+
+  const loadHolidays = async () => {
+    try {
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+      // Get holidays for the visible month range (including overflow days)
+      const startDate = formatDateLocal(new Date(year, month - 1, 1));
+      const endDate = formatDateLocal(new Date(year, month + 2, 0));
+      const resolvedHolidays = await holidayService.getHolidaysInRange(startDate, endDate);
+      setHolidays(resolvedHolidays);
+    } catch (error) {
+      console.error('Error loading holidays:', error);
+    }
+  };
 
   const loadCalendarData = async () => {
     setLoading(true);
@@ -191,6 +213,11 @@ const UnifiedCalendarModal: React.FC<UnifiedCalendarModalProps> = ({
     return getAssignmentsForDate(date).length > 0;
   };
 
+  const getHolidayForDate = (date: Date): ResolvedHoliday | undefined => {
+    const dateStr = formatDateLocal(date);
+    return holidays.find(h => h.date === dateStr);
+  };
+
   const navigateMonth = (direction: number) => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + direction, 1));
   };
@@ -336,6 +363,23 @@ const UnifiedCalendarModal: React.FC<UnifiedCalendarModalProps> = ({
                 const hasAssign = hasAssignments(dayInfo.date);
                 const assignCount = getAssignmentsForDate(dayInfo.date).length;
                 const today = isToday(dayInfo.date);
+                const holiday = getHolidayForDate(dayInfo.date);
+
+                // Determine background color with holiday priority
+                let backgroundColor = dayInfo.isCurrentMonth ? '#fafafa' : '#f5f5f5';
+                if (holiday) {
+                  if (holiday.halfDay === 'morning') {
+                    backgroundColor = 'linear-gradient(to bottom, #fff3cd 50%, #fafafa 50%)';
+                  } else if (holiday.halfDay === 'afternoon') {
+                    backgroundColor = 'linear-gradient(to bottom, #fafafa 50%, #fff3cd 50%)';
+                  } else {
+                    backgroundColor = '#fff3cd';
+                  }
+                } else if (today) {
+                  backgroundColor = '#e8f4fd';
+                } else if (hasAssign) {
+                  backgroundColor = '#f0f7ff';
+                }
 
                 return (
                   <div
@@ -348,25 +392,21 @@ const UnifiedCalendarModal: React.FC<UnifiedCalendarModalProps> = ({
                       alignItems: 'center',
                       justifyContent: 'center',
                       borderRadius: '6px',
-                      backgroundColor: today
-                        ? '#e8f4fd'
-                        : hasAssign
-                          ? '#f0f7ff'
-                          : dayInfo.isCurrentMonth
-                            ? '#fafafa'
-                            : '#f5f5f5',
+                      background: backgroundColor,
                       color: dayInfo.isCurrentMonth ? '#333' : '#999',
                       cursor: hasAssign ? 'pointer' : 'default',
                       border: today
                         ? '2px solid #3498db'
-                        : hasAssign
-                          ? '1px solid #3498db'
-                          : '1px solid transparent',
+                        : holiday
+                          ? '1px solid #ffc107'
+                          : hasAssign
+                            ? '1px solid #3498db'
+                            : '1px solid transparent',
                       transition: 'all 0.2s ease',
                       position: 'relative'
                     }}
                     onMouseEnter={(e) => {
-                      if (hasAssign) {
+                      if (hasAssign || holiday) {
                         e.currentTarget.style.transform = 'scale(1.05)';
                         e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
                       }
@@ -375,6 +415,7 @@ const UnifiedCalendarModal: React.FC<UnifiedCalendarModalProps> = ({
                       e.currentTarget.style.transform = 'scale(1)';
                       e.currentTarget.style.boxShadow = 'none';
                     }}
+                    title={holiday ? holiday.name : undefined}
                   >
                     <span style={{
                       fontSize: '14px',
@@ -382,6 +423,24 @@ const UnifiedCalendarModal: React.FC<UnifiedCalendarModalProps> = ({
                     }}>
                       {dayInfo.date.getDate()}
                     </span>
+
+                    {/* Holiday indicator */}
+                    {holiday && !hasAssign && (
+                      <div style={{
+                        position: 'absolute',
+                        bottom: '2px',
+                        left: '2px',
+                        right: '2px',
+                        fontSize: '7px',
+                        color: '#856404',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        textAlign: 'center'
+                      }}>
+                        {holiday.name}
+                      </div>
+                    )}
 
                     {/* Assignment indicator */}
                     {hasAssign && (
@@ -419,6 +478,7 @@ const UnifiedCalendarModal: React.FC<UnifiedCalendarModalProps> = ({
               display: 'flex',
               gap: '16px',
               justifyContent: 'center',
+              flexWrap: 'wrap',
               fontSize: '12px',
               color: '#666'
             }}>
@@ -441,6 +501,18 @@ const UnifiedCalendarModal: React.FC<UnifiedCalendarModalProps> = ({
                 }} />
                 <span>Heute</span>
               </div>
+              {holidays.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <div style={{
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '2px',
+                    border: '1px solid #ffc107',
+                    backgroundColor: '#fff3cd'
+                  }} />
+                  <span>Feiertag</span>
+                </div>
+              )}
             </div>
           </>
         )}

@@ -325,3 +325,22 @@ CREATE INDEX IF NOT EXISTS idx_weekly_work_requirements_plan ON weekly_work_requ
 CREATE INDEX IF NOT EXISTS idx_weekly_assignments_plan ON weekly_assignments(plan_id);
 CREATE INDEX IF NOT EXISTS idx_weekly_assignments_week ON weekly_assignments(week_id);
 CREATE INDEX IF NOT EXISTS idx_weekly_assignments_employee ON weekly_assignments(employee_id);
+
+-- =====================================================
+-- Legal Holidays
+-- =====================================================
+-- Legal holidays table for display-only indicators
+CREATE TABLE IF NOT EXISTS legal_holidays (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  date TEXT NOT NULL,           -- YYYY-MM-DD (start date for multi-day)
+  end_date TEXT,                -- YYYY-MM-DD (NULL for single day)
+  half_day TEXT CHECK(half_day IN ('morning', 'afternoon') OR half_day IS NULL),
+  is_recurring BOOLEAN DEFAULT FALSE,
+  description TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  created_by TEXT REFERENCES employees(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_legal_holidays_date ON legal_holidays(date);
+CREATE INDEX IF NOT EXISTS idx_legal_holidays_end_date ON legal_holidays(end_date);

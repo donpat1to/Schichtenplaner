@@ -290,6 +290,40 @@
     color: #999;
 }
 
+/* Holiday styles */
+.day.holiday {
+    background-color: #fff3cd;
+    border-color: #ffc107;
+}
+
+.day.holiday.halfDayMorning {
+    background: linear-gradient(to bottom, #fff3cd 50%, #f8f9fa 50%);
+    border-color: #ffc107;
+}
+
+.day.holiday.halfDayAfternoon {
+    background: linear-gradient(to bottom, #f8f9fa 50%, #fff3cd 50%);
+    border-color: #ffc107;
+}
+
+.holidayIndicator {
+    position: absolute;
+    bottom: 2px;
+    left: 2px;
+    right: 2px;
+    font-size: 9px;
+    color: #856404;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
+}
+
+.legendColor.holidayLegend {
+    background-color: #fff3cd;
+    border-color: #ffc107;
+}
+
 .dayNumber {
     font-size: 18px;
     font-weight: 600;
