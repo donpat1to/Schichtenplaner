@@ -13,7 +13,7 @@ const SecurityWarning: React.FC = () => {
 
     checkProtocol();
     window.addEventListener('load', checkProtocol);
-    
+
     return () => window.removeEventListener('load', checkProtocol);
   }, []);
 
@@ -21,24 +21,28 @@ const SecurityWarning: React.FC = () => {
     return null;
   }
 
+  if (import.meta.env.VITE_FORCE_HTTPS !== 'true' || isDismissed) return null;
+
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      backgroundColor: '#ff6b35',
-      color: 'white',
-      padding: '10px 20px',
-      textAlign: 'center',
-      zIndex: 10000,
-      fontSize: '14px',
-      fontWeight: 'bold',
-      boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-    }}>
-      ⚠️ SECURITY WARNING: This site is being accessed over HTTP. 
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: '#ff6b35',
+        color: 'white',
+        padding: '10px 20px',
+        textAlign: 'center',
+        zIndex: 10000,
+        fontSize: '14px',
+        fontWeight: 'bold',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+      }}
+    >
+      ⚠️ SECURITY WARNING: This site is being accessed over HTTP.
       For secure communication, please use HTTPS.
-      <button 
+      <button
         onClick={() => setIsDismissed(true)}
         style={{
           marginLeft: '15px',
@@ -47,7 +51,7 @@ const SecurityWarning: React.FC = () => {
           color: 'white',
           padding: '2px 8px',
           borderRadius: '3px',
-          cursor: 'pointer'
+          cursor: 'pointer',
         }}
       >
         Dismiss
