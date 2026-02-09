@@ -81,6 +81,67 @@ function parseWorkDays(workDaysStr: string | null): number[] {
   return workDaysStr.split(',').map(d => parseInt(d.trim(), 10)).filter(d => !isNaN(d));
 }
 
+// Day names in German (index 0 = Sunday, 1 = Monday, etc.)
+const DAY_NAMES = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+const DAY_NAMES_FULL = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+
+// Helper function to get work days as text (e.g., "Mo, Di, Mi, Do, Fr")
+function getWorkDaysText(workDays: number[]): string {
+  return workDays.map(d => DAY_NAMES[d]).join(', ');
+}
+
+// Helper function to get assignment style in German
+function getAssignmentStyleText(style: 'consecutive' | 'scattered' | 'flexible'): string {
+  switch (style) {
+    case 'consecutive': return 'Konsekutiv';
+    case 'scattered': return 'Verteilt';
+    case 'flexible': return 'Flexibel';
+    default: return style;
+  }
+}
+
+// Helper function to get assigned weeks as formatted text (e.g., "KW 1, KW 2, KW 5")
+function getAssignedWeeksText(assignedWeekIds: string[], weeks: PlanWeek[]): string {
+  const assignedWeeks = weeks
+    .filter(w => assignedWeekIds.includes(w.id))
+    .sort((a, b) => a.weekNumber - b.weekNumber);
+  return assignedWeeks.map(w => `KW ${w.weekNumber}`).join(', ') || 'Keine';
+}
+
+// Helper function to get work days for calendar layout
+function getWorkDaysForCalendar(workDays: number[]): { id: number; name: string; nameFull: string }[] {
+  return workDays.map(d => ({
+    id: d,
+    name: DAY_NAMES[d],
+    nameFull: DAY_NAMES_FULL[d]
+  }));
+}
+
+// Helper function to format date as DD.MM
+function formatDateShort(dateStr: string): string {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+}
+
+// Helper function to format date as DD.MM.YYYY HH:mm
+function formatDateTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('de-DE', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+// Helper function to get employee suffix based on type
+function getEmployeeSuffix(emp: { isTrainee: boolean; employeeType: string }): string {
+  if (emp.isTrainee) return ' (T)';
+  if (emp.employeeType === 'manager') return ' (M)';
+  return '';
+}
+
 // Helper function to get plan with all details
 async function getWeeklyPlanById(planId: string): Promise<WeeklyPlanWithDetails | null> {
   const plan = await db.get<any>(`
@@ -1076,118 +1137,208 @@ export const exportWeeklyPlanToExcel = async (req: Request, res: Response): Prom
     workbook.creator = 'Schichtplaner System';
     workbook.created = new Date();
 
-    // Summary sheet
+    const headerFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: 'FFFFFFFF' } };
+    const headerFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2C3E50' } };
+
+    const totalAssignments = plan.employees?.reduce((sum, emp) => sum + emp.assignedWeeks.length, 0) || 0;
+    const workDays = getWorkDaysForCalendar(plan.workDays);
+
+    // ========== Sheet 1: Planübersicht (Enhanced) ==========
     const summarySheet = workbook.addWorksheet('Planübersicht');
     summarySheet.columns = [
       { header: 'Eigenschaft', key: 'property', width: 25 },
-      { header: 'Wert', key: 'value', width: 35 }
+      { header: 'Wert', key: 'value', width: 40 }
     ];
 
     summarySheet.addRows([
       { property: 'Plan Name', value: plan.name },
       { property: 'Beschreibung', value: plan.description || 'Keine' },
       { property: 'Zeitraum', value: `${plan.startDate} bis ${plan.endDate}` },
+      { property: 'Arbeitstage', value: getWorkDaysText(plan.workDays) },
       { property: 'Status', value: plan.status },
       { property: 'Erstellt von', value: plan.createdByName || 'Unbekannt' },
+      { property: 'Erstellt am', value: formatDateTime(plan.createdAt) },
       { property: 'Anzahl Wochen', value: plan.weeks.length },
       { property: 'Anzahl Mitarbeiter', value: plan.employees?.length || 0 },
+      { property: 'Zuweisungen gesamt', value: totalAssignments },
     ]);
 
-    const header = summarySheet.getRow(1);
-    header.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2C3E50' } };
+    const summaryHeader = summarySheet.getRow(1);
+    summaryHeader.font = headerFont;
+    summaryHeader.fill = headerFill;
 
-    // Assignments sheet
-    const assignmentsSheet = workbook.addWorksheet('Wochenzuweisungen');
+    // ========== Sheet 2: Wochenplan Details (Calendar Layout) ==========
+    const calendarSheet = workbook.addWorksheet('Wochenplan Details');
 
-    // Header row: Week columns
-    const headerRow = ['Mitarbeiter', 'Gewünschte Wochen', 'Zuteilungsstil', 'Blockgröße', ...plan.weeks.map(w => `KW ${w.weekNumber}`)];
-    const assignmentHeader = assignmentsSheet.addRow(headerRow);
-    assignmentHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    assignmentHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2C3E50' } };
+    // Header row: Kalenderwoche | Zeitraum | Day columns
+    const calendarHeaderRow = ['Kalenderwoche', 'Zeitraum', ...workDays.map(d => d.nameFull)];
+    const calendarHeader = calendarSheet.addRow(calendarHeaderRow);
+    calendarHeader.font = headerFont;
+    calendarHeader.fill = headerFill;
+    calendarHeader.alignment = { horizontal: 'center', vertical: 'middle' };
+    calendarHeader.height = 25;
 
-    // Employee rows with assignments
+    // Add week rows with assigned employees
+    plan.weeks.forEach(week => {
+      // Get employees assigned to this week
+      const assignedEmployees = plan.employees
+        ?.filter(emp => emp.assignedWeeks.includes(week.id))
+        .map(emp => `${emp.firstname} ${emp.lastname}${getEmployeeSuffix(emp)}`) || [];
+
+      const assignmentCount = assignedEmployees.length;
+      const meetsMinimum = assignmentCount >= week.minEmployees;
+
+      // Create cell content - same names for all work days since assignments are per-week
+      const employeeNames = assignedEmployees.join('\n') || 'Keine Zuweisung';
+
+      const rowData = [
+        `KW ${week.weekNumber}`,
+        `${formatDateShort(week.startDate)} - ${formatDateShort(week.endDate)}`,
+        ...workDays.map(() => employeeNames)
+      ];
+
+      const row = calendarSheet.addRow(rowData);
+
+      // Calculate dynamic row height
+      const maxAssignments = assignedEmployees.length;
+      row.height = Math.max(25, 20 + (maxAssignments * 15));
+
+      // Style cells
+      row.eachCell((cell, colNumber) => {
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+
+        // Color day cells based on coverage
+        if (colNumber > 2) {
+          if (meetsMinimum) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F5E8' } }; // Green
+          } else {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5E8E8' } }; // Red
+          }
+        }
+      });
+    });
+
+    // Adjust column widths
+    calendarSheet.getColumn(1).width = 15;
+    calendarSheet.getColumn(2).width = 18;
+    for (let i = 3; i <= workDays.length + 2; i++) {
+      calendarSheet.getColumn(i).width = 20;
+    }
+
+    // ========== Sheet 3: Mitarbeiter Zuweisungen (Employee × Week Matrix) ==========
+    const assignmentsSheet = workbook.addWorksheet('Mitarbeiter Zuweisungen');
+
+    // Header row
+    const assignmentsHeaderRow = [
+      'Mitarbeiter', 'Typ', 'Trainee', 'Gewünschte Wochen', 'Zuteilungsstil', 'Blockgröße',
+      ...plan.weeks.map(w => `KW ${w.weekNumber}`)
+    ];
+    const assignmentHeader = assignmentsSheet.addRow(assignmentsHeaderRow);
+    assignmentHeader.font = headerFont;
+    assignmentHeader.fill = headerFill;
+    assignmentHeader.alignment = { horizontal: 'center', vertical: 'middle' };
+
+    // Employee rows
     plan.employees?.forEach(emp => {
-      const rowData: any[] = [
-        `${emp.firstname} ${emp.lastname}${emp.isTrainee ? ' (T)' : ''}`,
+      const rowData: (string | number)[] = [
+        `${emp.firstname} ${emp.lastname}`,
+        emp.employeeType === 'manager' ? 'Manager' : 'Personal',
+        emp.isTrainee ? 'Ja' : 'Nein',
         emp.requiredWeeks,
-        emp.assignmentStyle === 'consecutive' ? 'Konsekutiv' : 'Verteilt',
+        getAssignmentStyleText(emp.assignmentStyle as 'consecutive' | 'scattered' | 'flexible'),
         emp.assignmentStyleConsecutive,
       ];
 
       plan.weeks.forEach(week => {
-        const isAssigned = emp.assignedWeeks.includes(week.id);
-        rowData.push(isAssigned ? '✓' : '');
+        rowData.push(emp.assignedWeeks.includes(week.id) ? '✓' : '');
       });
 
       const row = assignmentsSheet.addRow(rowData);
 
-      // Color assigned cells
-      plan.weeks.forEach((week, idx) => {
-        const cell = row.getCell(idx + 5); // +5 because we have 4 columns before weeks
-        if (emp.assignedWeeks.includes(week.id)) {
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF90EE90' } };
-          cell.alignment = { horizontal: 'center' };
+      // Style cells
+      row.eachCell((cell, colNumber) => {
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+        // Trainee text in purple
+        if (emp.isTrainee && colNumber === 1) {
+          cell.font = { color: { argb: 'FF9B59B6' }, bold: true };
+        }
+
+        // Consecutive style in yellow
+        if (colNumber === 5 && emp.assignmentStyle === 'consecutive') {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF9C4' } };
+        }
+
+        // Assigned weeks in green with checkmark
+        if (colNumber > 6) {
+          const weekIndex = colNumber - 7;
+          const week = plan.weeks[weekIndex];
+          if (week && emp.assignedWeeks.includes(week.id)) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F5E8' } };
+          }
         }
       });
-
-      // Color consecutive style employees differently
-      const styleCell = row.getCell(3);
-      if (emp.assignmentStyle === 'consecutive') {
-        styleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0E68C' } };
-        styleCell.alignment = { horizontal: 'center' };
-      }
     });
 
     // Adjust column widths
     assignmentsSheet.getColumn(1).width = 25;
-    assignmentsSheet.getColumn(2).width = 18;
-    assignmentsSheet.getColumn(3).width = 15;
-    assignmentsSheet.getColumn(4).width = 12;
-    for (let i = 5; i <= plan.weeks.length + 4; i++) {
-      assignmentsSheet.getColumn(i).width = 12;
+    assignmentsSheet.getColumn(2).width = 12;
+    assignmentsSheet.getColumn(3).width = 10;
+    assignmentsSheet.getColumn(4).width = 18;
+    assignmentsSheet.getColumn(5).width = 15;
+    assignmentsSheet.getColumn(6).width = 12;
+    for (let i = 7; i <= plan.weeks.length + 6; i++) {
+      assignmentsSheet.getColumn(i).width = 10;
     }
 
-    // Preferences sheet
-    const preferencesSheet = workbook.addWorksheet('Präferenzen');
-    const prefHeaderRow = ['Mitarbeiter', ...plan.weeks.map(w => `KW ${w.weekNumber}`)];
-    const prefHeader = preferencesSheet.addRow(prefHeaderRow);
-    prefHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    prefHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2C3E50' } };
+    // ========== Sheet 4: Mitarbeiter Details ==========
+    const detailsSheet = workbook.addWorksheet('Mitarbeiter Details');
 
+    // Header row
+    const detailsHeaderRow = [
+      'Name', 'E-Mail', 'Typ', 'Trainee', 'Gewünschte Wochen',
+      'Zuteilungsstil', 'Blockgröße', 'Zugewiesene Wochen'
+    ];
+    const detailsHeader = detailsSheet.addRow(detailsHeaderRow);
+    detailsHeader.font = headerFont;
+    detailsHeader.fill = headerFill;
+    detailsHeader.alignment = { horizontal: 'center', vertical: 'middle' };
+
+    // Employee rows
     plan.employees?.forEach(emp => {
-      const rowData: any[] = [`${emp.firstname} ${emp.lastname}`];
+      const rowData = [
+        `${emp.firstname} ${emp.lastname}`,
+        emp.email,
+        emp.employeeType === 'manager' ? 'Manager' : 'Personal',
+        emp.isTrainee ? 'Ja' : 'Nein',
+        emp.requiredWeeks,
+        getAssignmentStyleText(emp.assignmentStyle as 'consecutive' | 'scattered' | 'flexible'),
+        emp.assignmentStyleConsecutive,
+        getAssignedWeeksText(emp.assignedWeeks, plan.weeks)
+      ];
 
-      plan.weeks.forEach(week => {
-        const preference = emp.preferences.find(p => p.weekId === week.id);
-        let value = '';
-        let color = '';
+      const row = detailsSheet.addRow(rowData);
 
-        if (preference) {
-          switch (preference.preferenceLevel) {
-            case 1: value = '✓'; color = 'FF90EE90'; break; // Green for preferred
-            case 2: value = '○'; color = 'FFFFFF99'; break; // Yellow for available
-            case 3: value = '✗'; color = 'FFFF9999'; break; // Red for unavailable
-          }
+      // Style cells
+      row.eachCell((cell, colNumber) => {
+        cell.alignment = { horizontal: colNumber === 8 ? 'left' : 'center', vertical: 'middle' };
+
+        // Trainee name in purple
+        if (emp.isTrainee && colNumber === 1) {
+          cell.font = { color: { argb: 'FF9B59B6' }, bold: true };
         }
-        rowData.push(value);
-
-        const row = preferencesSheet.getRow(preferencesSheet.rowCount);
-        const cell = row.getCell(rowData.length);
-        if (color) {
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: color } };
-        }
-        cell.alignment = { horizontal: 'center' };
       });
-
-      preferencesSheet.addRow(rowData);
     });
 
-    // Adjust column widths for preferences sheet
-    preferencesSheet.getColumn(1).width = 25;
-    for (let i = 2; i <= plan.weeks.length + 1; i++) {
-      preferencesSheet.getColumn(i).width = 12;
-    }
+    // Adjust column widths
+    detailsSheet.getColumn(1).width = 25;
+    detailsSheet.getColumn(2).width = 30;
+    detailsSheet.getColumn(3).width = 12;
+    detailsSheet.getColumn(4).width = 10;
+    detailsSheet.getColumn(5).width = 18;
+    detailsSheet.getColumn(6).width = 15;
+    detailsSheet.getColumn(7).width = 12;
+    detailsSheet.getColumn(8).width = 40;
 
     // Send file
     const fileName = `Wochenplan_${plan.name}_${new Date().toISOString().split('T')[0]}.xlsx`;
@@ -1216,6 +1367,61 @@ export const exportWeeklyPlanToPDF = async (req: Request, res: Response): Promis
       return;
     }
 
+    const totalAssignments = plan.employees?.reduce((sum, emp) => sum + emp.assignedWeeks.length, 0) || 0;
+    const workDays = getWorkDaysForCalendar(plan.workDays);
+
+    // Build calendar table rows
+    const calendarRows = plan.weeks.map(week => {
+      const assignedEmployees = plan.employees
+        ?.filter(emp => emp.assignedWeeks.includes(week.id))
+        .map(emp => `${emp.firstname} ${emp.lastname}${getEmployeeSuffix(emp)}`) || [];
+      const meetsMinimum = assignedEmployees.length >= week.minEmployees;
+      const cellClass = meetsMinimum ? 'coverage-ok' : 'coverage-low';
+      const employeeNames = assignedEmployees.join('<br/>') || '<em>Keine</em>';
+
+      return `
+        <tr>
+          <td class="kw-cell">KW ${week.weekNumber}</td>
+          <td class="period-cell">${formatDateShort(week.startDate)} - ${formatDateShort(week.endDate)}</td>
+          ${workDays.map(() => `<td class="${cellClass}">${employeeNames}</td>`).join('')}
+        </tr>
+      `;
+    }).join('');
+
+    // Build assignment matrix rows
+    const assignmentRows = plan.employees?.map(emp => {
+      const weekCells = plan.weeks.map(week => {
+        const isAssigned = emp.assignedWeeks.includes(week.id);
+        return `<td class="${isAssigned ? 'assigned' : ''}">${isAssigned ? '✓' : ''}</td>`;
+      }).join('');
+
+      return `
+        <tr>
+          <td class="name-cell ${emp.isTrainee ? 'trainee' : ''}">${emp.firstname} ${emp.lastname}</td>
+          <td>${emp.employeeType === 'manager' ? 'M' : 'P'}</td>
+          <td>${emp.isTrainee ? 'Ja' : ''}</td>
+          <td>${emp.requiredWeeks}</td>
+          <td class="${emp.assignmentStyle === 'consecutive' ? 'consecutive-style' : ''}">${getAssignmentStyleText(emp.assignmentStyle as 'consecutive' | 'scattered' | 'flexible')}</td>
+          <td>${emp.assignmentStyleConsecutive}</td>
+          ${weekCells}
+        </tr>
+      `;
+    }).join('') || '<tr><td colspan="100%">Keine Mitarbeiter</td></tr>';
+
+    // Build employee details rows
+    const detailRows = plan.employees?.map(emp => `
+      <tr>
+        <td class="name-cell ${emp.isTrainee ? 'trainee' : ''}">${emp.firstname} ${emp.lastname}</td>
+        <td>${emp.email}</td>
+        <td>${emp.employeeType === 'manager' ? 'Manager' : 'Personal'}</td>
+        <td>${emp.isTrainee ? 'Ja' : 'Nein'}</td>
+        <td>${emp.requiredWeeks}</td>
+        <td>${getAssignmentStyleText(emp.assignmentStyle as 'consecutive' | 'scattered' | 'flexible')}</td>
+        <td>${emp.assignmentStyleConsecutive}</td>
+        <td class="weeks-cell">${getAssignedWeeksText(emp.assignedWeeks, plan.weeks)}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="8">Keine Mitarbeiter</td></tr>';
+
     const html = `
 <!DOCTYPE html>
 <html lang="de">
@@ -1226,297 +1432,257 @@ export const exportWeeklyPlanToPDF = async (req: Request, res: Response): Promis
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      font-size: 10pt;
+      font-size: 9pt;
       color: #2c3e50;
-      padding: 20px;
+      padding: 15px;
     }
     .header {
-      margin-bottom: 30px;
-      padding-bottom: 20px;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
       border-bottom: 3px solid #2c3e50;
     }
-    h1 { font-size: 24pt; color: #2c3e50; margin-bottom: 10px; }
-    .subtitle { font-size: 11pt; color: #7f8c8d; }
+    h1 { font-size: 20pt; color: #2c3e50; margin-bottom: 5px; }
+    h2 { font-size: 13pt; color: #2c3e50; margin: 20px 0 10px 0; padding-bottom: 5px; border-bottom: 2px solid #3498db; }
+    .subtitle { font-size: 10pt; color: #7f8c8d; }
+
+    /* Section 1: Info Grid */
     .info-section {
       background: #f8f9fa;
-      padding: 15px;
+      padding: 12px;
       border-radius: 5px;
-      margin-bottom: 30px;
+      margin-bottom: 20px;
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-      gap: 15px;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
     }
     .info-item {
-      padding: 10px;
+      padding: 8px;
       background: white;
       border-radius: 3px;
-      border-left: 4px solid #3498db;
+      border-left: 3px solid #3498db;
     }
     .info-item strong {
       display: block;
-      margin-bottom: 5px;
+      margin-bottom: 3px;
       color: #2c3e50;
+      font-size: 8pt;
     }
     .info-item span {
       color: #34495e;
+      font-size: 9pt;
     }
-    .info-section h2 {
-      font-size: 14pt;
-      margin-bottom: 12px;
-      color: #34495e;
-      grid-column: 1 / -1;
-    }
+
+    /* Tables */
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 20px;
-      page-break-inside: avoid;
+      margin-bottom: 15px;
+      font-size: 8pt;
     }
     thead { background: #2c3e50; color: white; }
     thead th {
-      padding: 12px 8px;
+      padding: 8px 4px;
       text-align: center;
       font-weight: 600;
       border: 1px solid #2c3e50;
+      font-size: 8pt;
     }
     td {
-      padding: 10px 8px;
+      padding: 6px 4px;
       border: 1px solid #dee2e6;
       text-align: center;
+      vertical-align: middle;
     }
-    .assigned { background: #90EE90 !important; }
-    .block-style { background: #F0E68C !important; }
-    .trainee { color: #CDA8F0; font-weight: bold; }
+    .name-cell { text-align: left; font-weight: 500; }
+    .kw-cell { font-weight: bold; background: #f8f9fa; }
+    .period-cell { white-space: nowrap; }
+    .weeks-cell { text-align: left; }
+
+    /* Coverage colors */
+    .coverage-ok { background: #E8F5E8; }
+    .coverage-low { background: #F5E8E8; }
+    .assigned { background: #E8F5E8; font-weight: bold; }
+    .consecutive-style { background: #FFF9C4; }
+    .trainee { color: #9B59B6; font-weight: bold; }
+
+    /* Legend */
     .legend {
-      margin-top: 15px;
-      padding: 10px;
+      margin: 10px 0;
+      padding: 8px;
       background: #f8f9fa;
       border-radius: 5px;
       display: flex;
       flex-wrap: wrap;
       gap: 15px;
+      font-size: 8pt;
     }
     .legend-item {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 5px;
     }
     .legend-color {
-      width: 20px;
-      height: 20px;
-      border-radius: 3px;
+      width: 14px;
+      height: 14px;
+      border-radius: 2px;
+      border: 1px solid #ccc;
     }
-    .green { background: #90EE90; }
-    .yellow { background: #F0E68C; }
-    .red { background: #FF9999; }
-    .pref-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-      gap: 20px;
-      margin-top: 20px;
-    }
-    .employee-card {
-      border: 1px solid #dee2e6;
-      border-radius: 5px;
-      padding: 15px;
-      background: #f8f9fa;
-    }
-    .employee-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 10px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid #dee2e6;
-    }
-    .employee-name {
-      font-weight: bold;
-      font-size: 11pt;
-    }
-    .employee-details {
-      display: flex;
-      gap: 15px;
-      font-size: 9pt;
-      color: #7f8c8d;
-    }
-    .preferences-list {
-      list-style: none;
-    }
-    .preference-item {
-      display: flex;
-      justify-content: space-between;
-      padding: 5px 0;
-      border-bottom: 1px dotted #dee2e6;
-    }
-    .preference-week {
-      font-weight: 500;
-    }
-    .preference-level-1 { color: #27ae60; }
-    .preference-level-2 { color: #f39c12; }
-    .preference-level-3 { color: #e74c3c; }
+    .green { background: #E8F5E8; }
+    .red { background: #F5E8E8; }
+    .yellow { background: #FFF9C4; }
+    .purple { background: white; color: #9B59B6; font-weight: bold; }
+
     .footer {
-      margin-top: 30px;
+      margin-top: 20px;
       text-align: center;
-      font-size: 9pt;
+      font-size: 8pt;
       color: #95a5a6;
       border-top: 1px solid #ecf0f1;
-      padding-top: 10px;
+      padding-top: 8px;
     }
+
     @media print {
       body { padding: 10px; }
-      .legend { break-inside: avoid; }
-      table { break-inside: avoid; }
-      .pref-grid { break-inside: avoid; }
+      .page-break { page-break-before: always; }
+      table { page-break-inside: auto; }
+      tr { page-break-inside: avoid; }
     }
   </style>
 </head>
 <body>
+  <!-- Section 1: Header + Info -->
   <div class="header">
     <h1>Wochenplan: ${plan.name}</h1>
     <div class="subtitle">Zeitraum: ${plan.startDate} - ${plan.endDate}</div>
   </div>
 
   <div class="info-section">
-    <h2>Plan Informationen</h2>
     <div class="info-item">
-      <strong>Beschreibung:</strong>
+      <strong>Beschreibung</strong>
       <span>${plan.description || 'Keine'}</span>
     </div>
     <div class="info-item">
-      <strong>Status:</strong>
-      <span>${plan.status}</span>
+      <strong>Arbeitstage</strong>
+      <span>${getWorkDaysText(plan.workDays)}</span>
     </div>
     <div class="info-item">
-      <strong>Erstellt von:</strong>
+      <strong>Erstellt von</strong>
       <span>${plan.createdByName || 'Unbekannt'}</span>
     </div>
     <div class="info-item">
-      <strong>Anzahl Wochen:</strong>
+      <strong>Erstellt am</strong>
+      <span>${formatDateTime(plan.createdAt)}</span>
+    </div>
+    <div class="info-item">
+      <strong>Anzahl Wochen</strong>
       <span>${plan.weeks.length}</span>
     </div>
     <div class="info-item">
-      <strong>Anzahl Mitarbeiter:</strong>
+      <strong>Mitarbeiter</strong>
       <span>${plan.employees?.length || 0}</span>
     </div>
     <div class="info-item">
-      <strong>Gesamte Zuweisungen:</strong>
-      <span>${plan.employees?.reduce((sum, emp) => sum + emp.assignedWeeks.length, 0) || 0}</span>
+      <strong>Zuweisungen</strong>
+      <span>${totalAssignments}</span>
     </div>
   </div>
 
-  <h2>Wochenzuweisungen</h2>
+  <div class="page-break"></div>
+  
+  <!-- Section 2: Wochenplan Timetable (Calendar Grid) -->
+  <h2>Wochenplan Details</h2>
   <table>
     <thead>
       <tr>
-        <th>Mitarbeiter</th>
-        <th>Wochen</th>
-        <th>Stil</th>
-        <th>Block</th>
-        ${plan.weeks.map(w => `<th>KW ${w.weekNumber}<br/>${formatDate(w.startDate)}</th>`).join('')}
+        <th style="width: 60px;">KW</th>
+        <th style="width: 100px;">Zeitraum</th>
+        ${workDays.map(d => `<th>${d.nameFull}</th>`).join('')}
       </tr>
     </thead>
     <tbody>
-      ${plan.employees?.map(emp => `
-        <tr>
-          <td style="text-align: left;" class="${emp.isTrainee ? 'trainee' : ''}">
-            ${emp.firstname} ${emp.lastname}${emp.isTrainee ? ' (T)' : ''}
-          </td>
-          <td>${emp.requiredWeeks}</td>
-          <td class="${emp.assignmentStyle === 'consecutive' ? 'consecutive-style' : ''}">
-            ${emp.assignmentStyle === 'consecutive' ? 'Konsekutiv' : 'Verteilt'}
-          </td>
-          <td>${emp.assignmentStyleConsecutive}</td>
-          ${plan.weeks.map(week => `
-            <td class="${emp.assignedWeeks.includes(week.id) ? 'assigned' : ''}">
-              ${emp.assignedWeeks.includes(week.id) ? '✓' : ''}
-            </td>
-          `).join('')}
-        </tr>
-      `).join('') || '<tr><td colspan="100%">Keine Mitarbeiter</td></tr>'}
+      ${calendarRows}
     </tbody>
   </table>
 
   <div class="legend">
     <div class="legend-item">
       <div class="legend-color green"></div>
-      <span>Zugewiesene Wochen</span>
+      <span>Besetzung ausreichend (≥ Min.)</span>
     </div>
     <div class="legend-item">
-      <div class="legend-color yellow"></div>
-      <span>Block-Zuteilung</span>
+      <div class="legend-color red"></div>
+      <span>Unterbesetzung (< Min.)</span>
     </div>
     <div class="legend-item">
-      <div class="legend-color"></div>
-      <span>(T) = Trainee</span>
+      <span class="purple">(T)</span>
+      <span>Trainee</span>
+    </div>
+    <div class="legend-item">
+      <span class="purple">(M)</span>
+      <span>Manager</span>
     </div>
   </div>
 
-  <h2>Präferenzen der Mitarbeiter</h2>
-  <div class="pref-grid">
-    ${plan.employees?.map(emp => `
-      <div class="employee-card">
-        <div class="employee-header">
-          <div class="employee-name">
-            ${emp.firstname} ${emp.lastname}${emp.isTrainee ? ' (T)' : ''}
-          </div>
-          <div class="employee-details">
-            <span>${emp.requiredWeeks} Wochen</span>
-            <span>${emp.assignmentStyle === 'consecutive' ? 'Konsekutiv' : 'Verteilt'}</span>
-            <span>${emp.assignedWeeks.length} zugewiesen</span>
-          </div>
-        </div>
-        <ul class="preferences-list">
-          ${emp.preferences.map(pref => {
-      const week = plan.weeks.find(w => w.id === pref.weekId);
-      return `
-            <li class="preference-item">
-              <span class="preference-week">KW ${week?.weekNumber || '?'}: ${week?.startDate || ''}</span>
-              <span class="preference-level-${pref.preferenceLevel}">
-                ${getPreferenceLabel(pref.preferenceLevel)}
-              </span>
-            </li>
-          `}).join('')}
-          ${emp.preferences.length === 0 ? '<li>Keine Präferenzen eingetragen</li>' : ''}
-        </ul>
-      </div>
-    `).join('') || '<p>Keine Mitarbeiter</p>'}
-  </div>
+  <div class="page-break"></div>
+
+  <!-- Section 3: Mitarbeiter-Zuweisungen (Matrix Table) -->
+  <h2>Mitarbeiter Zuweisungen</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Mitarbeiter</th>
+        <th>Typ</th>
+        <th>Trainee</th>
+        <th>Wochen</th>
+        <th>Stil</th>
+        <th>Block</th>
+        ${plan.weeks.map(w => `<th>KW ${w.weekNumber}</th>`).join('')}
+      </tr>
+    </thead>
+    <tbody>
+      ${assignmentRows}
+    </tbody>
+  </table>
 
   <div class="legend">
     <div class="legend-item">
       <div class="legend-color green"></div>
-      <span>Bevorzugt (✓)</span>
+      <span>Zugewiesen (✓)</span>
     </div>
     <div class="legend-item">
       <div class="legend-color yellow"></div>
-      <span>Verfügbar (○)</span>
-    </div>
-    <div class="legend-item">
-      <div class="legend-color red"></div>
-      <span>Nicht verfügbar (✗)</span>
+      <span>Konsekutiv-Stil</span>
     </div>
   </div>
 
+  <div class="page-break"></div>
+
+  <!-- Section 4: Mitarbeiter Details -->
+  <h2>Mitarbeiter Details</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>E-Mail</th>
+        <th>Typ</th>
+        <th>Trainee</th>
+        <th>Wochen</th>
+        <th>Stil</th>
+        <th>Block</th>
+        <th>Zugewiesene Wochen</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${detailRows}
+    </tbody>
+  </table>
+
   <div class="footer">
-    Erstellt am ${new Date().toLocaleDateString('de-DE')} mit Schichtplaner System
+    Erstellt am ${new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })} mit Schichtplaner System
   </div>
 </body>
 </html>
     `;
-
-    function formatDate(dateStr: string): string {
-      const date = new Date(dateStr);
-      return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
-    }
-
-    function getPreferenceLabel(level: number): string {
-      switch (level) {
-        case 1: return '✓ Bevorzugt';
-        case 2: return '○ Verfügbar';
-        case 3: return '✗ Nicht verfügbar';
-        default: return '';
-      }
-    }
 
     browser = await chromium.launch({ headless: true });
     const context = await browser.newContext();
@@ -1528,7 +1694,7 @@ export const exportWeeklyPlanToPDF = async (req: Request, res: Response): Promis
       format: 'A4',
       landscape: true,
       printBackground: true,
-      margin: { top: '15mm', right: '10mm', bottom: '15mm', left: '10mm' },
+      margin: { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' },
     });
 
     await browser.close();
