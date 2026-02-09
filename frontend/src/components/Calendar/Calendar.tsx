@@ -123,8 +123,8 @@ const Calendar: React.FC<CalendarProps> = ({
     ];
 
     const allDayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-    // Filter day names based on active work days (1=Monday index 0, 7=Sunday index 6)
-    const dayNames = allDayNames.filter((_, index) => activeWorkDays.includes(index + 1));
+    // Always show all day names (Mo-Su)
+    const dayNames = allDayNames;
 
     // Determine calendar boundaries based on mode
     let firstDayOfCalendar: Date;
@@ -415,7 +415,7 @@ const Calendar: React.FC<CalendarProps> = ({
             <div className={styles.calendarGrid}>
                 {/* Day names header */}
                 <div className={styles.headerRow} style={{
-                    gridTemplateColumns: `50px repeat(${activeWorkDays.length}, 1fr)`
+                    gridTemplateColumns: `50px repeat(7, 1fr)`
                 }}>
                     <div className={styles.weekNumberHeader}>KW</div>
                     {dayNames.map((day, index) => (
@@ -441,14 +441,16 @@ const Calendar: React.FC<CalendarProps> = ({
                             <div className={styles.weekContent}>
                                 {/* Upper row: Day cells (filtered by work days) */}
                                 <div className={styles.daysRow} style={{
-                                    gridTemplateColumns: `repeat(${activeWorkDays.length}, 1fr)`
+                                    gridTemplateColumns: `repeat(7, 1fr)`
                                 }}>
-                                    {week.filter(day => isWorkDay(day.date)).map((day, dayIndex) => {
+                                    {week.map((day, dayIndex) => {
+                                        const isWorkDayCell = isWorkDay(day.date);
                                         const dayClass = [
                                             styles.day,
                                             !day.isCurrentMonth ? styles.adjacentMonth : '',
                                             day.dayInfo?.isInPlan ? styles.inPlan : '',
                                             day.dayInfo?.isAssigned ? styles.assigned : '',
+                                            !isWorkDayCell ? styles.nonWorkDay : '',
                                         ].filter(Boolean).join(' ');
 
                                         const getPreferenceStyle = () => {

@@ -117,6 +117,18 @@ function getWorkDaysForCalendar(workDays: number[]): { id: number; name: string;
   }));
 }
 
+// Helper function to get all days for calendar layout (Mo-Su) with work day indicator
+function getAllDaysForCalendar(workDays: number[]): { id: number; name: string; nameFull: string; isWorkDay: boolean }[] {
+  // Return all days Monday (1) through Sunday (0/7)
+  const allDays = [1, 2, 3, 4, 5, 6, 0]; // Mo, Di, Mi, Do, Fr, Sa, So
+  return allDays.map(d => ({
+    id: d,
+    name: DAY_NAMES[d],
+    nameFull: DAY_NAMES_FULL[d],
+    isWorkDay: workDays.includes(d === 0 ? 7 : d) || workDays.includes(d) // Handle Sunday as 7 or 0
+  }));
+}
+
 // Helper function to format date as DD.MM
 function formatDateShort(dateStr: string): string {
   const date = new Date(dateStr);
@@ -140,6 +152,19 @@ function getEmployeeSuffix(emp: { isTrainee: boolean; employeeType: string }): s
   if (emp.isTrainee) return ' (T)';
   if (emp.employeeType === 'manager') return ' (M)';
   return '';
+}
+
+// Helper function to get the date for a specific day within a week
+// dayOfWeek: 0 = Sunday, 1 = Monday, etc.
+function getDateForDayInWeek(weekStartDate: string, dayOfWeek: number): string {
+  const start = new Date(weekStartDate);
+  // weekStartDate is Monday (day 1), so calculate offset
+  // Monday = 1, so offset for Monday = 0, Tuesday = 1, etc.
+  // For Sunday (0), offset = 6
+  const offset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const targetDate = new Date(start);
+  targetDate.setDate(start.getDate() + offset);
+  return formatDateShort(targetDate.toISOString().split('T')[0]);
 }
 
 // Helper function to get plan with all details
@@ -1141,7 +1166,7 @@ export const exportWeeklyPlanToExcel = async (req: Request, res: Response): Prom
     const headerFill: ExcelJS.Fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2C3E50' } };
 
     const totalAssignments = plan.employees?.reduce((sum, emp) => sum + emp.assignedWeeks.length, 0) || 0;
-    const workDays = getWorkDaysForCalendar(plan.workDays);
+    const allDays = getAllDaysForCalendar(plan.workDays);
 
     // ========== Sheet 1: Planübersicht (Enhanced) ==========
     const summarySheet = workbook.addWorksheet('Planübersicht');
@@ -1170,16 +1195,35 @@ export const exportWeeklyPlanToExcel = async (req: Request, res: Response): Prom
     // ========== Sheet 2: Wochenplan Details (Calendar Layout) ==========
     const calendarSheet = workbook.addWorksheet('Wochenplan Details');
 
-    // Header row: Kalenderwoche | Zeitraum | Day columns
-    const calendarHeaderRow = ['Kalenderwoche', 'Zeitraum', ...workDays.map(d => d.nameFull)];
+    // Header row: Kalenderwoche | Zeitraum | Day columns (always show all 7 days Mo-Su)
+    const calendarHeaderRow = ['Kalenderwoche', 'Zeitraum', ...allDays.map(d => d.nameFull)];
     const calendarHeader = calendarSheet.addRow(calendarHeaderRow);
     calendarHeader.font = headerFont;
     calendarHeader.fill = headerFill;
     calendarHeader.alignment = { horizontal: 'center', vertical: 'middle' };
     calendarHeader.height = 25;
 
+    // Gray out non-work day headers
+    allDays.forEach((day, index) => {
+      if (!day.isWorkDay) {
+        const cell = calendarHeader.getCell(index + 3); // +3 because columns 1 and 2 are KW and Zeitraum
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF7F8C8D' } }; // Gray header for non-work days
+      }
+    });
+
+    // Define border styles
+    const thickBorder: Partial<ExcelJS.Border> = { style: 'medium', color: { argb: 'FF2C3E50' } };
+    const thinBorder: Partial<ExcelJS.Border> = { style: 'thin', color: { argb: 'FF2C3E50' } };
+
+    // Style header row with thick borders
+    calendarHeader.eachCell((cell) => {
+      cell.border = { top: thickBorder, bottom: thickBorder, left: thinBorder, right: thinBorder };
+    });
+    calendarHeader.getCell(1).border = { top: thickBorder, bottom: thickBorder, left: thickBorder, right: thinBorder };
+    calendarHeader.getCell(calendarHeaderRow.length).border = { top: thickBorder, bottom: thickBorder, left: thinBorder, right: thickBorder };
+
     // Add week rows with assigned employees
-    plan.weeks.forEach(week => {
+    plan.weeks.forEach((week, weekIndex) => {
       // Get employees assigned to this week
       const assignedEmployees = plan.employees
         ?.filter(emp => emp.assignedWeeks.includes(week.id))
@@ -1187,42 +1231,90 @@ export const exportWeeklyPlanToExcel = async (req: Request, res: Response): Prom
 
       const assignmentCount = assignedEmployees.length;
       const meetsMinimum = assignmentCount >= week.minEmployees;
+      const isLastWeek = weekIndex === plan.weeks.length - 1;
 
-      // Create cell content - same names for all work days since assignments are per-week
-      const employeeNames = assignedEmployees.join('\n') || 'Keine Zuweisung';
-
-      const rowData = [
+      // First row: Date row (KW and Zeitraum values go here since they'll be merged)
+      // Show all 7 days (Mo-Su)
+      const dateRowData = [
         `KW ${week.weekNumber}`,
         `${formatDateShort(week.startDate)} - ${formatDateShort(week.endDate)}`,
-        ...workDays.map(() => employeeNames)
+        ...allDays.map(day => getDateForDayInWeek(week.startDate, day.id))
       ];
+      const dateRow = calendarSheet.addRow(dateRowData);
+      dateRow.height = 20;
 
-      const row = calendarSheet.addRow(rowData);
-
-      // Calculate dynamic row height
+      // Second row: Employee names (only show for work days, empty for non-work days)
+      const employeeNames = assignedEmployees.join('\n') || 'Keine Zuweisung';
+      const empRowData = [
+        '',
+        '',
+        ...allDays.map(day => day.isWorkDay ? employeeNames : '')
+      ];
+      const empRow = calendarSheet.addRow(empRowData);
       const maxAssignments = assignedEmployees.length;
-      row.height = Math.max(25, 20 + (maxAssignments * 15));
+      empRow.height = Math.max(30, 15 + (maxAssignments * 15));
 
-      // Style cells
-      row.eachCell((cell, colNumber) => {
+      // Merge KW and Zeitraum cells across both rows
+      const dateRowNum = dateRow.number;
+      calendarSheet.mergeCells(dateRowNum, 1, dateRowNum + 1, 1); // KW column
+      calendarSheet.mergeCells(dateRowNum, 2, dateRowNum + 1, 2); // Zeitraum column
+
+      // Style date row
+      dateRow.eachCell((cell, colNumber) => {
         cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        cell.font = { bold: true, size: 9 };
+        const bottomBorderStyle = thinBorder;
 
-        // Color day cells based on coverage
-        if (colNumber > 2) {
-          if (meetsMinimum) {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F5E8' } }; // Green
+        if (colNumber <= 2) {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8F9FA' } };
+          cell.border = { top: thinBorder, bottom: bottomBorderStyle, left: colNumber === 1 ? thickBorder : thinBorder, right: thinBorder };
+        } else {
+          const dayIndex = colNumber - 3;
+          const isWorkDay = allDays[dayIndex]?.isWorkDay ?? true;
+          // Date cells: gray for non-work days, darker header-like background for work days
+          if (isWorkDay) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE3E8ED' } };
           } else {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5E8E8' } }; // Red
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD0D0D0' } };
+            cell.font = { bold: true, size: 9, color: { argb: 'FF999999' } };
           }
+          cell.border = { top: thinBorder, bottom: bottomBorderStyle, left: thinBorder, right: colNumber === calendarHeaderRow.length ? thickBorder : thinBorder };
+        }
+      });
+
+      // Style employee row
+      empRow.eachCell((cell, colNumber) => {
+        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        const bottomBorderStyle = isLastWeek ? thickBorder : thinBorder;
+
+        if (colNumber <= 2) {
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8F9FA' } };
+          cell.border = { top: thinBorder, bottom: bottomBorderStyle, left: colNumber === 1 ? thickBorder : thinBorder, right: thinBorder };
+        } else {
+          const dayIndex = colNumber - 3;
+          const isWorkDay = allDays[dayIndex]?.isWorkDay ?? true;
+
+          if (!isWorkDay) {
+            // Non-work day: gray out
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0F0F0' } };
+            cell.font = { color: { argb: 'FF999999' } };
+          } else if (meetsMinimum) {
+            // Work day with sufficient coverage
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F5E8' } };
+          } else {
+            // Work day with insufficient coverage
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5E8E8' } };
+          }
+          cell.border = { top: thinBorder, bottom: bottomBorderStyle, left: thinBorder, right: colNumber === calendarHeaderRow.length ? thickBorder : thinBorder };
         }
       });
     });
 
-    // Adjust column widths
-    calendarSheet.getColumn(1).width = 15;
-    calendarSheet.getColumn(2).width = 18;
-    for (let i = 3; i <= workDays.length + 2; i++) {
-      calendarSheet.getColumn(i).width = 20;
+    // Adjust column widths (always 7 day columns)
+    calendarSheet.getColumn(1).width = 12;
+    calendarSheet.getColumn(2).width = 16;
+    for (let i = 3; i <= 9; i++) { // 7 days: columns 3-9
+      calendarSheet.getColumn(i).width = 22;
     }
 
     // ========== Sheet 3: Mitarbeiter Zuweisungen (Employee × Week Matrix) ==========
@@ -1368,22 +1460,29 @@ export const exportWeeklyPlanToPDF = async (req: Request, res: Response): Promis
     }
 
     const totalAssignments = plan.employees?.reduce((sum, emp) => sum + emp.assignedWeeks.length, 0) || 0;
-    const workDays = getWorkDaysForCalendar(plan.workDays);
+    const allDays = getAllDaysForCalendar(plan.workDays);
 
-    // Build calendar table rows
+    // Build calendar table rows (always show all 7 days Mo-Su)
     const calendarRows = plan.weeks.map(week => {
       const assignedEmployees = plan.employees
         ?.filter(emp => emp.assignedWeeks.includes(week.id))
         .map(emp => `${emp.firstname} ${emp.lastname}${getEmployeeSuffix(emp)}`) || [];
       const meetsMinimum = assignedEmployees.length >= week.minEmployees;
-      const cellClass = meetsMinimum ? 'coverage-ok' : 'coverage-low';
       const employeeNames = assignedEmployees.join('<br/>') || '<em>Keine</em>';
 
       return `
         <tr>
           <td class="kw-cell">KW ${week.weekNumber}</td>
           <td class="period-cell">${formatDateShort(week.startDate)} - ${formatDateShort(week.endDate)}</td>
-          ${workDays.map(() => `<td class="${cellClass}">${employeeNames}</td>`).join('')}
+          ${allDays.map(day => {
+            const dayDate = getDateForDayInWeek(week.startDate, day.id);
+            if (!day.isWorkDay) {
+              // Non-work day: grayed out
+              return `<td class="non-work-day"><div class="day-date non-work-day-header">${dayDate}</div><div class="day-content non-work-day-content"></div></td>`;
+            }
+            const contentClass = meetsMinimum ? 'coverage-ok' : 'coverage-low';
+            return `<td><div class="day-date">${dayDate}</div><div class="day-content ${contentClass}">${employeeNames}</div></td>`;
+          }).join('')}
         </tr>
       `;
     }).join('');
@@ -1484,19 +1583,39 @@ export const exportWeeklyPlanToPDF = async (req: Request, res: Response): Promis
       padding: 8px 4px;
       text-align: center;
       font-weight: 600;
-      border: 1px solid #2c3e50;
+      border: 2px solid #2c3e50;
       font-size: 8pt;
     }
     td {
       padding: 6px 4px;
       border: 1px solid #dee2e6;
       text-align: center;
-      vertical-align: middle;
+      vertical-align: top;
     }
     .name-cell { text-align: left; font-weight: 500; }
-    .kw-cell { font-weight: bold; background: #f8f9fa; }
-    .period-cell { white-space: nowrap; }
+    .kw-cell { font-weight: bold; background: #f8f9fa; vertical-align: middle; }
+    .period-cell { white-space: nowrap; vertical-align: middle; }
     .weeks-cell { text-align: left; }
+
+    /* Calendar table specific styles */
+    .calendar-table { border: 2px solid #2c3e50; }
+    .calendar-table td { border: 2px solid #2c3e50; padding: 0; }
+    .calendar-table .kw-cell, .calendar-table .period-cell { padding: 6px 4px; border: 2px solid #2c3e50; }
+
+    /* Date box styling */
+    .day-date {
+      background: #e3e8ed;
+      font-weight: bold;
+      color: #2c3e50;
+      padding: 4px 6px;
+      text-align: center;
+      border-bottom: 2px solid #2c3e50;
+      font-size: 9pt;
+    }
+    .day-content {
+      padding: 6px 4px;
+      min-height: 30px;
+    }
 
     /* Coverage colors */
     .coverage-ok { background: #E8F5E8; }
@@ -1504,6 +1623,12 @@ export const exportWeeklyPlanToPDF = async (req: Request, res: Response): Promis
     .assigned { background: #E8F5E8; font-weight: bold; }
     .consecutive-style { background: #FFF9C4; }
     .trainee { color: #9B59B6; font-weight: bold; }
+
+    /* Non-work day styling */
+    .non-work-day { background: #f0f0f0; }
+    .non-work-day-header { background: #d0d0d0; color: #999; }
+    .non-work-day-content { background: #f0f0f0; color: #999; min-height: 30px; }
+    th.non-work-day-th { background: #7F8C8D; }
 
     /* Legend */
     .legend {
@@ -1591,12 +1716,12 @@ export const exportWeeklyPlanToPDF = async (req: Request, res: Response): Promis
   
   <!-- Section 2: Wochenplan Timetable (Calendar Grid) -->
   <h2>Wochenplan Details</h2>
-  <table>
+  <table class="calendar-table">
     <thead>
       <tr>
         <th style="width: 60px;">KW</th>
         <th style="width: 100px;">Zeitraum</th>
-        ${workDays.map(d => `<th>${d.nameFull}</th>`).join('')}
+        ${allDays.map(d => `<th${!d.isWorkDay ? ' class="non-work-day-th"' : ''}>${d.nameFull}</th>`).join('')}
       </tr>
     </thead>
     <tbody>
@@ -1612,6 +1737,10 @@ export const exportWeeklyPlanToPDF = async (req: Request, res: Response): Promis
     <div class="legend-item">
       <div class="legend-color red"></div>
       <span>Unterbesetzung (< Min.)</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background: #f0f0f0;"></div>
+      <span>Kein Arbeitstag</span>
     </div>
     <div class="legend-item">
       <span class="purple">(T)</span>

@@ -280,6 +280,16 @@
     background-color: rgba(144, 238, 144, 0.3) !important;
 }
 
+.day.nonWorkDay {
+    background-color: #f0f0f0;
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.day.nonWorkDay .dayNumber {
+    color: #999;
+}
+
 .dayNumber {
     font-size: 18px;
     font-weight: 600;
