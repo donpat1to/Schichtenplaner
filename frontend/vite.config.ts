@@ -60,7 +60,7 @@ export default defineConfig(({ mode }): UserConfig => {
     define: {
       'import.meta.env.VITE_API_URL': JSON.stringify(isProduction ? '/api' : '/api'),
       // For OAuth redirects: in dev, direct to backend; in production, same origin
-      'import.meta.env.VITE_APP_URL': JSON.stringify(env.APP_URL || 'http://localhost:3002'),
+      'import.meta.env.APP_URL': JSON.stringify(env.APP_URL || 'http://localhost:3002'),
       'import.meta.env.ENABLE_PRO': JSON.stringify(env.ENABLE_PRO || 'false'),
       'import.meta.env.NODE_ENV': JSON.stringify(mode),
       'import.meta.env.FORCE_HTTPS': JSON.stringify(env.FORCE_HTTPS || 'false'),

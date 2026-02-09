@@ -100,10 +100,10 @@ const getRateLimitConfig = () => {
   const isProduction = process.env.NODE_ENV === 'production';
 
   return {
-    windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes default
+    windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '300000'), // 5 minutes default
     max: isProduction
-      ? parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '50')  // Stricter in production
-      : parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'), // More lenient in development
+      ? parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '500')  // Stricter in production
+      : parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '1000'), // More lenient in development
 
     // Development-specific relaxations
     skip: (req: Request) => {
@@ -133,7 +133,7 @@ export const apiLimiter = rateLimit({
     res.status(429).json({
       error: 'Zu viele Anfragen',
       message: 'Bitte versuchen Sie es später erneut',
-      retryAfter: '15 Minuten',
+      retryAfter: '5 Minuten',
       clientIP: process.env.NODE_ENV === 'development' ? clientIP : undefined // Only expose IP in dev
     });
   }
@@ -141,8 +141,8 @@ export const apiLimiter = rateLimit({
 
 // Strict limiter for auth endpoints
 export const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: parseInt(process.env.AUTH_RATE_LIMIT_MAX_REQUESTS || '50'),
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '300000'), // 5 minutes default
+  max: parseInt(process.env.AUTH_RATE_LIMIT_MAX_REQUESTS || '100'),
   message: {
     error: 'Zu viele Login-Versuche, bitte versuchen Sie es später erneut'
   },
@@ -157,15 +157,15 @@ export const authLimiter = rateLimit({
     res.status(429).json({
       error: 'Zu viele Login-Versuche',
       message: 'Aus Sicherheitsgründen wurde Ihr Konto temporär gesperrt',
-      retryAfter: '15 Minuten'
+      retryAfter: '5 Minuten'
     });
   }
 });
 
 // Separate limiter for expensive endpoints
 export const expensiveEndpointLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: parseInt(process.env.EXPENSIVE_ENDPOINT_LIMIT || '20'),
+  windowMs: parseInt(process.env.EXPENSIVE_ENDPOINT_WINDOW_MS || '300000'), // 5 minutes default
+  max: parseInt(process.env.EXPENSIVE_ENDPOINT_LIMIT || '100'),
   message: {
     error: 'Zu viele Anfragen für diese Ressource'
   },

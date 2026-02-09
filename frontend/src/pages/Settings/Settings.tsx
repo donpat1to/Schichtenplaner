@@ -1551,7 +1551,7 @@ const Settings: React.FC = () => {
                             <label style={styles.fieldLabel}>Callback URL (Redirect URI)</label>
                             <input
                               type="text"
-                              value={`${window.location.protocol}//${window.location.hostname}:3002/api/auth/external/${idpForm.slug}/callback`}
+                              value={`${import.meta.env.APP_URL}/api/auth/external/${idpForm.slug}/callback`}
                               readOnly
                               style={{
                                 ...styles.fieldInputDisabled,
