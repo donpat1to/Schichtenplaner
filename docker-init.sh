@@ -53,6 +53,25 @@ fi
 
 chmod 600 /app/.env
 
+# Generate frontend runtime config
+echo "🔧 Generating frontend runtime configuration..."
+
+ENABLE_PRO_JS="false"
+FORCE_HTTPS_JS="false"
+[ "$ENABLE_PRO" = "true" ] && ENABLE_PRO_JS="true"
+[ "$FORCE_HTTPS" = "true" ] && FORCE_HTTPS_JS="true"
+
+cat > /app/frontend-build/config.js << EOF
+window.__RUNTIME_CONFIG__ = {
+  APP_URL: "${APP_URL:-http://localhost:3002}",
+  ENABLE_PRO: ${ENABLE_PRO_JS},
+  FORCE_HTTPS: ${FORCE_HTTPS_JS},
+  API_URL: "${VITE_API_URL:-/api}"
+};
+EOF
+
+echo "✅ Frontend config generated"
+
 echo "🔧 Proxy Configuration:"
 echo "   - TRUST_PROXY_ENABLED: ${TRUST_PROXY_ENABLED:-true}"
 echo "   - TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-172.0.0.0/8,10.0.0.0/8,192.168.0.0/16}"

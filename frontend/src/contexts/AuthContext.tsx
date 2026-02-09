@@ -1,6 +1,7 @@
 // frontend/src/contexts/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Employee } from '../models/Employee';
+import { API_URL } from '../config/runtime';
 
 interface LoginRequest {
   identifier: string;
@@ -20,7 +21,7 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const API_BASE_URL = API_URL;
 
 interface AuthProviderProps {
   children: ReactNode;

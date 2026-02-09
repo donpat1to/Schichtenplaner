@@ -15,6 +15,7 @@ import {
   WhitelistEntry,
   CreateWhitelistEntryRequest
 } from '../../services/identityProviderService';
+import { APP_URL } from '../../config/runtime';
 
 // Convert name to URL-friendly slug
 const slugify = (text: string): string => {
@@ -1551,7 +1552,7 @@ const Settings: React.FC = () => {
                             <label style={styles.fieldLabel}>Callback URL (Redirect URI)</label>
                             <input
                               type="text"
-                              value={`${import.meta.env.APP_URL}/api/auth/external/${idpForm.slug}/callback`}
+                              value={`${APP_URL}/api/auth/external/${idpForm.slug}/callback`}
                               readOnly
                               style={{
                                 ...styles.fieldInputDisabled,

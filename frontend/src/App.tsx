@@ -18,15 +18,13 @@ import Help from './pages/Help/Help';
 import Setup from './pages/Setup/Setup';
 import ErrorBoundary from './components/ErrorBoundary/ErrorBoundary';
 import SecurityWarning from './components/SecurityWarning/SecurityWarning';
+import { ENABLE_PRO } from './config/runtime';
 
 // Free Footer Link Pages (always available)
 import FAQ from './components/Layout/FooterLinks/FAQ/FAQ';
 import About from './components/Layout/FooterLinks/About/About';
 import Features from './components/Layout/FooterLinks/Features/Features';
 import { CommunityContact, CommunityLegalPage } from './components/Layout/FooterLinks/CommunityLinks/communityLinks';
-
-// Vite environment variables (use import.meta.env instead of process.env)
-const ENABLE_PRO = import.meta.env.ENABLE_PRO === 'true';
 
 // Conditional Premium Components
 let PremiumContact: React.FC = CommunityContact;

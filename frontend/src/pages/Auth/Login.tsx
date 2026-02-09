@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
+import { API_URL, APP_URL } from '../../config/runtime';
 
 interface IdpProvider {
   id: string;
@@ -11,10 +12,7 @@ interface IdpProvider {
   loginUrl: string;
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
-// For redirects (OAuth flow), we need the actual backend URL, not the proxy path
-// In production (same origin), this is empty; in dev, it points to the backend directly
-const APP_URL = import.meta.env.VITE_APP_URL || 'http://localhost:3002';
+const API_BASE_URL = API_URL;
 
 const Login: React.FC = () => {
   const [identifier, setIdentifier] = useState('');

@@ -1,5 +1,6 @@
 // src/components/SecurityWarning/SecurityWarning.tsx
 import React, { useState, useEffect } from 'react';
+import { FORCE_HTTPS } from '../../config/runtime';
 
 const SecurityWarning: React.FC = () => {
   const [isHttp, setIsHttp] = useState(false);
@@ -21,7 +22,7 @@ const SecurityWarning: React.FC = () => {
     return null;
   }
 
-  if (import.meta.env.VITE_FORCE_HTTPS !== 'true' || isDismissed) return null;
+  if (!FORCE_HTTPS || isDismissed) return null;
 
   return (
     <div

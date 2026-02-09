@@ -1,4 +1,5 @@
 import { ValidationError, ErrorService } from './errorService';
+import { API_URL } from '../config/runtime';
 
 export class ApiError extends Error {
   public validationErrors: ValidationError[];
@@ -18,7 +19,7 @@ export class ApiClient {
   private baseURL: string;
 
   constructor() {
-    this.baseURL = import.meta.env.VITE_API_URL || '/api';
+    this.baseURL = API_URL;
   }
 
   private getAuthHeaders(): HeadersInit {
