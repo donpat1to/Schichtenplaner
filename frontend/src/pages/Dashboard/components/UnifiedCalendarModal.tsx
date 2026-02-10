@@ -224,7 +224,9 @@ const UnifiedCalendarModal: React.FC<UnifiedCalendarModalProps> = ({
 
   const handleDayClick = (date: Date) => {
     const dateStr = formatDateLocal(date);
-    if (hasAssignments(date)) {
+    const holiday = getHolidayForDate(date);
+    // Allow opening popup for holidays OR assignments
+    if (hasAssignments(date) || holiday) {
       setSelectedDate(dateStr);
     }
   };
@@ -364,6 +366,8 @@ const UnifiedCalendarModal: React.FC<UnifiedCalendarModalProps> = ({
                 const assignCount = getAssignmentsForDate(dayInfo.date).length;
                 const today = isToday(dayInfo.date);
                 const holiday = getHolidayForDate(dayInfo.date);
+                const isFullHoliday = holiday && !holiday.halfDay;
+                const isClickable = hasAssign || holiday;
 
                 // Determine background color with holiday priority
                 let backgroundColor = dayInfo.isCurrentMonth ? '#fafafa' : '#f5f5f5';
@@ -394,7 +398,7 @@ const UnifiedCalendarModal: React.FC<UnifiedCalendarModalProps> = ({
                       borderRadius: '6px',
                       background: backgroundColor,
                       color: dayInfo.isCurrentMonth ? '#333' : '#999',
-                      cursor: hasAssign ? 'pointer' : 'default',
+                      cursor: isClickable ? 'pointer' : 'default',
                       border: today
                         ? '2px solid #3498db'
                         : holiday
@@ -406,7 +410,7 @@ const UnifiedCalendarModal: React.FC<UnifiedCalendarModalProps> = ({
                       position: 'relative'
                     }}
                     onMouseEnter={(e) => {
-                      if (hasAssign || holiday) {
+                      if (isClickable) {
                         e.currentTarget.style.transform = 'scale(1.05)';
                         e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
                       }
@@ -424,8 +428,8 @@ const UnifiedCalendarModal: React.FC<UnifiedCalendarModalProps> = ({
                       {dayInfo.date.getDate()}
                     </span>
 
-                    {/* Holiday indicator */}
-                    {holiday && !hasAssign && (
+                    {/* Holiday indicator - show for full holidays or when no assignments */}
+                    {holiday && (isFullHoliday || !hasAssign) && (
                       <div style={{
                         position: 'absolute',
                         bottom: '2px',
@@ -442,8 +446,8 @@ const UnifiedCalendarModal: React.FC<UnifiedCalendarModalProps> = ({
                       </div>
                     )}
 
-                    {/* Assignment indicator */}
-                    {hasAssign && (
+                    {/* Assignment indicator - only show for half-day holidays or non-holidays */}
+                    {hasAssign && !isFullHoliday && (
                       <div style={{
                         position: 'absolute',
                         bottom: '4px',
@@ -522,6 +526,7 @@ const UnifiedCalendarModal: React.FC<UnifiedCalendarModalProps> = ({
           <DayAssignmentsPopup
             date={selectedDate}
             assignments={calendarAssignments.filter(a => a.date === selectedDate)}
+            holiday={holidays.find(h => h.date === selectedDate)}
             onClose={() => setSelectedDate(null)}
           />
         )}

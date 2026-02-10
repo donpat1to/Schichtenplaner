@@ -1396,11 +1396,24 @@ export const exportWeeklyPlanToExcel = async (req: Request, res: Response): Prom
       dateRow.height = 20;
 
       // Second row: Employee names (only show for work days, empty for non-work days)
+      // For full holidays, show holiday info instead of employees
       const employeeNames = assignedEmployees.join('\n') || 'Keine Zuweisung';
       const empRowData = [
         '',
         '',
-        ...allDays.map(day => day.isWorkDay ? employeeNames : '')
+        ...allDays.map(day => {
+          if (!day.isWorkDay) return '';
+
+          const fullDate = getFullDateForDayInWeek(week.startDate, day.id);
+          const holiday = getHolidayForDate(fullDate, holidays);
+
+          if (holiday && !holiday.halfDay) {
+            // Full holiday - show holiday info instead of employees
+            return `Feiertag: ${holiday.name}${holiday.description ? '\n' + holiday.description : ''}`;
+          }
+          // Half-day or no holiday - show employees as normal
+          return employeeNames;
+        })
       ];
       const empRow = calendarSheet.addRow(empRowData);
       const maxAssignments = assignedEmployees.length;
@@ -1658,9 +1671,13 @@ export const exportWeeklyPlanToPDF = async (req: Request, res: Response): Promis
               // Non-work day: grayed out
               return `<td class="non-work-day"><div class="day-date non-work-day-header">${dayDate}</div><div class="day-content non-work-day-content"></div></td>`;
             }
+            if (holiday && !holiday.halfDay) {
+              // Full holiday - show only holiday info, not employees
+              return `<td class="holiday"><div class="day-date holiday-header">${dayDate}</div><div class="day-content holiday-content"><strong>${holiday.name}</strong>${holiday.description ? `<div class="holiday-description">${holiday.description}</div>` : ''}</div></td>`;
+            }
             if (holiday) {
-              // Holiday: yellow styling
-              const halfDayClass = holiday.halfDay ? ` holiday-half-${holiday.halfDay}` : '';
+              // Half-day holiday: show employees + holiday indicator
+              const halfDayClass = ` holiday-half-${holiday.halfDay}`;
               return `<td class="holiday${halfDayClass}"><div class="day-date holiday-header">${dayDate}</div><div class="day-content holiday-content">${employeeNames}<div class="holiday-name">${holiday.name}</div></div></td>`;
             }
             const contentClass = meetsMinimum ? 'coverage-ok' : 'coverage-low';
@@ -1818,6 +1835,7 @@ export const exportWeeklyPlanToPDF = async (req: Request, res: Response): Promis
     .holiday-header { background: #ffc107; color: #856404; }
     .holiday-content { background: #fff3cd; color: #856404; }
     .holiday-name { font-size: 7pt; font-style: italic; margin-top: 4px; }
+    .holiday-description { font-size: 7pt; font-style: italic; margin-top: 2px; }
     .holiday-half-morning .holiday-content { background: linear-gradient(to bottom, #fff3cd 50%, #E8F5E8 50%); }
     .holiday-half-afternoon .holiday-content { background: linear-gradient(to bottom, #E8F5E8 50%, #fff3cd 50%); }
     .amber { background: #fff3cd; border-color: #ffc107; }

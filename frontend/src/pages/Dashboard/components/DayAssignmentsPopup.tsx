@@ -3,18 +3,22 @@ import React, { useState, useEffect } from 'react';
 import { employeeService } from '../../../services/employeeService';
 import { Employee } from '../../../models/Employee';
 import { CalendarDayAssignment } from '../Dashboard';
+import { ResolvedHoliday } from '../../../models/Holiday';
 
 interface DayAssignmentsPopupProps {
   date: string;
   assignments: CalendarDayAssignment[];
+  holiday?: ResolvedHoliday;
   onClose: () => void;
 }
 
 const DayAssignmentsPopup: React.FC<DayAssignmentsPopupProps> = ({
   date,
   assignments,
+  holiday,
   onClose
 }) => {
+  const isFullHoliday = holiday && !holiday.halfDay;
   const [employees, setEmployees] = useState<Map<string, Employee>>(new Map());
   const [loading, setLoading] = useState(true);
 
@@ -111,8 +115,8 @@ const DayAssignmentsPopup: React.FC<DayAssignmentsPopupProps> = ({
           marginBottom: '16px'
         }}>
           <div>
-            <h3 style={{ margin: '0 0 4px 0', color: '#2c3e50' }}>
-              Zuweisungen
+            <h3 style={{ margin: '0 0 4px 0', color: isFullHoliday ? '#856404' : '#2c3e50' }}>
+              {isFullHoliday ? 'Feiertag' : 'Zuweisungen'}
             </h3>
             <div style={{ fontSize: '14px', color: '#666' }}>
               {formatDate(date)}
@@ -138,96 +142,219 @@ const DayAssignmentsPopup: React.FC<DayAssignmentsPopupProps> = ({
           <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
             Lade Daten...
           </div>
-        ) : assignments.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
-            Keine Zuweisungen an diesem Tag.
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gap: '16px' }}>
-            {Object.values(groupedAssignments).map((group, groupIndex) => {
-              const typeBadge = getPlanTypeBadge(group.planType);
+        ) : isFullHoliday ? (
+          // Full-day holiday: Show holiday info + affected employees
+          <div>
+            {/* Holiday Info */}
+            <div style={{
+              padding: '16px',
+              backgroundColor: '#fff3cd',
+              borderRadius: '8px',
+              borderLeft: '4px solid #ffc107',
+              marginBottom: '16px'
+            }}>
+              <div style={{
+                fontSize: '18px',
+                fontWeight: 'bold',
+                color: '#856404',
+                marginBottom: holiday.description ? '8px' : '0'
+              }}>
+                {holiday.name}
+              </div>
+              {holiday.description && (
+                <div style={{ fontSize: '14px', color: '#856404', fontStyle: 'italic' }}>
+                  {holiday.description}
+                </div>
+              )}
+            </div>
 
-              return (
-                <div key={groupIndex}>
-                  <details>
-                    <summary style={{
-                      fontSize: '1rem',
-                      fontWeight: 600,
-                      color: '#161718',
-                      margin: '0 0 1rem 0'
-                    }}>
-                      <span style={{ fontWeight: 'bold', color: '#2c3e50' }}>
-                        {group.planName}
-                      </span>
-                      <span style={{
-                        padding: '2px 8px',
-                        backgroundColor: typeBadge.color,
-                        color: 'white',
-                        borderRadius: '10px',
-                        fontSize: '10px',
-                        fontWeight: 'bold',
-                        marginLeft: '10px',
-                      }}>
-                        {typeBadge.label}
-                      </span>
-                    </summary>
+            {/* Affected Employees Section */}
+            {assignments.length > 0 && (
+              <div>
+                <div style={{
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  color: '#666',
+                  marginBottom: '12px'
+                }}>
+                  Betroffene Mitarbeiter
+                </div>
+                <div style={{ display: 'grid', gap: '12px' }}>
+                  {Object.values(groupedAssignments).map((group, groupIndex) => {
+                    const typeBadge = getPlanTypeBadge(group.planType);
 
-                    {/* Assignments List */}
-                    <div style={{ display: 'grid', gap: '8px' }}>
-                      {group.assignments.map((assignment, index) => (
-                        <div
-                          key={index}
-                          style={{
-                            padding: '12px',
+                    return (
+                      <div key={groupIndex}>
+                        <details open>
+                          <summary style={{
+                            fontSize: '1rem',
+                            fontWeight: 600,
+                            color: '#161718',
+                            margin: '0 0 0.5rem 0',
+                            cursor: 'pointer'
+                          }}>
+                            <span style={{ fontWeight: 'bold', color: '#2c3e50' }}>
+                              {group.planName}
+                            </span>
+                            <span style={{
+                              padding: '2px 8px',
+                              backgroundColor: typeBadge.color,
+                              color: 'white',
+                              borderRadius: '10px',
+                              fontSize: '10px',
+                              fontWeight: 'bold',
+                              marginLeft: '10px',
+                            }}>
+                              {typeBadge.label}
+                            </span>
+                          </summary>
+
+                          <div style={{
+                            padding: '8px 12px',
                             backgroundColor: '#f8f9fa',
                             borderRadius: '6px',
-                            borderLeft: `3px solid ${typeBadge.color}`
-                          }}
-                        >
-                          <div style={{
-                            fontWeight: '500',
-                            color: '#333',
-                            marginBottom: assignment.planType === 'shift' ? '4px' : '0'
+                            fontSize: '14px',
+                            color: '#666'
                           }}>
-                            {getEmployeeName(assignment)}
+                            {group.assignments.map(a => getEmployeeName(a)).join(', ')}
                           </div>
-
-                          {assignment.planType === 'shift' && (
-                            <div style={{
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '2px'
-                            }}>
-                              {assignment.timeSlotName && (
-                                <div style={{ fontSize: '13px', color: '#666' }}>
-                                  {assignment.timeSlotName}
-                                </div>
-                              )}
-                              {assignment.startTime && assignment.endTime && (
-                                <div style={{ fontSize: '12px', color: '#999' }}>
-                                  {assignment.startTime} - {assignment.endTime}
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                          {assignment.planType === 'weekly' && (
-                            <div style={{ fontSize: '12px', color: '#999' }}>
-                              Wochenzuweisung
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </details>
+                        </details>
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
+              </div>
+            )}
+
+            {assignments.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '12px', color: '#666' }}>
+                Keine betroffenen Mitarbeiter
+              </div>
+            )}
+          </div>
+        ) : (
+          // Normal day or half-day holiday: Show assignments (with holiday banner for half-day)
+          <div>
+            {/* Half-day holiday banner */}
+            {holiday && holiday.halfDay && (
+              <div style={{
+                padding: '12px',
+                backgroundColor: '#fff3cd',
+                borderRadius: '8px',
+                borderLeft: '4px solid #ffc107',
+                marginBottom: '16px'
+              }}>
+                <div style={{
+                  fontSize: '15px',
+                  fontWeight: 'bold',
+                  color: '#856404',
+                  marginBottom: '4px'
+                }}>
+                  {holiday.name}
+                </div>
+                <div style={{ fontSize: '12px', color: '#856404' }}>
+                  {holiday.halfDay === 'morning' ? 'Vormittag frei' : 'Nachmittag frei'}
+                </div>
+                {holiday.description && (
+                  <div style={{ fontSize: '12px', color: '#856404', fontStyle: 'italic', marginTop: '4px' }}>
+                    {holiday.description}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {assignments.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+                Keine Zuweisungen an diesem Tag.
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gap: '16px' }}>
+                {Object.values(groupedAssignments).map((group, groupIndex) => {
+                  const typeBadge = getPlanTypeBadge(group.planType);
+
+                  return (
+                    <div key={groupIndex}>
+                      <details>
+                        <summary style={{
+                          fontSize: '1rem',
+                          fontWeight: 600,
+                          color: '#161718',
+                          margin: '0 0 1rem 0'
+                        }}>
+                          <span style={{ fontWeight: 'bold', color: '#2c3e50' }}>
+                            {group.planName}
+                          </span>
+                          <span style={{
+                            padding: '2px 8px',
+                            backgroundColor: typeBadge.color,
+                            color: 'white',
+                            borderRadius: '10px',
+                            fontSize: '10px',
+                            fontWeight: 'bold',
+                            marginLeft: '10px',
+                          }}>
+                            {typeBadge.label}
+                          </span>
+                        </summary>
+
+                        {/* Assignments List */}
+                        <div style={{ display: 'grid', gap: '8px' }}>
+                          {group.assignments.map((assignment, index) => (
+                            <div
+                              key={index}
+                              style={{
+                                padding: '12px',
+                                backgroundColor: '#f8f9fa',
+                                borderRadius: '6px',
+                                borderLeft: `3px solid ${typeBadge.color}`
+                              }}
+                            >
+                              <div style={{
+                                fontWeight: '500',
+                                color: '#333',
+                                marginBottom: assignment.planType === 'shift' ? '4px' : '0'
+                              }}>
+                                {getEmployeeName(assignment)}
+                              </div>
+
+                              {assignment.planType === 'shift' && (
+                                <div style={{
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '2px'
+                                }}>
+                                  {assignment.timeSlotName && (
+                                    <div style={{ fontSize: '13px', color: '#666' }}>
+                                      {assignment.timeSlotName}
+                                    </div>
+                                  )}
+                                  {assignment.startTime && assignment.endTime && (
+                                    <div style={{ fontSize: '12px', color: '#999' }}>
+                                      {assignment.startTime} - {assignment.endTime}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {assignment.planType === 'weekly' && (
+                                <div style={{ fontSize: '12px', color: '#999' }}>
+                                  Wochenzuweisung
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
         {/* Summary */}
-        {!loading && assignments.length > 0 && (
+        {!loading && assignments.length > 0 && !isFullHoliday && (
           <div style={{
             marginTop: '16px',
             paddingTop: '12px',

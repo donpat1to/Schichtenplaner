@@ -202,10 +202,9 @@ const Dashboard: React.FC = () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Helper to find holiday for a date
-    const getHolidayForDate = (dateStr: string): string | undefined => {
-      const holiday = holidays.find(h => h.date === dateStr);
-      return holiday?.name;
+    // Helper to find holiday for a date - returns full holiday object
+    const getHolidayForDate = (dateStr: string): ResolvedHoliday | undefined => {
+      return holidays.find(h => h.date === dateStr);
     };
 
     try {
@@ -232,6 +231,13 @@ const Dashboard: React.FC = () => {
 
             for (const date of occurrences) {
               const dateStr = formatDateLocal(date);
+              const holiday = getHolidayForDate(dateStr);
+
+              // Skip full holidays - don't show assignments
+              if (holiday && !holiday.halfDay) {
+                continue;
+              }
+
               assignments.push({
                 id: `shift-${plan.id}-${shift.id}-${dateStr}`,
                 date: formatShiftDate(dateStr),
@@ -240,7 +246,7 @@ const Dashboard: React.FC = () => {
                 planName: plan.name,
                 planType: 'shift',
                 details: shift.timeSlot?.name || 'Schicht',
-                holidayName: getHolidayForDate(dateStr)
+                holidayName: holiday?.name
               });
             }
           }
@@ -282,7 +288,7 @@ const Dashboard: React.FC = () => {
               planName: plan.name,
               planType: 'weekly',
               details: `KW ${weekNumber}`,
-              holidayName: weekStartHoliday
+              holidayName: weekStartHoliday?.name
             });
           }
         } catch (err) {
