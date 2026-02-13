@@ -1,0 +1,165 @@
+/* Schichtenplaner Print Styles */
+
+@media print {
+    /* Hide non-essential elements */
+    .app-header,
+    .app-footer,
+    nav,
+    .sidebar,
+    .btn,
+    .page-actions,
+    form:not(.print-form),
+    .no-print,
+    .modal-overlay,
+    .alert {
+        display: none !important;
+    }
+
+    /* Reset background colors for printing */
+    body {
+        background: white !important;
+        color: black !important;
+        font-size: 11pt;
+        line-height: 1.4;
+    }
+
+    .app-container {
+        min-height: auto;
+    }
+
+    .app-main {
+        padding: 0;
+    }
+
+    /* Typography for print */
+    h1 { font-size: 18pt; }
+    h2 { font-size: 14pt; }
+    h3 { font-size: 12pt; }
+
+    /* Ensure tables print well */
+    table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 10pt;
+    }
+
+    th, td {
+        border: 1px solid #333;
+        padding: 6px 8px;
+        text-align: left;
+    }
+
+    th {
+        background-color: #f0f0f0 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    /* Cards without shadows */
+    .card {
+        border: 1px solid #ccc;
+        box-shadow: none;
+        break-inside: avoid;
+    }
+
+    /* Page breaks */
+    .page-break {
+        page-break-before: always;
+    }
+
+    .page-break-after {
+        page-break-after: always;
+    }
+
+    .no-break {
+        break-inside: avoid;
+    }
+
+    /* Preference colors for print (ensure visibility) */
+    .pref-preferred {
+        background-color: #c8e6c9 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .pref-available {
+        background-color: #fff9c4 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .pref-unavailable {
+        background-color: #ffcdd2 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    /* Status badges for print */
+    .badge-draft {
+        background-color: #e0e0e0 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .badge-published {
+        background-color: #c8e6c9 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    /* Links show URL */
+    a[href^="http"]:after {
+        content: " (" attr(href) ")";
+        font-size: 9pt;
+        color: #666;
+    }
+
+    /* Hide interactive elements */
+    .pref-cell {
+        cursor: default;
+    }
+
+    /* Page margins */
+    @page {
+        margin: 1.5cm;
+        size: A4;
+    }
+
+    /* Landscape for schedules */
+    @page landscape {
+        size: A4 landscape;
+    }
+
+    .print-landscape {
+        page: landscape;
+    }
+
+    /* Print header/footer */
+    .print-header {
+        display: block !important;
+        text-align: center;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #333;
+    }
+
+    .print-footer {
+        display: block !important;
+        text-align: center;
+        margin-top: 20px;
+        padding-top: 10px;
+        border-top: 1px solid #ccc;
+        font-size: 9pt;
+        color: #666;
+    }
+
+    /* Grid adjustments for print */
+    .grid-2, .grid-3, .grid-4 {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    /* Ensure text is visible */
+    .text-muted {
+        color: #666 !important;
+    }
+}

@@ -1,0 +1,62 @@
+# Schichtenplaner Apache Configuration
+# Requires mod_rewrite
+
+RewriteEngine On
+RewriteBase /
+
+# Redirect to index.php for routing
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ index.php?route=$1 [QSA,L]
+
+# Protect sensitive files
+<FilesMatch "^(config\.php|\.env|\.env\.example)$">
+    Order deny,allow
+    Deny from all
+</FilesMatch>
+
+# Protect directories
+<IfModule mod_autoindex.c>
+    Options -Indexes
+</IfModule>
+
+# Security Headers
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set X-XSS-Protection "1; mode=block"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# Prevent access to includes directory
+<IfModule mod_rewrite.c>
+    RewriteRule ^includes/ - [F,L]
+    RewriteRule ^templates/ - [F,L]
+    RewriteRule ^solver/ - [F,L]
+    RewriteRule ^sql/ - [F,L]
+</IfModule>
+
+# PHP settings (if allowed)
+<IfModule mod_php.c>
+    php_value upload_max_filesize 10M
+    php_value post_max_size 10M
+    php_value max_execution_time 120
+    php_value session.cookie_httponly 1
+    php_value session.use_strict_mode 1
+</IfModule>
+
+# Gzip compression
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/css application/json application/javascript text/xml application/xml
+</IfModule>
+
+# Cache static assets
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css "access plus 1 week"
+    ExpiresByType application/javascript "access plus 1 week"
+    ExpiresByType image/png "access plus 1 month"
+    ExpiresByType image/jpeg "access plus 1 month"
+    ExpiresByType image/gif "access plus 1 month"
+    ExpiresByType image/svg+xml "access plus 1 month"
+</IfModule>
